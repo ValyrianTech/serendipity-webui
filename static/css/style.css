@@ -1,5 +1,10 @@
 /* Custom styles for Serendipity Web UI */
 
+/* Ensure hidden class works */
+.hidden {
+    display: none !important;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;

@@ -327,10 +327,15 @@
                 }
                 
                 window.currentWif = wif;
-                document.getElementById('setup-wif-modal').classList.add('hidden');
+                const modal = document.getElementById('setup-wif-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                    modal.classList.add('hidden');
+                }
                 updateWifStatus(true);
                 showToast('Key saved successfully', 'success');
             } catch (e) {
+                console.error('Failed to save WIF:', e);
                 showToast('Failed to save key: ' + e.message, 'error');
             }
         };
