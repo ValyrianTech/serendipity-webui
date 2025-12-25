@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{{ agent_name }} - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- Agent Header -->
+        <div id="agent-header" class="bg-slate-800 rounded-xl p-8 mb-6 border border-slate-700">
+            <div class="flex flex-col md:flex-row items-center gap-6">
+                <div id="agent-avatar-large" class="w-32 h-32 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
+                    <span class="text-4xl">{{ agent_name[0] }}</span>
+                </div>
+                <div class="text-center md:text-left flex-1">
+                    <h1 class="text-3xl font-bold mb-2">{{ agent_name }}</h1>
+                    <p id="agent-desc" class="text-slate-400 mb-4">Loading...</p>
+                    <div class="flex flex-wrap gap-2 justify-center md:justify-start">
+                        <span id="agent-model" class="px-3 py-1 bg-slate-700 rounded-full text-sm"></span>
+                        <span id="agent-temp" class="px-3 py-1 bg-slate-700 rounded-full text-sm"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <button onclick="startNewConversation()" class="bg-indigo-600 hover:bg-indigo-700 rounded-xl p-6 text-left transition-colors">
+                <div class="flex items-center gap-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    <div>
+                        <h3 class="text-lg font-semibold">New Conversation</h3>
+                        <p class="text-indigo-200 text-sm">Start a fresh chat with {{ agent_name }}</p>
+                    </div>
+                </div>
+            </button>
+            
+            <a href="/agent/{{ agent_name }}/conversations" class="bg-slate-800 hover:bg-slate-700 rounded-xl p-6 text-left transition-colors border border-slate-700">
+                <div class="flex items-center gap-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <div>
+                        <h3 class="text-lg font-semibold">View Conversations</h3>
+                        <p class="text-slate-400 text-sm">Browse existing conversations</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        
+        <!-- Agent Details -->
+        <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <h2 class="text-xl font-semibold mb-4">Agent Details</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm text-slate-400">Available Tools</label>
+                    <div id="agent-tools" class="flex flex-wrap gap-2 mt-1">
+                        <span class="text-slate-500">Loading...</span>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400">Participants</label>
+                    <div id="agent-participants" class="flex flex-wrap gap-2 mt-1">
+                        <span class="text-slate-500">Loading...</span>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400">System Message</label>
+                    <div id="agent-system-message" class="mt-1 p-3 bg-slate-900 rounded-lg text-sm text-slate-300 max-h-40 overflow-y-auto">
+                        Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getAgent, getSettings, saveSettings, addMessage } from '/static/js/api.js';
+    
+    const agentName = '{{ agent_name }}';
+    let agentData = null;
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadAgentDetails();
+        updateSidebarAgentInfo();
+    });
+    
+    async function loadAgentDetails() {
+        try {
+            const data = await getAgent(agentName);
+            agentData = data.agent;
+            
+            const settings = getSettings();
+            const baseUrl = `http://${settings.serverAddress}:${settings.serverPort}`;
+            
+            // Update avatar
+            if (agentData.profile_picture) {
+                const imgUrl = agentData.profile_picture
+                    .replace('<serverhost>', settings.serverAddress)
+                    .replace('<serverport>', settings.serverPort);
+                document.getElementById('agent-avatar-large').innerHTML = 
+                    `<img src="${imgUrl}" alt="${agentName}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-4xl\\'>${agentName[0]}</span>'">`;
+            }
+            
+            // Update description
+            document.getElementById('agent-desc').textContent = agentData.description || 'No description';
+            
+            // Update model and temperature
+            document.getElementById('agent-model').textContent = `Model: ${agentData.model_name || 'default'}`;
+            document.getElementById('agent-temp').textContent = `Temp: ${agentData.temperature || 0}`;
+            
+            // Update tools
+            const toolsContainer = document.getElementById('agent-tools');
+            if (agentData.tools && agentData.tools.length > 0) {
+                toolsContainer.innerHTML = agentData.tools.map(tool => 
+                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${tool}</span>`
+                ).join('');
+            } else {
+                toolsContainer.innerHTML = '<span class="text-slate-500">No tools configured</span>';
+            }
+            
+            // Update participants
+            const participantsContainer = document.getElementById('agent-participants');
+            if (agentData.participants && agentData.participants.length > 0) {
+                participantsContainer.innerHTML = agentData.participants.map(p => 
+                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${p}</span>`
+                ).join('');
+            } else {
+                participantsContainer.innerHTML = '<span class="text-slate-500">No participants</span>';
+            }
+            
+            // Update system message
+            document.getElementById('agent-system-message').textContent = 
+                agentData.system_message || 'No system message';
+            
+            // Save agent data to localStorage for other pages
+            localStorage.setItem('serendipity_agent_profile_image', agentData.profile_picture || '');
+            localStorage.setItem('serendipity_agent_description', agentData.description || '');
+            
+        } catch (e) {
+            console.error('Failed to load agent details:', e);
+            showToast('Failed to load agent details', 'error');
+        }
+    }
+    
+    function updateSidebarAgentInfo() {
+        const settings = getSettings();
+        const agentInfo = document.getElementById('agent-info');
+        const agentAvatar = document.getElementById('agent-avatar');
+        const agentNameDisplay = document.getElementById('agent-name-display');
+        const agentDescDisplay = document.getElementById('agent-description-display');
+        
+        agentInfo.classList.remove('hidden');
+        agentNameDisplay.textContent = agentName;
+        agentDescDisplay.textContent = localStorage.getItem('serendipity_agent_description') || '';
+        
+        const profileImage = localStorage.getItem('serendipity_agent_profile_image');
+        if (profileImage) {
+            const imgUrl = profileImage
+                .replace('<serverhost>', settings.serverAddress)
+                .replace('<serverport>', settings.serverPort);
+            agentAvatar.src = imgUrl;
+        }
+    }
+    
+    window.startNewConversation = async function() {
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        const settings = getSettings();
+        
+        // Navigate to conversation page with empty conversation_id
+        window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation`;
+    };
+</script>
+{% endblock %}

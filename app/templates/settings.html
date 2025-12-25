@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Settings</h1>
+        
+        <!-- Server Configuration -->
+        <div class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+            <h2 class="text-xl font-semibold mb-4">Server Configuration</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">Server Address</label>
+                    <input type="text" id="server-address" placeholder="192.168.0.124"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">Server Port</label>
+                    <input type="text" id="server-port" placeholder="42069"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">WebSocket Port</label>
+                    <input type="text" id="websocket-port" placeholder="8765"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                
+                <button onclick="saveServerSettings()" class="btn-primary">Save Server Settings</button>
+            </div>
+        </div>
+        
+        <!-- WIF Key Management -->
+        <div class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+            <h2 class="text-xl font-semibold mb-4">WIF Key Management</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">Current Bitcoin Address</label>
+                    <input type="text" id="current-address" readonly
+                           class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm text-slate-400">
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">WIF Key</label>
+                    <textarea id="wif-key-display" rows="2" readonly
+                              class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm text-slate-400"></textarea>
+                    <p class="text-xs text-slate-500 mt-1">Your WIF key is stored encrypted in your browser</p>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button onclick="showChangeWifModal()" class="btn-secondary">Change WIF Key</button>
+                    <button onclick="exportWifKey()" class="btn-secondary">Export Key</button>
+                    <button onclick="clearWifKey()" class="btn-danger">Clear Key</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Voice Settings -->
+        <div class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+            <h2 class="text-xl font-semibold mb-4">Voice Settings</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">OpenVoice Server URL</label>
+                    <input type="text" id="openvoice-server" placeholder="http://localhost:8000"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="auto-play" class="w-4 h-4 rounded">
+                        <span>Auto-play voice responses</span>
+                    </label>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="auto-send" class="w-4 h-4 rounded">
+                        <span>Auto-send after voice recording</span>
+                    </label>
+                </div>
+                
+                <button onclick="saveVoiceSettings()" class="btn-primary">Save Voice Settings</button>
+            </div>
+        </div>
+        
+        <!-- About -->
+        <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <h2 class="text-xl font-semibold mb-4">About</h2>
+            <p class="text-slate-400">Serendipity Web UI</p>
+            <p class="text-slate-500 text-sm mt-2">A web interface for the Serendipity AI agent platform.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Change WIF Modal -->
+<div id="change-wif-modal" class="modal-backdrop hidden">
+    <div class="modal-content">
+        <h2 class="text-xl font-bold mb-4">Change WIF Key</h2>
+        
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">New WIF Key</label>
+            <textarea id="new-wif-key" rows="2" placeholder="Enter your WIF key..."
+                      class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm"></textarea>
+        </div>
+        
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Bitcoin Address (derived)</label>
+            <input type="text" id="new-bitcoin-address" readonly
+                   class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm text-slate-400">
+        </div>
+        
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Password (optional)</label>
+            <input type="password" id="new-password" placeholder="Leave empty for no encryption"
+                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+        </div>
+        
+        <div class="flex gap-3">
+            <button onclick="saveNewWifKey()" class="btn-primary flex-1">Save</button>
+            <button onclick="generateNewKey()" class="btn-secondary">Generate New</button>
+            <button onclick="closeChangeWifModal()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getSettings, saveSettings } from '/static/js/api.js';
+    import { wifToAddress, generateWifKey, encryptWif, saveWif, loadWifStorage, clearWifStorage } from '/static/js/bitcoin.js';
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSettings();
+        updateWifDisplay();
+    });
+    
+    function loadSettings() {
+        const settings = getSettings();
+        
+        document.getElementById('server-address').value = settings.serverAddress;
+        document.getElementById('server-port').value = settings.serverPort;
+        document.getElementById('websocket-port').value = settings.websocketPort;
+        
+        // Voice settings
+        document.getElementById('openvoice-server').value = localStorage.getItem('serendipity_openvoice_server') || '';
+        document.getElementById('auto-play').checked = localStorage.getItem('serendipity_auto_play') === 'true';
+        document.getElementById('auto-send').checked = localStorage.getItem('serendipity_auto_send') === 'true';
+    }
+    
+    function updateWifDisplay() {
+        const storage = loadWifStorage();
+        
+        if (window.currentWif) {
+            const address = wifToAddress(window.currentWif);
+            document.getElementById('current-address').value = address || 'Invalid key';
+            document.getElementById('wif-key-display').value = window.currentWif.substring(0, 10) + '...' + window.currentWif.substring(window.currentWif.length - 10);
+        } else if (storage) {
+            document.getElementById('current-address').value = storage.encrypted ? '(encrypted - unlock to view)' : wifToAddress(storage.data) || '';
+            document.getElementById('wif-key-display').value = storage.encrypted ? '(encrypted)' : storage.data.substring(0, 10) + '...';
+        } else {
+            document.getElementById('current-address').value = 'No key configured';
+            document.getElementById('wif-key-display').value = '';
+        }
+    }
+    
+    window.saveServerSettings = function() {
+        saveSettings({
+            serverAddress: document.getElementById('server-address').value,
+            serverPort: document.getElementById('server-port').value,
+            websocketPort: document.getElementById('websocket-port').value
+        });
+        showToast('Server settings saved', 'success');
+    };
+    
+    window.saveVoiceSettings = function() {
+        localStorage.setItem('serendipity_openvoice_server', document.getElementById('openvoice-server').value);
+        localStorage.setItem('serendipity_auto_play', document.getElementById('auto-play').checked);
+        localStorage.setItem('serendipity_auto_send', document.getElementById('auto-send').checked);
+        showToast('Voice settings saved', 'success');
+    };
+    
+    window.showChangeWifModal = function() {
+        document.getElementById('change-wif-modal').classList.remove('hidden');
+        document.getElementById('new-wif-key').value = '';
+        document.getElementById('new-bitcoin-address').value = '';
+        document.getElementById('new-password').value = '';
+    };
+    
+    window.closeChangeWifModal = function() {
+        document.getElementById('change-wif-modal').classList.add('hidden');
+    };
+    
+    document.getElementById('new-wif-key')?.addEventListener('input', (e) => {
+        const wif = e.target.value.trim();
+        if (wif.length > 40) {
+            const address = wifToAddress(wif);
+            document.getElementById('new-bitcoin-address').value = address || 'Invalid WIF key';
+        } else {
+            document.getElementById('new-bitcoin-address').value = '';
+        }
+    });
+    
+    window.generateNewKey = function() {
+        const wif = generateWifKey();
+        document.getElementById('new-wif-key').value = wif;
+        document.getElementById('new-bitcoin-address').value = wifToAddress(wif);
+    };
+    
+    window.saveNewWifKey = async function() {
+        const wif = document.getElementById('new-wif-key').value.trim();
+        const password = document.getElementById('new-password').value;
+        
+        if (!wif || wif.length < 40) {
+            showToast('Please enter a valid WIF key', 'error');
+            return;
+        }
+        
+        try {
+            if (password) {
+                const encrypted = await encryptWif(wif, password);
+                saveWif(null, true, encrypted);
+            } else {
+                saveWif(wif, false);
+            }
+            
+            window.currentWif = wif;
+            closeChangeWifModal();
+            updateWifDisplay();
+            updateWifStatus(true);
+            showToast('WIF key saved', 'success');
+        } catch (e) {
+            showToast('Failed to save key: ' + e.message, 'error');
+        }
+    };
+    
+    window.exportWifKey = function() {
+        if (!window.currentWif) {
+            showToast('No key to export. Please unlock first.', 'error');
+            return;
+        }
+        
+        // Create download
+        const blob = new Blob([window.currentWif], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'serendipity-wif-key.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showToast('Key exported', 'success');
+    };
+    
+    window.clearWifKey = function() {
+        if (confirm('Are you sure you want to clear your WIF key? Make sure you have a backup!')) {
+            clearWifStorage();
+            window.currentWif = null;
+            updateWifDisplay();
+            updateWifStatus(false);
+            showToast('Key cleared', 'info');
+        }
+    };
+</script>
+{% endblock %}

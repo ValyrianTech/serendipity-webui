@@ -1,0 +1,167 @@
+/* Custom styles for Serendipity Web UI */
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Message card styles */
+.message-card {
+    @apply bg-slate-800 rounded-lg p-4 mb-3;
+}
+
+.message-card .sender {
+    @apply text-sm font-semibold text-slate-400 mb-2;
+}
+
+.message-card .content {
+    @apply text-slate-200;
+}
+
+/* Code block styling */
+.code-block {
+    @apply bg-slate-900 rounded-md p-3 my-2 overflow-x-auto;
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+    font-size: 0.875rem;
+}
+
+/* Agent card hover effect */
+.agent-card {
+    @apply transition-all duration-200;
+}
+
+.agent-card:hover {
+    @apply transform scale-[1.02] shadow-lg;
+}
+
+/* Conversation list item */
+.conversation-item {
+    @apply p-3 rounded-lg cursor-pointer transition-colors duration-150;
+}
+
+.conversation-item:hover {
+    @apply bg-slate-700;
+}
+
+/* Input focus styles */
+input:focus, textarea:focus, select:focus {
+    @apply outline-none ring-2 ring-indigo-500;
+}
+
+/* Button styles */
+.btn-primary {
+    @apply bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-150;
+}
+
+.btn-secondary {
+    @apply bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-150;
+}
+
+.btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-150;
+}
+
+/* Loading spinner */
+.spinner {
+    @apply animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500;
+}
+
+/* Toast notifications */
+.toast {
+    @apply fixed bottom-4 right-4 p-4 rounded-lg shadow-lg z-50 transition-all duration-300;
+}
+
+.toast-success {
+    @apply bg-green-600 text-white;
+}
+
+.toast-error {
+    @apply bg-red-600 text-white;
+}
+
+.toast-info {
+    @apply bg-blue-600 text-white;
+}
+
+/* Markdown content styling */
+.markdown-content h1 { @apply text-2xl font-bold mb-4; }
+.markdown-content h2 { @apply text-xl font-bold mb-3; }
+.markdown-content h3 { @apply text-lg font-bold mb-2; }
+.markdown-content p { @apply mb-3; }
+.markdown-content ul { @apply list-disc list-inside mb-3; }
+.markdown-content ol { @apply list-decimal list-inside mb-3; }
+.markdown-content a { @apply text-indigo-400 hover:underline; }
+.markdown-content blockquote { @apply border-l-4 border-slate-500 pl-4 italic; }
+
+/* Chat input area */
+.chat-input-area {
+    @apply bg-slate-800 border-t border-slate-700 p-4;
+}
+
+/* Sidebar navigation */
+.sidebar-nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition-colors duration-150;
+}
+
+.sidebar-nav-item.active {
+    @apply bg-indigo-600 text-white;
+}
+
+/* Profile image */
+.profile-image {
+    @apply rounded-full object-cover;
+}
+
+/* Status indicator */
+.status-dot {
+    @apply w-3 h-3 rounded-full;
+}
+
+.status-dot.online {
+    @apply bg-green-500;
+}
+
+.status-dot.offline {
+    @apply bg-slate-500;
+}
+
+/* Modal backdrop */
+.modal-backdrop {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.modal-content {
+    @apply bg-slate-800 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto;
+}
+
+/* Progress bar for context size */
+.context-progress {
+    @apply h-2 bg-slate-700 rounded-full overflow-hidden;
+}
+
+.context-progress-bar {
+    @apply h-full bg-indigo-500 transition-all duration-300;
+}
+
+/* Streaming indicator */
+.streaming-indicator {
+    @apply inline-flex items-center gap-2 text-sm text-slate-400;
+}
+
+.streaming-indicator .dot {
+    @apply w-2 h-2 bg-indigo-500 rounded-full animate-pulse;
+}

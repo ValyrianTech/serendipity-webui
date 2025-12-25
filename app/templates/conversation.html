@@ -1,0 +1,628 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - {{ agent_name }} - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+    <!-- Header -->
+    <div class="bg-slate-800 border-b border-slate-700 px-4 py-3">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="/agent/{{ agent_name }}/conversations" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <h1 id="conversation-title" class="text-lg font-semibold truncate">New Conversation</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="refreshConversation()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+                <button onclick="toggleSettings()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Context size indicator -->
+        <div class="mt-2">
+            <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>Context</span>
+                <span id="context-info">0 / 4096 tokens</span>
+            </div>
+            <div class="context-progress">
+                <div id="context-bar" class="context-progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Messages Area -->
+    <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div id="messages-loading" class="flex justify-center py-12">
+            <div class="spinner"></div>
+        </div>
+        
+        <div id="messages-list" class="hidden">
+            <!-- Messages will be inserted here -->
+        </div>
+        
+        <div id="no-messages" class="text-center py-12 hidden">
+            <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <p class="text-slate-400">Start the conversation by sending a message</p>
+        </div>
+        
+        <!-- Streaming indicator -->
+        <div id="streaming-indicator" class="hidden">
+            <div class="message-card bg-slate-800">
+                <div class="streaming-indicator">
+                    <span class="dot"></span>
+                    <span class="dot" style="animation-delay: 0.2s"></span>
+                    <span class="dot" style="animation-delay: 0.4s"></span>
+                    <span class="ml-2">Generating response...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Input Area -->
+    <div class="chat-input-area">
+        <!-- Staged files -->
+        <div id="staged-files" class="hidden mb-3">
+            <div class="flex flex-wrap gap-2" id="staged-files-list"></div>
+        </div>
+        
+        <div class="flex items-end gap-3">
+            <!-- File upload button -->
+            <button onclick="document.getElementById('file-input').click()" class="p-3 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                </svg>
+            </button>
+            <input type="file" id="file-input" class="hidden" multiple onchange="handleFileSelect(event)">
+            
+            <!-- Message input -->
+            <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sm text-slate-400">Sending as:</span>
+                    <input type="text" id="sender-name" value="User" 
+                           class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm w-32">
+                </div>
+                <textarea id="message-input" rows="1" placeholder="Type your message..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none"
+                          onkeydown="handleKeyDown(event)"></textarea>
+            </div>
+            
+            <!-- Respond as selector -->
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-400">Respond as</label>
+                <select id="respond-as" class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm">
+                    <option value="{{ agent_name }}">{{ agent_name }}</option>
+                </select>
+            </div>
+            
+            <!-- Run toggle -->
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="run-toggle" checked class="w-4 h-4 rounded">
+                <span class="text-sm text-slate-400">Run</span>
+            </label>
+            
+            <!-- Send button -->
+            <button onclick="sendMessage()" id="send-btn" class="btn-primary px-6 py-3">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Panel (slide-in) -->
+<div id="settings-panel" class="fixed inset-y-0 right-0 w-80 bg-slate-800 border-l border-slate-700 transform translate-x-full transition-transform duration-300 z-30 overflow-y-auto">
+    <div class="p-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Settings</h2>
+            <button onclick="toggleSettings()" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Model selector -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Model</label>
+            <select id="model-select" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2">
+                <option>Loading...</option>
+            </select>
+        </div>
+        
+        <!-- Temperature -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Temperature: <span id="temp-value">0.7</span></label>
+            <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7" 
+                   class="w-full" oninput="document.getElementById('temp-value').textContent = this.value">
+        </div>
+        
+        <!-- Memory -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Memory: <span id="memory-value">0</span></label>
+            <input type="range" id="memory" min="0" max="100" step="1" value="0" 
+                   class="w-full" oninput="document.getElementById('memory-value').textContent = this.value">
+        </div>
+        
+        <!-- Enabled Tools -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Enabled Tools</label>
+            <div id="tools-list" class="space-y-2 max-h-40 overflow-y-auto">
+                <span class="text-slate-500 text-sm">Loading...</span>
+            </div>
+        </div>
+        
+        <!-- Enabled Roles -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Enabled Roles</label>
+            <div id="roles-list" class="space-y-2 max-h-40 overflow-y-auto">
+                <span class="text-slate-500 text-sm">Loading...</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection } from '/static/js/api.js';
+    import { signData } from '/static/js/bitcoin.js';
+    
+    const agentName = '{{ agent_name }}';
+    const urlParams = new URLSearchParams(window.location.search);
+    let conversationId = urlParams.get('conversation_id') || '';
+    let conversationData = null;
+    let stagedFiles = [];
+    let ws = null;
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadModels();
+        
+        if (conversationId) {
+            await loadConversation();
+        } else {
+            document.getElementById('messages-loading').classList.add('hidden');
+            document.getElementById('no-messages').classList.remove('hidden');
+        }
+        
+        // Auto-resize textarea
+        const textarea = document.getElementById('message-input');
+        textarea.addEventListener('input', () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        });
+        
+        updateSidebarAgentInfo();
+    });
+    
+    async function loadModels() {
+        try {
+            const data = await getModels();
+            const select = document.getElementById('model-select');
+            select.innerHTML = '';
+            
+            if (data.model_names) {
+                data.model_names.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    if (model === data.default_model) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load models:', e);
+        }
+    }
+    
+    window.loadConversation = async function() {
+        if (!conversationId) return;
+        
+        const loading = document.getElementById('messages-loading');
+        const list = document.getElementById('messages-list');
+        const noMessages = document.getElementById('no-messages');
+        
+        loading.classList.remove('hidden');
+        list.classList.add('hidden');
+        noMessages.classList.add('hidden');
+        
+        try {
+            const settings = getSettings();
+            const data = await getConversation(agentName, settings.folderName, conversationId);
+            conversationData = data;
+            
+            // Update title
+            document.getElementById('conversation-title').textContent = 
+                data.conversation?.title || 'Conversation';
+            
+            // Update context info
+            const currentTokens = data.conversation?.current_tokens || 0;
+            const contextSize = data.conversation?.model_context_size || 4096;
+            document.getElementById('context-info').textContent = `${currentTokens} / ${contextSize} tokens`;
+            document.getElementById('context-bar').style.width = `${Math.min(100, (currentTokens / contextSize) * 100)}%`;
+            
+            // Update settings panel
+            if (data.conversation?.model_name) {
+                document.getElementById('model-select').value = data.conversation.model_name;
+            }
+            if (data.conversation?.temperature !== undefined) {
+                document.getElementById('temperature').value = data.conversation.temperature;
+                document.getElementById('temp-value').textContent = data.conversation.temperature;
+            }
+            
+            // Update respond-as options
+            const respondAs = document.getElementById('respond-as');
+            respondAs.innerHTML = '';
+            if (data.conversation?.participants) {
+                data.conversation.participants.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p;
+                    option.textContent = p;
+                    if (p === agentName) option.selected = true;
+                    respondAs.appendChild(option);
+                });
+            }
+            
+            // Update tools list
+            updateToolsList(data.conversation?.enabled_tools || []);
+            
+            // Update roles list
+            updateRolesList(data.conversation?.enabled_roles || []);
+            
+            // Update staged files
+            if (data.staged_files && data.staged_files.length > 0) {
+                stagedFiles = data.staged_files;
+                updateStagedFilesDisplay();
+            }
+            
+            // Render messages
+            renderMessages(data.conversation?.messages || []);
+            
+            loading.classList.add('hidden');
+            
+            if (data.conversation?.messages?.length > 0) {
+                list.classList.remove('hidden');
+                scrollToBottom();
+            } else {
+                noMessages.classList.remove('hidden');
+            }
+            
+            // Connect to WebSocket for streaming
+            connectWebSocket();
+            
+        } catch (e) {
+            console.error('Failed to load conversation:', e);
+            loading.classList.add('hidden');
+            showToast('Failed to load conversation', 'error');
+        }
+    };
+    
+    window.refreshConversation = loadConversation;
+    
+    function renderMessages(messages) {
+        const list = document.getElementById('messages-list');
+        list.innerHTML = '';
+        
+        messages.forEach((msg, index) => {
+            const messageEl = createMessageElement(msg, index === messages.length - 1);
+            list.appendChild(messageEl);
+        });
+    }
+    
+    function createMessageElement(msg, isLast) {
+        const div = document.createElement('div');
+        div.className = 'message-card';
+        div.dataset.messageId = msg.message_id || '';
+        
+        const sender = msg.sender || 'Unknown';
+        const content = msg.content || '';
+        
+        // Parse message parts if available
+        let contentHtml = '';
+        if (msg.parts && msg.parts.length > 0) {
+            msg.parts.forEach(part => {
+                if (part.type === 'text') {
+                    contentHtml += `<div class="markdown-content">${marked.parse(part.content || '')}</div>`;
+                } else if (part.type === 'code') {
+                    contentHtml += `<pre class="code-block"><code class="language-${part.language || 'plaintext'}">${escapeHtml(part.content || '')}</code></pre>`;
+                }
+            });
+        } else {
+            contentHtml = `<div class="markdown-content">${marked.parse(content)}</div>`;
+        }
+        
+        div.innerHTML = `
+            <div class="sender">${escapeHtml(sender)}</div>
+            <div class="content">${contentHtml}</div>
+        `;
+        
+        // Highlight code blocks
+        div.querySelectorAll('pre code').forEach(block => {
+            hljs.highlightElement(block);
+        });
+        
+        return div;
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function scrollToBottom() {
+        const container = document.getElementById('messages-container');
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    window.sendMessage = async function() {
+        const input = document.getElementById('message-input');
+        const content = input.value.trim();
+        
+        if (!content && stagedFiles.length === 0) return;
+        
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        const settings = getSettings();
+        const sender = document.getElementById('sender-name').value || 'User';
+        const respondAs = document.getElementById('respond-as').value || agentName;
+        const run = document.getElementById('run-toggle').checked;
+        const model = document.getElementById('model-select').value;
+        const temperature = parseFloat(document.getElementById('temperature').value);
+        const memory = parseInt(document.getElementById('memory').value);
+        
+        // Get enabled tools and roles
+        const enabledTools = Array.from(document.querySelectorAll('#tools-list input:checked')).map(cb => cb.value);
+        const enabledRoles = Array.from(document.querySelectorAll('#roles-list input:checked')).map(cb => cb.value);
+        
+        const messageData = {
+            conversationId: conversationId,
+            agent: agentName,
+            folderName: settings.folderName,
+            content: content,
+            modelName: model,
+            sender: sender,
+            respondAs: respondAs,
+            temperature: temperature,
+            enabledRoles: enabledRoles,
+            enabledTools: enabledTools,
+            memory: memory,
+            run: run,
+            files: stagedFiles.map(f => f.fileName || f)
+        };
+        
+        // Clear input
+        input.value = '';
+        input.style.height = 'auto';
+        
+        // Show user message immediately
+        const list = document.getElementById('messages-list');
+        const noMessages = document.getElementById('no-messages');
+        noMessages.classList.add('hidden');
+        list.classList.remove('hidden');
+        
+        const userMsg = createMessageElement({ sender: sender, content: content }, false);
+        list.appendChild(userMsg);
+        scrollToBottom();
+        
+        // Show streaming indicator if run is enabled
+        if (run) {
+            document.getElementById('streaming-indicator').classList.remove('hidden');
+        }
+        
+        try {
+            const response = await addMessage(window.currentWif, messageData);
+            
+            if (response.conversation_id) {
+                conversationId = response.conversation_id;
+                // Update URL without reload
+                window.history.replaceState({}, '', `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(conversationId)}`);
+            }
+            
+            // Clear staged files
+            stagedFiles = [];
+            updateStagedFilesDisplay();
+            
+            // Refresh conversation to get updated messages
+            setTimeout(() => {
+                loadConversation();
+            }, run ? 2000 : 500);
+            
+        } catch (e) {
+            console.error('Failed to send message:', e);
+            showToast('Failed to send message: ' + e.message, 'error');
+            document.getElementById('streaming-indicator').classList.add('hidden');
+        }
+    };
+    
+    function handleKeyDown(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    }
+    window.handleKeyDown = handleKeyDown;
+    
+    window.toggleSettings = function() {
+        const panel = document.getElementById('settings-panel');
+        panel.classList.toggle('translate-x-full');
+    };
+    
+    function updateToolsList(enabledTools) {
+        const container = document.getElementById('tools-list');
+        // For now, just show enabled tools
+        if (enabledTools.length > 0) {
+            container.innerHTML = enabledTools.map(tool => `
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" value="${tool}" checked class="w-4 h-4 rounded">
+                    <span class="text-sm">${tool}</span>
+                </label>
+            `).join('');
+        } else {
+            container.innerHTML = '<span class="text-slate-500 text-sm">No tools enabled</span>';
+        }
+    }
+    
+    function updateRolesList(enabledRoles) {
+        const container = document.getElementById('roles-list');
+        if (enabledRoles.length > 0) {
+            container.innerHTML = enabledRoles.map(role => `
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" value="${role}" checked class="w-4 h-4 rounded">
+                    <span class="text-sm">${role}</span>
+                </label>
+            `).join('');
+        } else {
+            container.innerHTML = '<span class="text-slate-500 text-sm">No roles enabled</span>';
+        }
+    }
+    
+    // File handling
+    window.handleFileSelect = async function(event) {
+        const files = event.target.files;
+        if (!files.length) return;
+        
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        for (const file of files) {
+            try {
+                showToast(`Uploading ${file.name}...`, 'info');
+                
+                // Upload file
+                const uploadResult = await uploadFile(file);
+                
+                if (uploadResult.file_id) {
+                    // Stage file
+                    const stageData = {
+                        agent: agentName,
+                        conversationId: conversationId,
+                        fileName: file.name,
+                        fileId: uploadResult.file_id
+                    };
+                    
+                    await stageFile(window.currentWif, stageData);
+                    
+                    stagedFiles.push({ fileName: file.name, fileId: uploadResult.file_id });
+                    updateStagedFilesDisplay();
+                    showToast(`${file.name} staged`, 'success');
+                }
+            } catch (e) {
+                console.error('Failed to upload file:', e);
+                showToast(`Failed to upload ${file.name}`, 'error');
+            }
+        }
+        
+        event.target.value = '';
+    };
+    
+    function updateStagedFilesDisplay() {
+        const container = document.getElementById('staged-files');
+        const list = document.getElementById('staged-files-list');
+        
+        if (stagedFiles.length > 0) {
+            container.classList.remove('hidden');
+            list.innerHTML = stagedFiles.map((file, index) => `
+                <div class="flex items-center gap-2 bg-slate-700 rounded-lg px-3 py-1">
+                    <span class="text-sm">${file.fileName || file}</span>
+                    <button onclick="removeStagedFileAt(${index})" class="text-slate-400 hover:text-red-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            `).join('');
+        } else {
+            container.classList.add('hidden');
+        }
+    }
+    
+    window.removeStagedFileAt = async function(index) {
+        const file = stagedFiles[index];
+        
+        try {
+            await removeStagedFile(window.currentWif, {
+                agent: agentName,
+                conversationId: conversationId,
+                fileName: file.fileName || file
+            });
+            
+            stagedFiles.splice(index, 1);
+            updateStagedFilesDisplay();
+        } catch (e) {
+            console.error('Failed to remove staged file:', e);
+            showToast('Failed to remove file', 'error');
+        }
+    };
+    
+    // WebSocket for streaming
+    function connectWebSocket() {
+        if (!conversationId) return;
+        
+        if (ws) {
+            ws.close();
+        }
+        
+        ws = createStreamingConnection(
+            conversationId,
+            (data) => {
+                // Handle streaming message
+                if (data.type === 'token' || data.content) {
+                    // Append to streaming message
+                    console.log('Streaming:', data);
+                }
+                if (data.type === 'done' || data.type === 'complete') {
+                    document.getElementById('streaming-indicator').classList.add('hidden');
+                    loadConversation();
+                }
+            },
+            (error) => {
+                console.error('WebSocket error:', error);
+            },
+            () => {
+                console.log('WebSocket closed');
+            }
+        );
+    }
+    
+    function updateSidebarAgentInfo() {
+        const settings = getSettings();
+        const agentInfo = document.getElementById('agent-info');
+        const agentAvatar = document.getElementById('agent-avatar');
+        const agentNameDisplay = document.getElementById('agent-name-display');
+        const agentDescDisplay = document.getElementById('agent-description-display');
+        
+        agentInfo.classList.remove('hidden');
+        agentNameDisplay.textContent = agentName;
+        agentDescDisplay.textContent = localStorage.getItem('serendipity_agent_description') || '';
+        
+        const profileImage = localStorage.getItem('serendipity_agent_profile_image');
+        if (profileImage) {
+            const imgUrl = profileImage
+                .replace('<serverhost>', settings.serverAddress)
+                .replace('<serverport>', settings.serverPort);
+            agentAvatar.src = imgUrl;
+        }
+    }
+</script>
+{% endblock %}

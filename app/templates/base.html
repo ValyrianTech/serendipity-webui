@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Serendipity{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            850: '#172033',
+                            950: '#0a0f1a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body class="h-full bg-slate-900 text-slate-100">
+    <div class="flex h-full">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="hidden lg:flex lg:flex-col w-64 bg-slate-800 border-r border-slate-700">
+            <!-- Logo/Brand -->
+            <div class="p-4 border-b border-slate-700">
+                <a href="/" class="flex items-center gap-3 text-xl font-bold text-indigo-400">
+                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                    SERENDIPITY
+                </a>
+            </div>
+            
+            <!-- Agent Info (if selected) -->
+            <div id="agent-info" class="p-4 border-b border-slate-700 hidden">
+                <div class="flex items-center gap-3">
+                    <img id="agent-avatar" src="" alt="Agent" class="w-12 h-12 rounded-full bg-slate-700">
+                    <div>
+                        <div id="agent-name-display" class="font-semibold"></div>
+                        <div id="agent-description-display" class="text-sm text-slate-400 truncate max-w-[150px]"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Folder Selector -->
+            <div id="folder-selector" class="p-4 border-b border-slate-700 hidden">
+                <label class="text-sm text-slate-400 block mb-2">Folder</label>
+                <select id="folder-select" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    <option value="default">default</option>
+                </select>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+                <a href="/" class="sidebar-nav-item">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    Agents
+                </a>
+                <a href="#" id="nav-agent-home" class="sidebar-nav-item hidden">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                    </svg>
+                    Agent Home
+                </a>
+                <a href="#" id="nav-conversations" class="sidebar-nav-item hidden">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    Conversations
+                </a>
+                <a href="/settings" class="sidebar-nav-item">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    Settings
+                </a>
+            </nav>
+            
+            <!-- WIF Key Status -->
+            <div class="p-4 border-t border-slate-700">
+                <div id="wif-status" class="flex items-center gap-2 text-sm">
+                    <span class="status-dot offline"></span>
+                    <span class="text-slate-400">No key loaded</span>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Mobile menu button -->
+        <button id="mobile-menu-btn" class="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-800 rounded-lg">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+        
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+    
+    <!-- Unlock Modal -->
+    <div id="unlock-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-4">Unlock WIF Key</h2>
+            <p class="text-slate-400 mb-4">Enter your password to unlock your stored WIF key.</p>
+            <input type="password" id="unlock-password" placeholder="Password" 
+                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 mb-4">
+            <div class="flex gap-3">
+                <button onclick="unlockWif()" class="btn-primary flex-1">Unlock</button>
+                <button onclick="closeUnlockModal()" class="btn-secondary">Cancel</button>
+            </div>
+            <div id="unlock-error" class="text-red-400 text-sm mt-2 hidden"></div>
+        </div>
+    </div>
+    
+    <!-- Setup WIF Modal -->
+    <div id="setup-wif-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-4">Setup WIF Key</h2>
+            <p class="text-slate-400 mb-4">Enter your WIF key or generate a new one. Optionally protect it with a password.</p>
+            
+            <div class="mb-4">
+                <label class="text-sm text-slate-400 block mb-2">WIF Key</label>
+                <textarea id="setup-wif-key" rows="2" placeholder="Enter your WIF key..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm"></textarea>
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm text-slate-400 block mb-2">Bitcoin Address (derived)</label>
+                <input type="text" id="setup-bitcoin-address" readonly
+                       class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm text-slate-400">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm text-slate-400 block mb-2">Password (optional)</label>
+                <input type="password" id="setup-password" placeholder="Leave empty for no encryption"
+                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+            </div>
+            
+            <div class="flex gap-3">
+                <button onclick="saveSetupWif()" class="btn-primary flex-1">Save Key</button>
+                <button onclick="generateNewWif()" class="btn-secondary">Generate New</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { 
+            wifToAddress, generateWifKey, encryptWif, decryptWif, 
+            saveWif, loadWifStorage, clearWifStorage 
+        } from '/static/js/bitcoin.js';
+        import { getSettings, saveSettings, getFolders } from '/static/js/api.js';
+        
+        // Make functions available globally
+        window.wifToAddress = wifToAddress;
+        window.generateWifKey = generateWifKey;
+        window.encryptWif = encryptWif;
+        window.decryptWif = decryptWif;
+        window.saveWif = saveWif;
+        window.loadWifStorage = loadWifStorage;
+        window.clearWifStorage = clearWifStorage;
+        window.getSettings = getSettings;
+        window.saveSettings = saveSettings;
+        window.getFolders = getFolders;
+        
+        // Current WIF key (in memory only)
+        window.currentWif = null;
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeApp();
+        });
+        
+        async function initializeApp() {
+            const storage = loadWifStorage();
+            
+            if (storage) {
+                if (storage.encrypted) {
+                    // Show unlock modal
+                    document.getElementById('unlock-modal').classList.remove('hidden');
+                } else {
+                    // Load unencrypted key
+                    window.currentWif = storage.data;
+                    updateWifStatus(true);
+                }
+            } else {
+                // Show setup modal
+                document.getElementById('setup-wif-modal').classList.remove('hidden');
+            }
+            
+            // Update navigation based on current agent
+            updateNavigation();
+            
+            // Load folders if agent is selected
+            const settings = getSettings();
+            if (settings.agentName) {
+                await loadFolders(settings.agentName);
+            }
+        }
+        
+        window.initializeApp = initializeApp;
+        
+        function updateWifStatus(loaded) {
+            const status = document.getElementById('wif-status');
+            if (loaded && window.currentWif) {
+                const address = wifToAddress(window.currentWif);
+                status.innerHTML = `
+                    <span class="status-dot online"></span>
+                    <span class="text-slate-400 truncate" title="${address}">${address.substring(0, 12)}...</span>
+                `;
+            } else {
+                status.innerHTML = `
+                    <span class="status-dot offline"></span>
+                    <span class="text-slate-400">No key loaded</span>
+                `;
+            }
+        }
+        
+        window.updateWifStatus = updateWifStatus;
+        
+        function updateNavigation() {
+            const settings = getSettings();
+            const agentName = settings.agentName;
+            
+            if (agentName) {
+                document.getElementById('nav-agent-home').classList.remove('hidden');
+                document.getElementById('nav-agent-home').href = `/agent/${encodeURIComponent(agentName)}`;
+                
+                document.getElementById('nav-conversations').classList.remove('hidden');
+                document.getElementById('nav-conversations').href = `/agent/${encodeURIComponent(agentName)}/conversations`;
+                
+                document.getElementById('folder-selector').classList.remove('hidden');
+            }
+        }
+        
+        window.updateNavigation = updateNavigation;
+        
+        async function loadFolders(agentName) {
+            try {
+                const data = await getFolders(agentName);
+                const select = document.getElementById('folder-select');
+                const settings = getSettings();
+                
+                select.innerHTML = '';
+                if (data.folders) {
+                    data.folders.forEach(folder => {
+                        const option = document.createElement('option');
+                        option.value = folder;
+                        option.textContent = folder;
+                        if (folder === settings.folderName) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                }
+                
+                select.onchange = () => {
+                    saveSettings({ folderName: select.value });
+                };
+            } catch (e) {
+                console.error('Failed to load folders:', e);
+            }
+        }
+        
+        window.loadFolders = loadFolders;
+        
+        // Unlock modal functions
+        window.unlockWif = async function() {
+            const password = document.getElementById('unlock-password').value;
+            const storage = loadWifStorage();
+            
+            try {
+                const wif = await decryptWif(storage.data, password);
+                window.currentWif = wif;
+                document.getElementById('unlock-modal').classList.add('hidden');
+                updateWifStatus(true);
+                showToast('Key unlocked successfully', 'success');
+            } catch (e) {
+                document.getElementById('unlock-error').textContent = 'Invalid password';
+                document.getElementById('unlock-error').classList.remove('hidden');
+            }
+        };
+        
+        window.closeUnlockModal = function() {
+            document.getElementById('unlock-modal').classList.add('hidden');
+            // Show setup modal instead
+            document.getElementById('setup-wif-modal').classList.remove('hidden');
+        };
+        
+        // Setup WIF modal functions
+        document.getElementById('setup-wif-key')?.addEventListener('input', (e) => {
+            const wif = e.target.value.trim();
+            if (wif.length > 40) {
+                const address = wifToAddress(wif);
+                document.getElementById('setup-bitcoin-address').value = address || 'Invalid WIF key';
+            } else {
+                document.getElementById('setup-bitcoin-address').value = '';
+            }
+        });
+        
+        window.generateNewWif = function() {
+            const wif = generateWifKey();
+            document.getElementById('setup-wif-key').value = wif;
+            document.getElementById('setup-bitcoin-address').value = wifToAddress(wif);
+        };
+        
+        window.saveSetupWif = async function() {
+            const wif = document.getElementById('setup-wif-key').value.trim();
+            const password = document.getElementById('setup-password').value;
+            
+            if (!wif || wif.length < 40) {
+                showToast('Please enter a valid WIF key', 'error');
+                return;
+            }
+            
+            try {
+                if (password) {
+                    const encrypted = await encryptWif(wif, password);
+                    saveWif(null, true, encrypted);
+                } else {
+                    saveWif(wif, false);
+                }
+                
+                window.currentWif = wif;
+                document.getElementById('setup-wif-modal').classList.add('hidden');
+                updateWifStatus(true);
+                showToast('Key saved successfully', 'success');
+            } catch (e) {
+                showToast('Failed to save key: ' + e.message, 'error');
+            }
+        };
+        
+        // Toast notifications
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+        
+        // Mobile menu toggle
+        document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('fixed');
+            sidebar.classList.toggle('inset-0');
+            sidebar.classList.toggle('z-40');
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

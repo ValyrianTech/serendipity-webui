@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Agents - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Select an Agent</h1>
+        
+        <div id="agents-loading" class="flex justify-center py-12">
+            <div class="spinner"></div>
+        </div>
+        
+        <div id="agents-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+            <!-- Agent cards will be inserted here -->
+        </div>
+        
+        <div id="agents-error" class="text-center py-12 hidden">
+            <p class="text-red-400 mb-4">Failed to load agents</p>
+            <button onclick="loadAgents()" class="btn-primary">Retry</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getAgents, getAgent, saveSettings, getSettings } from '/static/js/api.js';
+    
+    window.getAgents = getAgents;
+    window.getAgent = getAgent;
+    window.saveSettings = saveSettings;
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAgents();
+    });
+    
+    window.loadAgents = async function() {
+        const loading = document.getElementById('agents-loading');
+        const grid = document.getElementById('agents-grid');
+        const error = document.getElementById('agents-error');
+        
+        loading.classList.remove('hidden');
+        grid.classList.add('hidden');
+        error.classList.add('hidden');
+        
+        try {
+            const data = await getAgents();
+            
+            grid.innerHTML = '';
+            
+            if (data.agents && data.agents.length > 0) {
+                data.agents.forEach(agent => {
+                    const card = createAgentCard(agent);
+                    grid.appendChild(card);
+                });
+                
+                loading.classList.add('hidden');
+                grid.classList.remove('hidden');
+            } else {
+                loading.classList.add('hidden');
+                error.classList.remove('hidden');
+                error.querySelector('p').textContent = 'No agents found';
+            }
+        } catch (e) {
+            console.error('Failed to load agents:', e);
+            loading.classList.add('hidden');
+            error.classList.remove('hidden');
+        }
+    };
+    
+    function createAgentCard(agent) {
+        const settings = getSettings();
+        const baseUrl = `http://${settings.serverAddress}:${settings.serverPort}`;
+        
+        const card = document.createElement('div');
+        card.className = 'agent-card bg-slate-800 rounded-xl p-6 cursor-pointer hover:bg-slate-750 border border-slate-700';
+        card.onclick = () => selectAgent(agent);
+        
+        const profileImage = agent.profile_image 
+            ? agent.profile_image.replace('<serverhost>', settings.serverAddress).replace('<serverport>', settings.serverPort)
+            : '';
+        
+        card.innerHTML = `
+            <div class="flex items-center gap-4 mb-4">
+                <div class="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
+                    ${profileImage 
+                        ? `<img src="${profileImage}" alt="${agent.name}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl\\'>${agent.name.charAt(0)}</span>'">`
+                        : `<span class="text-2xl">${agent.name.charAt(0)}</span>`
+                    }
+                </div>
+                <div>
+                    <h3 class="text-xl font-semibold">${agent.name}</h3>
+                </div>
+            </div>
+            <p class="text-slate-400 text-sm line-clamp-3">${agent.description || 'No description'}</p>
+        `;
+        
+        return card;
+    }
+    
+    async function selectAgent(agent) {
+        const settings = getSettings();
+        
+        // Save agent selection
+        saveSettings({ agentName: agent.name });
+        localStorage.setItem('serendipity_agent_profile_image', agent.profile_image || '');
+        localStorage.setItem('serendipity_agent_description', agent.description || '');
+        
+        // Navigate to agent home
+        window.location.href = `/agent/${encodeURIComponent(agent.name)}`;
+    }
+</script>
+{% endblock %}

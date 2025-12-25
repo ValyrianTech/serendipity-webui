@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Conversations - {{ agent_name }} - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-3xl font-bold">Conversations</h1>
+            <button onclick="startNewConversation()" class="btn-primary flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New
+            </button>
+        </div>
+        
+        <div id="conversations-loading" class="flex justify-center py-12">
+            <div class="spinner"></div>
+        </div>
+        
+        <div id="conversations-list" class="space-y-2 hidden">
+            <!-- Conversation items will be inserted here -->
+        </div>
+        
+        <div id="conversations-empty" class="text-center py-12 hidden">
+            <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <p class="text-slate-400 mb-4">No conversations yet</p>
+            <button onclick="startNewConversation()" class="btn-primary">Start your first conversation</button>
+        </div>
+        
+        <div id="conversations-error" class="text-center py-12 hidden">
+            <p class="text-red-400 mb-4">Failed to load conversations</p>
+            <button onclick="loadConversations()" class="btn-primary">Retry</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getConversations, getSettings } from '/static/js/api.js';
+    
+    const agentName = '{{ agent_name }}';
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        loadConversations();
+        updateSidebarAgentInfo();
+    });
+    
+    window.loadConversations = async function() {
+        const loading = document.getElementById('conversations-loading');
+        const list = document.getElementById('conversations-list');
+        const empty = document.getElementById('conversations-empty');
+        const error = document.getElementById('conversations-error');
+        
+        loading.classList.remove('hidden');
+        list.classList.add('hidden');
+        empty.classList.add('hidden');
+        error.classList.add('hidden');
+        
+        try {
+            const settings = getSettings();
+            const data = await getConversations(agentName, settings.folderName);
+            
+            if (data.conversations_info && data.conversations_info.length > 0) {
+                list.innerHTML = '';
+                
+                data.conversations_info.forEach(conv => {
+                    const item = createConversationItem(conv);
+                    list.appendChild(item);
+                });
+                
+                loading.classList.add('hidden');
+                list.classList.remove('hidden');
+            } else {
+                loading.classList.add('hidden');
+                empty.classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error('Failed to load conversations:', e);
+            loading.classList.add('hidden');
+            error.classList.remove('hidden');
+        }
+    };
+    
+    function createConversationItem(conv) {
+        const item = document.createElement('div');
+        item.className = 'conversation-item bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600';
+        item.onclick = () => openConversation(conv.conversation_id);
+        
+        item.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                    <h3 class="font-medium truncate">${conv.title || 'Untitled Conversation'}</h3>
+                    <p class="text-sm text-slate-400">${conv.conversation_id.substring(0, 8)}...</p>
+                </div>
+                <svg class="w-5 h-5 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </div>
+        `;
+        
+        return item;
+    }
+    
+    function openConversation(conversationId) {
+        window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(conversationId)}`;
+    }
+    
+    window.startNewConversation = function() {
+        window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation`;
+    };
+    
+    function updateSidebarAgentInfo() {
+        const settings = getSettings();
+        const agentInfo = document.getElementById('agent-info');
+        const agentAvatar = document.getElementById('agent-avatar');
+        const agentNameDisplay = document.getElementById('agent-name-display');
+        const agentDescDisplay = document.getElementById('agent-description-display');
+        
+        agentInfo.classList.remove('hidden');
+        agentNameDisplay.textContent = agentName;
+        agentDescDisplay.textContent = localStorage.getItem('serendipity_agent_description') || '';
+        
+        const profileImage = localStorage.getItem('serendipity_agent_profile_image');
+        if (profileImage) {
+            const imgUrl = profileImage
+                .replace('<serverhost>', settings.serverAddress)
+                .replace('<serverport>', settings.serverPort);
+            agentAvatar.src = imgUrl;
+        }
+    }
+</script>
+{% endblock %}
