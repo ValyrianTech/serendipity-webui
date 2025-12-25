@@ -294,7 +294,9 @@
         };
         
         window.clearAndSetupNewKey = function() {
-            clearWifStorage();
+            console.log('Clearing WIF storage...');
+            localStorage.removeItem('serendipity_wif');
+            console.log('Storage after clear:', localStorage.getItem('serendipity_wif'));
             document.getElementById('unlock-modal').classList.add('hidden');
             document.getElementById('setup-wif-modal').classList.remove('hidden');
             showToast('Previous key cleared', 'info');
