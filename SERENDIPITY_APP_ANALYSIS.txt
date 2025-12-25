@@ -1,0 +1,1677 @@
+================================================================================
+SERENDIPITY MOBILE APP - COMPREHENSIVE ANALYSIS
+================================================================================
+This document provides a detailed analysis of the Serendipity Flutter Flow mobile
+app to serve as a blueprint for recreating it as a standalone web application.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. APPLICATION OVERVIEW
+2. GLOBAL STATE (App State Variables)
+3. PAGES AND SCREENS
+4. REUSABLE COMPONENTS
+5. API ENDPOINTS (SERENDIPITY API)
+6. API ENDPOINTS (SPELLBOOK API)
+7. DATA STRUCTURES
+8. CUSTOM ACTIONS
+9. CUSTOM WIDGETS
+10. NAVIGATION STRUCTURE
+
+================================================================================
+1. APPLICATION OVERVIEW
+================================================================================
+
+Serendipity is an AI agent management and conversation application that allows
+users to:
+- Select and manage AI agents
+- Have conversations with agents
+- Configure LLM models
+- Manage MCP (Model Context Protocol) servers
+- Create and run workflows
+- Manage toolsets for agents
+- Configure system settings
+
+The app connects to a backend server via REST API and WebSocket for real-time
+streaming of AI responses.
+
+Default Server Configuration:
+- Server Address: 192.168.0.124 (configurable)
+- Server Port: 42069 (configurable)
+- WebSocket Port: 8765 (configurable)
+
+================================================================================
+2. GLOBAL STATE (App State Variables)
+================================================================================
+
+PERSISTED STATE (saved to SharedPreferences):
+- isDarkMode: bool (default: true) - Theme preference
+- openvoiceServer: String - OpenVoice TTS server URL
+- autoSend: bool (default: false) - Auto-send after voice recording
+- autoPlay: bool (default: false) - Auto-play voice responses
+- serverAddress: String (default: '192.168.0.124') - Backend server address
+- serverPort: int (default: 42069) - Backend server port
+- websocketPort: int (default: 8765) - WebSocket port for streaming
+- wifKey: String - WIF key for Bitcoin signing
+- bitcoinAddress: String - Bitcoin address for authentication
+- modelContextSizes: dynamic (JSON) - Model context size mappings
+
+SESSION STATE (not persisted):
+- agentName: String (default: 'Serendipity') - Currently selected agent
+- folderName: String (default: 'default') - Current conversation folder
+- agentProfileImage: String - Agent's profile picture URL
+- conversationId: String - Current conversation ID
+- userName: String - User's display name
+- respondAs: String - Who the AI should respond as
+- participants: List<String> - Conversation participants
+- modelName: String - Current LLM model name
+- temperature: double (default: 0.0) - LLM temperature setting
+- availableRoles: List<String> - Available agent roles
+- availableTools: List<String> - Available tools for agent
+- enabledRoles: List<String> - Currently enabled roles
+- enabledTools: List<String> - Currently enabled tools
+- systemMessage: String - System message for conversation
+- memory: int (default: 0) - Memory setting
+- openFiles: List<String> - Files open in conversation context
+- newMessagesAvailable: bool - Flag for new messages
+- agentDescription: String - Agent's description
+- totalTokens: int - Total tokens used in conversation
+- totalCost: double - Total cost of conversation
+- availableVoices: List<String> - Available TTS voices
+- activeVoice: String - Currently active voice
+- playedAudioMessages: List<String> - IDs of played audio messages
+- conversationTitle: String (default: 'SERENDIPITY') - Conversation title
+- selectedLLMConfig: String - Selected LLM configuration
+- currentTokens: int - Current token count
+- modelContextSize: int (default: 4096) - Model's context window size
+- nextSpeaker: String - Next speaker in conversation
+- voices: List<String> - Agent's voice configurations
+- saveToolsetData: ToolsetDataStruct - Toolset save data
+- availableMCPServers: List<String> - Available MCP servers
+- platform: String - Detected platform (windows/linux/macos/android/ios/web)
+
+================================================================================
+3. PAGES AND SCREENS
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 HOME PAGE (/homePage)
+--------------------------------------------------------------------------------
+Route: HomePage
+Path: /homePage
+
+PURPOSE: Landing page with side navigation
+
+UI ELEMENTS:
+- AppBar with title "SERENDIPITY"
+- Menu icon (visible on mobile/tablet) - Opens drawer
+- Side Navigation Component (visible on desktop)
+- Empty main content area
+
+BUTTONS/ACTIONS:
+- Menu icon tap → Opens side navigation drawer
+
+--------------------------------------------------------------------------------
+3.2 AGENT SELECTION PAGE (/agentSelectionPage)
+--------------------------------------------------------------------------------
+Route: AgentSelectionPage
+Path: /agentSelectionPage
+
+PURPOSE: Display and select available AI agents
+
+UI ELEMENTS:
+- AppBar with title "Agents"
+- Menu icon for drawer navigation
+- Side Navigation Component
+- ListView of agent cards
+
+AGENT CARD FIELDS:
+- Profile image (100x100)
+- Agent name
+- Agent description
+
+API CALLS ON LOAD:
+- GetAgents → Fetches list of all agents
+
+BUTTONS/ACTIONS:
+- Agent card tap:
+  1. Sets agentName in app state
+  2. Sets agentProfileImage in app state
+  3. Sets agentDescription in app state
+  4. Calls GetAvailableVoices API
+  5. Sets availableVoices in app state
+  6. Navigates to AgentHomePage
+
+--------------------------------------------------------------------------------
+3.3 AGENT HOME PAGE (/agentHomePage)
+--------------------------------------------------------------------------------
+Route: AgentHomePage
+Path: /agentHomePage
+
+PURPOSE: Agent dashboard with quick actions
+
+UI ELEMENTS:
+- AppBar with title "SERENDIPITY"
+- Side Navigation Component
+- Agent profile image (200x200)
+- Agent name (headline)
+- Agent description (body text)
+- Action buttons column (200px wide)
+
+ON PAGE LOAD:
+1. Sets theme based on isDarkMode
+2. Calls GetAgent API
+3. Detects OS platform
+4. Updates app state with agent data:
+   - modelName, temperature, modelContextSize
+   - memory, availableTools, agentProfileImage
+   - agentDescription, voices, availableRoles
+5. Calls GetAvailableVoices API
+6. Plays silent audio on desktop (audio initialization)
+
+BUTTONS:
+1. "New conversation" button:
+   - Clears conversationId
+   - Sets userName from agent data
+   - Sets respondAs to agentName
+   - Sets participants from agent data
+   - Navigates to ConversationPage
+
+2. "Start workflow" button:
+   - Same setup as new conversation
+   - Opens StartWorkflowDialogComponent (300x50% height)
+
+3. "Initialize voices" button (conditional - shown if agentName != activeVoice):
+   - Prepares InitializeAgentVoicesData
+   - Signs data with Bitcoin key
+   - Calls InitializeAgentVoices API
+   - Shows success/error snackbar
+
+--------------------------------------------------------------------------------
+3.4 CONVERSATIONS PAGE (/conversationsPage)
+--------------------------------------------------------------------------------
+Route: ConversationsPage
+Path: /conversationsPage
+
+PURPOSE: List all conversations for current agent and folder
+
+UI ELEMENTS:
+- AppBar with title "Conversations"
+- Side Navigation Component
+- ListView of conversation cards
+
+CONVERSATION CARD FIELDS:
+- Title (auto-sized text, max 3 lines)
+
+API CALLS ON LOAD:
+- GetConversations (agent, folderName) → Fetches conversations list
+
+BUTTONS/ACTIONS:
+- Conversation card tap:
+  1. Sets conversationId in app state
+  2. Sets respondAs to agentName
+  3. Navigates to ConversationPage
+
+--------------------------------------------------------------------------------
+3.5 CONVERSATION PAGE (/conversationPage)
+--------------------------------------------------------------------------------
+Route: ConversationPage
+Path: /conversationPage
+
+PURPOSE: Main chat interface for conversations with AI agents
+
+UI ELEMENTS:
+- AppBar with:
+  - Refresh icon (desktop only)
+  - Conversation title (auto-sized)
+  - More options button (vertical dots)
+- Side Navigation Component
+- Context size progress bar (linear percent indicator)
+- Context size text: "Context size: X / Y"
+- PageView with 5 swipeable pages:
+  1. Agent profile image (400x400)
+  2. Messages list with streaming widget
+  3. Conversation Settings Component
+  4. System/Todo/Wishlist/Variables managers
+  5. Workspace/Open Files managers
+- Page indicator dots
+- Staged files list (removable)
+- Message input row:
+  - Username card (tappable to change)
+  - Message text field (multi-line, max 5 lines)
+  - Microphone toggle (record/stop)
+- Bottom action row:
+  - Attach file button
+  - Respond as dropdown
+  - Send button
+  - Run toggle (auto-run AI response)
+
+ON PAGE LOAD:
+1. If no conversationId, creates new conversation via AddMessage API
+2. Calls GetConversation API
+3. Updates app state with conversation data
+4. Starts 1-second timer for checking newMessagesAvailable
+5. Auto-refreshes title if still "SERENDIPITY"
+
+MESSAGE DISPLAY:
+- Messages shown in reverse chronological order
+- Each message shows:
+  - Sender name
+  - Message parts (text, code, images, mermaid diagrams, tool requests)
+  - Stop audio button (if playing)
+- Long press on message → Opens EditConversationDialogComponent
+
+STREAMING:
+- StreamCompletionWidget connects to WebSocket
+- Host: serverAddress, Port: websocketPort
+- Conversation ID passed for filtering
+
+INPUT HANDLING:
+- Voice recording with transcription (Spellbook transcribe API)
+- File upload with staging (Spellbook upload API + StageFile API)
+- Message signing with Bitcoin key before sending
+
+SEND MESSAGE FLOW:
+1. Prepare MessageData struct
+2. Sign data with Bitcoin key
+3. Call AddMessage API
+4. Clear input field
+5. Refresh conversation
+6. Scroll to bottom
+
+DIALOGS:
+- ChangeUserNameComponent - Change display name
+- ConversationManagerDialogComponent - Conversation actions
+- EditConversationDialogComponent - Edit/delete messages
+
+--------------------------------------------------------------------------------
+3.6 EDIT AGENT PAGE (/editAgent)
+--------------------------------------------------------------------------------
+Route: EditAgentPage
+Path: /editAgent
+
+PURPOSE: Configure agent settings
+
+UI ELEMENTS (scrollable form):
+- Agent name text field
+- Profile picture image (300x300)
+- Profile picture URL text field
+- Upload profile picture button
+- Description text field
+- System message text field (multi-line)
+- Bootup message text field (multi-line)
+- Model name dropdown
+- Temperature slider
+- Memory slider
+- SERENDIPITY checkbox
+- Public checkbox
+- Tools section:
+  - List of current tools with remove buttons
+  - New tool text field with add button
+- Auto-allow tools multi-select dropdown
+- Toolsets text field (comma-separated)
+- User name text field
+- Participants section:
+  - List of participants with remove buttons
+  - New participant text field with add button
+- Order of speakers section:
+  - Reorderable list
+- Voices section:
+  - List of voices with remove buttons
+  - New voice text field with add button
+  - Upload voice button
+- Roles section:
+  - List of AgentRoleCardComponents
+  - Add role button → Opens AddAgentRoleDialogComponent
+- Save button
+
+ON PAGE LOAD:
+- Calls GetAgent API
+- Populates all form fields with agent data
+
+SAVE FLOW:
+1. Prepare EditAgentData struct
+2. Sign data with Bitcoin key
+3. Call EditAgent API
+4. Show success/error snackbar
+5. Navigate back to AgentHomePage
+
+--------------------------------------------------------------------------------
+3.7 SETTINGS PAGE (/settingsPage)
+--------------------------------------------------------------------------------
+Route: SettingsPage
+Path: /settingsPage
+
+PURPOSE: Application settings configuration
+
+UI ELEMENTS:
+- OpenVoice server URL text field
+- Auto play voice switch
+- Auto send when talking switch
+- Server address text field
+- Server port text field
+- WebSocket port text field
+- ComfyUI server address text field
+- ComfyUI server port text field
+- Save ComfyUI server button
+- WIF Key text field
+- Generate new WIF key button
+- Bitcoin address display (read-only)
+- Dark mode toggle button
+
+FIELD BEHAVIORS:
+- All text fields auto-save on change (2 second debounce)
+- Switches immediately update app state
+
+BUTTONS:
+- Save ComfyUI Server:
+  1. Prepare SaveComfyUIServerData
+  2. Sign and call SaveComfyUIServer API
+
+- Generate WIF Key:
+  1. Calls randomWifKey custom action
+  2. Converts to Bitcoin address
+  3. Saves both to app state
+
+- Dark mode toggle:
+  1. Toggles isDarkMode
+  2. Updates theme mode
+
+--------------------------------------------------------------------------------
+3.8 LLMs PAGE (/LLMsPage)
+--------------------------------------------------------------------------------
+Route: LLMsPage
+Path: /LLMsPage
+
+PURPOSE: Manage LLM configurations
+
+UI ELEMENTS:
+- Add LLM button (+ icon)
+- Back button (arrow, when adding new)
+- Default LLM section:
+  - Label "Default LLM"
+  - Dropdown with all models
+  - Save button (when changed)
+- LLM config dropdown (select existing config)
+- LLMConfigComponent (when config selected or adding new)
+
+API CALLS:
+- GetModels → Fetches available models and default
+- SpellbookApiGroup.lLMsCall → Fetches LLM configurations
+
+SAVE DEFAULT LLM FLOW:
+1. Prepare SaveDefaultLLMData
+2. Sign and call SaveDefaultLLM API
+3. Refresh page
+
+--------------------------------------------------------------------------------
+3.9 MCPs PAGE (/MCPsPage)
+--------------------------------------------------------------------------------
+Route: MCPsPage
+Path: /MCPsPage
+
+PURPOSE: Manage MCP (Model Context Protocol) server configurations
+
+UI ELEMENTS:
+- MCPConfigComponent (full page component)
+
+The MCPConfigComponent handles:
+- Listing available MCP servers
+- Adding new MCP server configurations
+- Editing existing configurations
+- Deleting configurations
+
+--------------------------------------------------------------------------------
+3.10 TOOLSETS PAGE (/ToolsetsPage)
+--------------------------------------------------------------------------------
+Route: ToolsetsPage
+Path: /ToolsetsPage
+
+PURPOSE: Manage toolsets (collections of MCP servers)
+
+UI ELEMENTS:
+- ToolsetComponent (full page component)
+
+The ToolsetComponent handles:
+- Listing available toolsets
+- Creating new toolsets
+- Adding/removing servers from toolsets
+- Deleting toolsets
+
+--------------------------------------------------------------------------------
+3.11 WORKFLOW EDITOR PAGE (/workflowEditor)
+--------------------------------------------------------------------------------
+Route: WorkflowEditorPage
+Path: /workflowEditor
+Parameters: workflowId (optional), nodeId (optional)
+
+PURPOSE: Create and edit workflows
+
+UI ELEMENTS:
+- Workflow ID dropdown (select existing workflow)
+- Node ID dropdown (select node to edit, shown after workflow selected)
+- Start workflow button
+- Workflow ID text field
+- Instructions text field
+- Generate workflow button
+- Flowchart text field (mermaid syntax)
+- Mermaid diagram preview (WebView or TreeViewWidget)
+- WorkflowStepComponent (when node selected)
+
+ON PAGE LOAD (with workflowId parameter):
+- Calls GetWorkflow API
+- Populates flowchart and node IDs
+
+WORKFLOW SELECTION:
+1. Calls GetWorkflow API
+2. Updates flowchart display
+3. Populates node ID dropdown
+
+NODE SELECTION:
+- Navigates to same page with workflowId and nodeId parameters
+- Shows WorkflowStepComponent for editing
+
+START WORKFLOW:
+1. Prepare StartWorkflowData
+2. Sign and call StartWorkflow API
+3. Update app state with conversation data
+4. Navigate to ConversationPage
+
+GENERATE WORKFLOW:
+1. Prepare EditWorkflowData with instructions
+2. Sign and call GenerateWorkflow API
+3. Refresh page
+
+================================================================================
+4. REUSABLE COMPONENTS
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 SIDE NAVIGATION COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Main navigation sidebar
+
+ELEMENTS:
+- SERENDIPITY header with home icon (navigates to AgentHomePage)
+- Agent profile section:
+  - Profile image (100x100)
+  - Agent name
+  - Agent description
+- Folder dropdown (fetches from GetFolders API)
+- Navigation section label
+- Navigation items:
+  - Agents → AgentSelectionPage
+  - Edit agent → EditAgentPage
+  - Conversations → ConversationsPage
+  - Workflows → WorkflowEditorPage
+  - LLMs → LLMsPage
+  - MCPs → MCPsPage
+  - Toolsets → ToolsetsPage
+  - Settings → SettingsPage
+- Dark mode toggle at bottom
+
+--------------------------------------------------------------------------------
+4.2 MESSAGE CARD COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Display a single message in conversation
+
+PARAMETERS:
+- sender: dynamic - Message sender name
+- content: dynamic - Message content
+- messageId: String - Unique message ID
+- parts: List<dynamic> - Message parts array
+- isLast: bool - Whether this is the last message
+- textOnlyParts: String - Text-only content for TTS
+- images: List<String> - Image filenames
+
+ELEMENTS:
+- Sender name label
+- Stop audio button (when playing)
+- Images list (if any)
+- Message parts list:
+  - Tool request parts → MessageToolRequestPartComponent
+  - Text parts → MessageTextPartComponent
+  - Image parts → MessageImagePartComponent
+  - Mermaid parts → MessageMermaidPartComponent
+  - Code parts → MessageCodePartComponent
+
+AUTO-PLAY BEHAVIOR:
+- If autoPlay enabled and isLast and not already played:
+  - Generates TTS URL via OpenVoice
+  - Plays audio automatically
+  - Adds messageId to playedAudioMessages
+
+--------------------------------------------------------------------------------
+4.3 CONVERSATION SETTINGS COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Settings panel for current conversation
+
+ELEMENTS:
+- TokenCounterComponent (totalTokens, totalCost)
+- ModelManagerComponent (model selection, temperature)
+- MemoryManagerComponent (memory slider)
+- RoleManagerComponent (enable/disable roles)
+- ToolManagerComponent (enable/disable tools)
+
+--------------------------------------------------------------------------------
+4.4 MODEL MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Select LLM model and temperature
+
+ELEMENTS:
+- Model dropdown (fetches from GetModels API)
+- Temperature slider (0.0 - 2.0)
+
+--------------------------------------------------------------------------------
+4.5 ROLE MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Enable/disable agent roles for conversation
+
+ELEMENTS:
+- Available roles list with checkboxes
+- Each role toggles in enabledRoles app state
+
+--------------------------------------------------------------------------------
+4.6 TOOL MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Enable/disable tools for conversation
+
+ELEMENTS:
+- Available tools list with checkboxes
+- Each tool toggles in enabledTools app state
+
+--------------------------------------------------------------------------------
+4.7 MEMORY MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Configure memory/context settings
+
+ELEMENTS:
+- Memory slider
+- Updates memory in app state
+
+--------------------------------------------------------------------------------
+4.8 SYSTEM MESSAGE COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: View/edit system message
+
+ELEMENTS:
+- System message text area
+- Save button
+
+--------------------------------------------------------------------------------
+4.9 TODO MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Manage agent's todo list
+
+API: GetTodo
+
+--------------------------------------------------------------------------------
+4.10 WISHLIST MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Manage agent's wishlist
+
+API: GetWishlist
+
+--------------------------------------------------------------------------------
+4.11 VARIABLES MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: View/manage agent variables
+
+API: GetVariables
+
+--------------------------------------------------------------------------------
+4.12 WORKSPACE MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Browse agent's workspace files
+
+API: GetWorkspace
+ELEMENTS:
+- TreeViewWidget for file hierarchy
+
+--------------------------------------------------------------------------------
+4.13 OPEN FILES MANAGER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Manage files in conversation context
+
+ELEMENTS:
+- List of open files
+- Remove file buttons
+
+--------------------------------------------------------------------------------
+4.14 LLM CONFIG COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Configure LLM settings
+
+FIELDS:
+- Name text field
+- Description text field
+- Host text field
+- Port text field
+- Server type dropdown
+- Model name text field
+- Prompt tokens cost text field
+- Prompt tokens multiplier text field
+- Completion tokens cost text field
+- Completion tokens multiplier text field
+- Context length text field
+- Prompt template text field
+- API key text field
+- Allow auto routing checkbox
+- Vision checkbox
+- Audio checkbox
+- Video checkbox
+- Chat checkbox
+- Save button
+- Delete button
+
+--------------------------------------------------------------------------------
+4.15 MCP CONFIG COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Configure MCP server settings
+
+FIELDS:
+- Server name dropdown (existing servers)
+- Add new button
+- Name text field
+- Description text field
+- Transport type dropdown (sse/stdio)
+- Base URL text field
+- SSE endpoint text field
+- Messages endpoint text field
+- Auth type dropdown (none/api_key/oauth)
+- API key header text field
+- API key text field
+- Client ID text field
+- Auth endpoint text field
+- Token endpoint text field
+- Resource metadata URI text field
+- Streaming enabled checkbox
+- Tools enabled checkbox
+- Enabled checkbox
+- Tool filter multi-select
+- STDIO config section (for stdio transport):
+  - Command text field
+  - Args text field
+  - Env text field
+- Cached tools display
+- Save button
+- Delete button
+
+--------------------------------------------------------------------------------
+4.16 TOOLSET COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Manage toolset configurations
+
+ELEMENTS:
+- Toolset dropdown (existing toolsets)
+- Add new button
+- Name text field
+- Description text field
+- Servers list (ToolsetServerComponents)
+- Add server button
+- Save button
+- Delete button
+
+--------------------------------------------------------------------------------
+4.17 TOOLSET SERVER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Configure a server within a toolset
+
+FIELDS:
+- Server name dropdown
+- Tool filter multi-select
+- Remove button
+
+--------------------------------------------------------------------------------
+4.18 WORKFLOW STEP COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Edit a single workflow step/node
+
+FIELDS:
+- Node ID display
+- Step type dropdown
+- Prompt text field
+- Model dropdown
+- Temperature slider
+- Tools multi-select
+- Roles multi-select
+- Next nodes configuration
+- Save button
+
+--------------------------------------------------------------------------------
+4.19 AGENT ROLE CARD COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Display and edit an agent role
+
+FIELDS:
+- Role name
+- Role description
+- System message
+- Edit button
+- Delete button
+
+--------------------------------------------------------------------------------
+4.20 CONVERSATION MANAGER DIALOG COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Actions for current conversation
+
+BUTTONS:
+- Summarize conversation
+- Generate memory
+- Update knowledge base
+- Archive conversation
+- Delete conversation
+- Move to folder
+
+--------------------------------------------------------------------------------
+4.21 EDIT CONVERSATION DIALOG COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Edit or delete a specific message
+
+PARAMETERS:
+- messageId: String
+
+ACTIONS:
+- Edit message content
+- Delete message
+- Regenerate response
+
+--------------------------------------------------------------------------------
+4.22 START WORKFLOW DIALOG COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Select and start a workflow
+
+ELEMENTS:
+- Workflow dropdown (fetches from GetWorkflows API)
+- Workflow input text field
+- Start button
+
+--------------------------------------------------------------------------------
+4.23 MOVE TO FOLDER DIALOG COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Move conversation to different folder
+
+ELEMENTS:
+- Folder dropdown
+- Move button
+
+--------------------------------------------------------------------------------
+4.24 CHANGE USER NAME COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Change display name for messages
+
+ELEMENTS:
+- Username text field
+- Save button
+
+--------------------------------------------------------------------------------
+4.25 TOKEN COUNTER COMPONENT
+--------------------------------------------------------------------------------
+PURPOSE: Display token usage and cost
+
+PARAMETERS:
+- totalTokens: int
+- totalCost: double
+
+DISPLAY:
+- "Total tokens: X"
+- "Total cost: $Y.YYYY"
+
+================================================================================
+5. API ENDPOINTS (SERENDIPITY API)
+================================================================================
+
+Base URL: http://{serverAddress}:{serverPort}
+
+All POST endpoints use signed requests with:
+- address: Bitcoin address
+- message: Timestamp message
+- signature: Bitcoin signature
+- data: Request payload
+
+--------------------------------------------------------------------------------
+GET ENDPOINTS
+--------------------------------------------------------------------------------
+
+GET /api/GetAgent
+  Parameters: agent_name
+  Returns: Agent configuration
+  Response fields:
+    - agent.name
+    - agent.model_name
+    - agent.participants[]
+    - agent.profile_picture
+    - agent.roles[]
+    - agent.temperature
+    - agent.tools[]
+    - agent.user_name
+    - agent.memory
+    - agent.available_funds
+    - agent.SERENDIPITY
+    - agent.public
+    - agent.auto_allow_tools[]
+    - agent.bootup_message
+    - agent.system_message
+    - agent.description
+    - agent.voices[]
+    - agent.model_context_size
+    - agent.order_of_speakers[]
+    - agent.toolsets[]
+
+GET /api/GetAgents
+  Returns: List of all agents
+  Response fields:
+    - agents[] (name, description, profile_image)
+
+GET /api/GetFolders
+  Parameters: agent
+  Returns: List of conversation folders
+  Response fields:
+    - folders[]
+
+GET /api/GetMCPServers
+  Returns: List of MCP servers
+  Response fields:
+    - mcp_servers[]
+    - mcp_servers[:].name
+
+GET /api/GetToolsets
+  Returns: List of toolsets
+  Response fields:
+    - toolsets
+    - count
+
+GET /api/GetMCPServerConfig
+  Parameters: server_name
+  Returns: MCP server configuration
+  Response fields:
+    - servers[]
+    - server_config.auth.type
+    - server_config.base_url
+    - server_config.capabilities.streaming
+    - server_config.capabilities.tools
+    - server_config.description
+    - server_config.enabled
+    - server_config.messages_endpoint
+    - server_config.sse_endpoint
+    - server_config.name
+    - server_config.transport_type
+    - server_config.auth.auth_endpoint
+    - server_config.auth.resource_metadata_uri
+    - server_config.auth.token_endpoint
+    - server_config.auth.api_key_header
+    - server_config.auth.api_key
+    - server_config.auth.client_id
+    - server_config.cached_tools
+    - server_config.tool_filter[]
+    - server_config.stdio_config
+
+GET /api/GetToolset
+  Parameters: toolset_name
+  Returns: Toolset configuration
+  Response fields:
+    - name
+    - toolset.description
+    - toolset.servers[]
+    - server_count
+
+GET /api/GetWorkflows
+  Parameters: agent
+  Returns: List of workflows
+  Response fields:
+    - workflows[]
+
+GET /api/GetWorkflow
+  Parameters: agent, workflow_id
+  Returns: Workflow configuration
+  Response fields:
+    - workflow.nodeIds[]
+    - workflow.flowchart
+    - workflow.nodes
+
+GET /api/GetConversations
+  Parameters: agent, folder_name
+  Returns: List of conversations
+  Response fields:
+    - conversations_info[]
+    - conversations_info[:].conversation_id
+    - conversations_info[:].title
+
+GET /api/GetConversation
+  Parameters: agent, folder_name, conversation_id
+  Returns: Full conversation data
+  Response fields:
+    - conversation.messages[]
+    - conversation.completions[]
+    - conversation.title
+    - conversation.participants[]
+    - conversation.system_message
+    - conversation.total_cost
+    - conversation.total_tokens
+    - conversation.open_files[]
+    - conversation.enabled_tools[]
+    - conversation.enabled_roles[]
+    - conversation.conversation_id
+    - conversation.agent
+    - conversation.audio_files
+    - conversation.model_name
+    - conversation.temperature
+    - conversation.user_name
+    - conversation.current_tokens
+    - staged_files[]
+    - next_speaker
+
+GET /api/GetModels
+  Returns: Available LLM models
+  Response fields:
+    - model_names[]
+    - models
+    - default_model
+    - model_context_sizes
+
+GET /api/GetTodo
+  Parameters: agent
+  Returns: Agent's todo list
+  Response fields:
+    - todo
+
+GET /api/GetAvailableVoices
+  Parameters: agent
+  Returns: Available TTS voices
+  Response fields:
+    - voices[]
+
+GET /api/GetWishlist
+  Parameters: agent
+  Returns: Agent's wishlist
+  Response fields:
+    - wishlist
+
+GET /api/GetVariables
+  Parameters: agent
+  Returns: Agent's variables
+  Response fields:
+    - variables[]
+
+GET /api/GetWorkspace
+  Parameters: agent
+  Returns: Agent's workspace file tree
+  Response fields:
+    - workspace
+
+--------------------------------------------------------------------------------
+POST ENDPOINTS
+--------------------------------------------------------------------------------
+
+POST /api/AddMessage/message
+  Body: { message, signature, address, data }
+  Data fields:
+    - conversationId
+    - agent
+    - folderName
+    - content
+    - modelName
+    - sender
+    - respondAs
+    - temperature
+    - enabledRoles[]
+    - enabledTools[]
+    - memory
+    - run (bool)
+    - files[]
+  Returns: Updated conversation
+
+POST /api/ArchiveConversation
+  Body: { conversation_id }
+  Archives a conversation
+
+POST /api/DeleteConversation
+  Body: { agent, folder_name, conversation_id }
+  Deletes a conversation
+
+POST /api/MoveToFolder
+  Body: { agent, folder_name, conversation_id, folder }
+  Moves conversation to different folder
+
+POST /api/EditConversation/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+    - messageId
+    - action (edit/delete/regenerate)
+    - content (for edit)
+  Edits conversation/message
+
+POST /api/EditAgent/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - serendipity
+    - memory
+    - modelName
+    - participants[]
+    - profilePicture
+    - public
+    - temperature
+    - tools[]
+    - autoAllowTools[]
+    - userName
+    - systemMessage
+    - bootupMessage
+    - description
+    - voices[]
+    - orderOfSpeakers[]
+    - toolsets[]
+  Updates agent configuration
+
+POST /api/SaveComfyUIServer/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - host
+    - port
+  Saves ComfyUI server configuration
+
+POST /api/SaveLLMConfig/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - name
+    - description
+    - host
+    - port
+    - serverType
+    - modelName
+    - promptTokensCost
+    - promptTokensMultiplier
+    - completionTokensCost
+    - completionTokensMultiplier
+    - contextLength
+    - promptTemplate
+    - apiKey
+    - allowAutoRouting
+    - vision
+    - audio
+    - video
+    - chat
+  Saves LLM configuration
+
+POST /api/SaveMCPServerConfig/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - name
+    - description
+    - transportType
+    - baseUrl
+    - sseEndpoint
+    - messagesEndpoint
+    - authType
+    - apiKeyHeader
+    - apiKey
+    - clientId
+    - authEndpoint
+    - tokenEndpoint
+    - resourceMetadataUri
+    - streamingEnabled
+    - toolsEnabled
+    - enabled
+    - toolFilter[]
+    - stdioConfig
+  Saves MCP server configuration
+
+POST /api/SaveToolset/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - name
+    - description
+    - servers[]
+  Saves toolset configuration
+
+POST /api/SaveDefaultLLM/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - llmName
+  Sets default LLM
+
+POST /api/UploadVoice/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - voiceName
+    - fileId
+  Uploads voice sample for TTS
+
+POST /api/UploadProfilePicture/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - fileName
+    - fileId
+  Uploads agent profile picture
+
+POST /api/StageFile/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+    - fileName
+    - fileId
+  Stages file for conversation
+
+POST /api/RemoveStagedFile/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+    - fileName
+  Removes staged file
+
+POST /api/DeleteLLMConfig/message
+  Body: { address, message, signature, data }
+  Deletes LLM configuration
+
+POST /api/DeleteMCPServerConfig/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - serverName
+  Deletes MCP server configuration
+
+POST /api/DeleteToolset/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - toolsetName
+  Deletes toolset
+
+POST /api/EditAgentRole/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - roleName
+    - roleDescription
+    - systemMessage
+    - action (add/edit/delete)
+  Edits agent role
+
+POST /api/EditAgentVoice/message
+  Body: { address, message, signature, data }
+  Edits agent voice configuration
+
+POST /api/GenerateWorkflow/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - workflowId
+    - instructions
+  Generates workflow from instructions
+
+POST /api/GenerateMemory/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+    - folderName
+  Generates memory from conversation
+
+POST /api/SummarizeConversation/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+    - folderName
+  Summarizes conversation
+
+POST /api/UpdateKnowledgeBase/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+    - folderName
+  Updates knowledge base from conversation
+
+POST /api/StartWorkflow/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - folderName
+    - conversationId
+    - workflowInput
+    - workflowId
+    - taskId
+  Starts workflow execution
+
+POST /api/InitializeAgentVoices/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - openvoiceServer
+  Initializes TTS voices for agent
+
+POST /api/StopGeneration/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - conversationId
+  Stops ongoing generation
+
+POST /api/EditWorkflowStep/message
+  Body: { address, message, signature, data }
+  Data fields:
+    - agent
+    - workflowId
+    - nodeId
+    - stepType
+    - prompt
+    - model
+    - temperature
+    - tools[]
+    - roles[]
+    - nextNodes
+  Edits workflow step
+
+================================================================================
+6. API ENDPOINTS (SPELLBOOK API)
+================================================================================
+
+Base URL: http://{serverAddress}:{serverPort}
+
+GET /spellbook/ping
+  Health check endpoint
+
+GET /spellbook/llms
+  Returns: List of LLM configuration names
+  Response: string[]
+
+GET /spellbook/llms/{llm}
+  Parameters: llm (path parameter)
+  Returns: LLM configuration details
+  Response fields:
+    - description
+    - host
+    - name
+    - port
+    - server_type
+    - model_name
+    - prompt_tokens_cost
+    - prompt_tokens_multiplier
+    - completion_tokens_cost
+    - completion_tokens_multiplier
+    - allow_auto_routing
+    - api_key
+    - vision
+    - audio
+    - video
+    - context_length
+    - prompt_template
+    - chat
+
+POST /spellbook/upload
+  Body: multipart/form-data with file
+  Returns: { file_id }
+  Uploads file to server
+
+POST /spellbook/transcribe
+  Body: multipart/form-data with audio file
+  Returns: { full_text }
+  Transcribes audio to text
+
+================================================================================
+7. DATA STRUCTURES
+================================================================================
+
+--------------------------------------------------------------------------------
+MessageDataStruct
+--------------------------------------------------------------------------------
+- conversationId: String
+- agent: String
+- folderName: String
+- content: String
+- modelName: String
+- sender: String
+- respondAs: String
+- temperature: double
+- enabledRoles: List<String>
+- enabledTools: List<String>
+- memory: int
+- run: bool
+- files: List<String>
+
+--------------------------------------------------------------------------------
+EditAgentDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- serendipity: bool
+- memory: int
+- modelName: String
+- participants: List<String>
+- profilePicture: String
+- public: bool
+- temperature: double
+- tools: List<String>
+- autoAllowTools: List<String>
+- userName: String
+- systemMessage: String
+- bootupMessage: String
+- description: String
+- voices: List<String>
+- orderOfSpeakers: List<String>
+- toolsets: List<String>
+
+--------------------------------------------------------------------------------
+EditConversationDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+- messageId: String
+- action: String
+- content: String
+- systemMessage: String
+- title: String
+
+--------------------------------------------------------------------------------
+SaveLLMConfigDataStruct
+--------------------------------------------------------------------------------
+- name: String
+- description: String
+- host: String
+- port: int
+- serverType: String
+- modelName: String
+- promptTokensCost: double
+- promptTokensMultiplier: int
+- completionTokensCost: double
+- completionTokensMultiplier: int
+- contextLength: int
+- promptTemplate: String
+- apiKey: String
+- allowAutoRouting: bool
+- vision: bool
+- audio: bool
+- video: bool
+- chat: bool
+
+--------------------------------------------------------------------------------
+SaveMCPConfigDataStruct
+--------------------------------------------------------------------------------
+- name: String
+- description: String
+- transportType: String
+- baseUrl: String
+- sseEndpoint: String
+- messagesEndpoint: String
+- authType: String
+- apiKeyHeader: String
+- apiKey: String
+- clientId: String
+- authEndpoint: String
+- tokenEndpoint: String
+- resourceMetadataUri: String
+- streamingEnabled: bool
+- toolsEnabled: bool
+- enabled: bool
+- toolFilter: List<String>
+- stdioConfig: dynamic
+
+--------------------------------------------------------------------------------
+ToolsetDataStruct
+--------------------------------------------------------------------------------
+- name: String
+- description: String
+- servers: List<ToolsetServerDataStruct>
+
+--------------------------------------------------------------------------------
+ToolsetServerDataStruct
+--------------------------------------------------------------------------------
+- serverName: String
+- toolFilter: List<String>
+
+--------------------------------------------------------------------------------
+StartWorkflowDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- folderName: String
+- conversationId: String
+- workflowInput: String
+- workflowId: String
+- taskId: String
+
+--------------------------------------------------------------------------------
+EditWorkflowStepDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- workflowId: String
+- nodeId: String
+- stepType: String
+- prompt: String
+- model: String
+- temperature: double
+- tools: List<String>
+- roles: List<String>
+- nextNodes: dynamic
+
+--------------------------------------------------------------------------------
+EditAgentRoleDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- roleName: String
+- roleDescription: String
+- systemMessage: String
+- action: String
+
+--------------------------------------------------------------------------------
+StageFileDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+- fileName: String
+- fileId: String
+
+--------------------------------------------------------------------------------
+RemoveStagedFileDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+- fileName: String
+
+--------------------------------------------------------------------------------
+GenerateMemoryDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+- folderName: String
+
+--------------------------------------------------------------------------------
+SummarizeConversationDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+- folderName: String
+
+--------------------------------------------------------------------------------
+UpdateKnowledgeBaseDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+- folderName: String
+
+--------------------------------------------------------------------------------
+InitializeAgentVoicesDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- openvoiceServer: String
+
+--------------------------------------------------------------------------------
+StopGenerationDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- conversationId: String
+
+--------------------------------------------------------------------------------
+SaveDefaultLLMDataStruct
+--------------------------------------------------------------------------------
+- llmName: String
+
+--------------------------------------------------------------------------------
+UploadProfilePictureDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- fileName: String
+- fileId: String
+
+--------------------------------------------------------------------------------
+UploadVoiceDataStruct
+--------------------------------------------------------------------------------
+- agent: String
+- voiceName: String
+- fileId: String
+
+--------------------------------------------------------------------------------
+SaveComfyUIServerDataStruct
+--------------------------------------------------------------------------------
+- host: String
+- port: int
+
+--------------------------------------------------------------------------------
+DeleteMCPServerConfigDataStruct
+--------------------------------------------------------------------------------
+- serverName: String
+
+--------------------------------------------------------------------------------
+DeleteToolsetDataStruct
+--------------------------------------------------------------------------------
+- toolsetName: String
+
+================================================================================
+8. CUSTOM ACTIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+detectOS()
+--------------------------------------------------------------------------------
+Returns: String (windows/linux/macos/android/ios/web)
+Detects the current operating system/platform
+
+--------------------------------------------------------------------------------
+pickAndUploadFiles()
+--------------------------------------------------------------------------------
+Returns: List<FFUploadedFile>
+Opens file picker and returns selected files
+
+--------------------------------------------------------------------------------
+randomWifKey()
+--------------------------------------------------------------------------------
+Returns: String
+Generates a random WIF (Wallet Import Format) key for Bitcoin
+
+--------------------------------------------------------------------------------
+wifKey2bitcoinAddress(String wifKey)
+--------------------------------------------------------------------------------
+Returns: String
+Converts WIF key to Bitcoin address
+
+--------------------------------------------------------------------------------
+signData(Map<String, dynamic> data)
+--------------------------------------------------------------------------------
+Returns: Map with { address, message, signature, data }
+Signs data using the stored WIF key for API authentication
+
+--------------------------------------------------------------------------------
+saveAsAudioFile(Uint8List bytes, String filename)
+--------------------------------------------------------------------------------
+Saves audio bytes to file
+
+--------------------------------------------------------------------------------
+windowsSound()
+--------------------------------------------------------------------------------
+Plays system sound on Windows
+
+================================================================================
+9. CUSTOM WIDGETS
+================================================================================
+
+--------------------------------------------------------------------------------
+StreamCompletionWidget
+--------------------------------------------------------------------------------
+Parameters:
+- width: double
+- height: double
+- host: String (server address)
+- port: int (WebSocket port)
+- conversationId: String
+
+Purpose: Connects to WebSocket and displays streaming AI responses in real-time
+
+--------------------------------------------------------------------------------
+TreeViewWidget
+--------------------------------------------------------------------------------
+Purpose: Displays hierarchical file/folder structure for workspace browsing
+
+--------------------------------------------------------------------------------
+ServerStatusIndicator
+--------------------------------------------------------------------------------
+Purpose: Shows server connection status
+
+--------------------------------------------------------------------------------
+CustomWebView
+--------------------------------------------------------------------------------
+Purpose: Embedded web view for displaying web content (mermaid diagrams, etc.)
+
+================================================================================
+10. NAVIGATION STRUCTURE
+================================================================================
+
+App Navigation Flow:
+                                    
+                    ┌─────────────────┐
+                    │   HomePage      │
+                    │   (Landing)     │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ AgentSelection  │
+                    │     Page        │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  AgentHomePage  │◄──────────────────┐
+                    │  (Dashboard)    │                   │
+                    └────────┬────────┘                   │
+                             │                            │
+        ┌────────────────────┼────────────────────┐       │
+        │                    │                    │       │
+┌───────▼───────┐   ┌───────▼───────┐   ┌───────▼───────┐│
+│ Conversations │   │  Start        │   │ Edit Agent    ││
+│    Page       │   │  Workflow     │   │    Page       ││
+└───────┬───────┘   │  Dialog       │   └───────────────┘│
+        │           └───────┬───────┘                    │
+┌───────▼───────┐           │                            │
+│ Conversation  │◄──────────┘                            │
+│    Page       │                                        │
+└───────────────┘                                        │
+                                                         │
+Side Navigation (accessible from all pages):             │
+├── Home (AgentHomePage) ─────────────────────────────────┘
+├── Agents (AgentSelectionPage)
+├── Edit Agent (EditAgentPage)
+├── Conversations (ConversationsPage)
+├── Workflows (WorkflowEditorPage)
+├── LLMs (LLMsPage)
+├── MCPs (MCPsPage)
+├── Toolsets (ToolsetsPage)
+└── Settings (SettingsPage)
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+This document was generated from analysis of the FF_SERENDIPITY Flutter Flow
+mobile application source code. Use this as a reference for recreating the
+application as a standalone web application.
+
+Key technologies to consider for web implementation:
+- React/Vue/Svelte for frontend framework
+- WebSocket for real-time streaming
+- Bitcoin/crypto library for message signing
+- Markdown/code highlighting for message display
+- Mermaid.js for diagram rendering
+- Audio recording/playback APIs
+- File upload handling
+
