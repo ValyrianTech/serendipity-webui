@@ -184,7 +184,22 @@
     
     let agentData = null;
     
+    // Wait for WIF key to be available (set by base template)
+    async function waitForWifKey(maxWaitMs = 5000) {
+        const startTime = Date.now();
+        while (!window.currentWif && (Date.now() - startTime) < maxWaitMs) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!window.currentWif) {
+            console.log('WIF key not available after waiting');
+        }
+        return !!window.currentWif;
+    }
+    
     document.addEventListener('DOMContentLoaded', async () => {
+        // Wait for base template to initialize (sets window.currentWif)
+        await waitForWifKey();
+        
         // Load agent data first to get default model
         await loadAgentData();
         await loadModels();
