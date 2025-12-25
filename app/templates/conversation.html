@@ -202,6 +202,9 @@
                 document.getElementById('temperature').value = agentData.agent.temperature;
                 document.getElementById('temp-value').textContent = agentData.agent.temperature;
             }
+            
+            // Initialize new conversation with info message (like Flutter app does)
+            await initializeNewConversation();
         }
         
         // Auto-resize textarea
@@ -237,6 +240,57 @@
             }
         } catch (e) {
             console.error('Failed to load agent data:', e);
+        }
+    }
+    
+    async function initializeNewConversation() {
+        if (!window.currentWif) {
+            console.log('No WIF key, skipping conversation initialization');
+            return;
+        }
+        
+        const settings = getSettings();
+        const model = document.getElementById('model-select').value;
+        const temperature = parseFloat(document.getElementById('temperature').value);
+        
+        // Create initial info message with current datetime (like Flutter app)
+        const now = new Date();
+        const dateStr = now.toISOString();
+        
+        const messageData = {
+            conversation_id: '',
+            sender: 'info',
+            respond_as: agentName,
+            content: dateStr,
+            agent: agentName,
+            folder_name: settings.folderName,
+            enabled_tools: agentData?.agent?.tools || [],
+            enabled_roles: agentData?.agent?.roles || [],
+            memory: agentData?.agent?.memory || 0,
+            temperature: temperature,
+            model_name: model,
+            run: false,
+            files: []
+        };
+        
+        try {
+            console.log('Initializing new conversation with info message');
+            const response = await addMessage(window.currentWif, messageData);
+            
+            if (response.conversation_id) {
+                conversationId = response.conversation_id;
+                window.history.replaceState({}, '', `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(conversationId)}`);
+                
+                // Connect WebSocket for this conversation
+                connectWebSocket();
+                
+                // Load the conversation to show the info message
+                await loadConversation();
+                
+                console.log('New conversation initialized:', conversationId);
+            }
+        } catch (e) {
+            console.error('Failed to initialize conversation:', e);
         }
     }
     
