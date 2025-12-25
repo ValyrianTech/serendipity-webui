@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WIF Key Storage Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/bitcoinjs-lib@6.1.5/src/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bs58@5.0.0/dist/bs58.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.1.0/lib/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@noble/hashes@1.3.3/sha256.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@noble/hashes@1.3.3/ripemd160.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 1.5rem;
+            color: #e94560;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #0f0f23;
+            color: #eee;
+            font-size: 1rem;
+            font-family: monospace;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.1s, opacity 0.1s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .btn-primary {
+            background: #e94560;
+            color: white;
+        }
+        .btn-secondary {
+            background: #533483;
+            color: white;
+        }
+        .btn-danger {
+            background: #c0392b;
+            color: white;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+        .status.success {
+            background: rgba(39, 174, 96, 0.2);
+            border: 1px solid #27ae60;
+            color: #27ae60;
+        }
+        .status.error {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+        }
+        .status.info {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid #3498db;
+            color: #3498db;
+        }
+        .hidden {
+            display: none;
+        }
+        .section {
+            border-top: 1px solid #333;
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+        .hint {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 WIF Key Storage Test</h1>
+        
+        <!-- Unlock Section (shown when encrypted key exists) -->
+        <div id="unlockSection" class="hidden">
+            <div class="form-group">
+                <label>Enter Password to Unlock</label>
+                <input type="password" id="unlockPassword" placeholder="Enter your password">
+            </div>
+            <button class="btn-primary" onclick="unlockKey()">Unlock</button>
+            <button class="btn-danger" onclick="clearStorage()">Clear Storage</button>
+            <div id="unlockStatus"></div>
+        </div>
+
+        <!-- Setup Section (shown when no key exists or after unlock) -->
+        <div id="setupSection" class="hidden">
+            <!-- Bitcoin Address Display -->
+            <div class="form-group" id="addressDisplay" style="display:none;">
+                <label>Bitcoin Address</label>
+                <input type="text" id="bitcoinAddress" readonly style="background: #1a1a2e; cursor: text;">
+                <p class="hint">Derived from your WIF key</p>
+            </div>
+            <div class="form-group">
+                <label>WIF Key</label>
+                <textarea id="wifKey" placeholder="Enter or paste your WIF key here..."></textarea>
+                <p class="hint">This is your Bitcoin private key in WIF format</p>
+            </div>
+            
+            <div class="form-group">
+                <label>Password (optional)</label>
+                <input type="password" id="password" placeholder="Leave empty for no encryption">
+                <p class="hint">If set, you'll need this password to access your key</p>
+            </div>
+            
+            <button class="btn-primary" onclick="saveKey()">Save Key</button>
+            <button class="btn-secondary" onclick="generateTestKey()">Generate Test Key</button>
+            
+            <div class="section">
+                <h3 style="margin-top:0">API Test</h3>
+                <div class="form-group">
+                    <label>Server Address</label>
+                    <input type="text" id="serverAddress" value="192.168.0.124" placeholder="e.g. 192.168.0.124">
+                </div>
+                <div class="form-group">
+                    <label>Server Port</label>
+                    <input type="text" id="serverPort" value="42069" placeholder="e.g. 42069">
+                </div>
+                <div class="form-group">
+                    <label>Agent Name</label>
+                    <input type="text" id="agentName" value="Serendipity" placeholder="e.g. Serendipity">
+                </div>
+                <button class="btn-secondary" onclick="testApiCall()">Test API (AddMessage)</button>
+                <div id="apiResult" class="status info" style="margin-top: 10px; display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h3 style="margin-top:0">Current Status</h3>
+                <div id="status" class="status info">No key stored</div>
+            </div>
+            
+            <div class="section">
+                <h3 style="margin-top:0">Stored Data (Debug)</h3>
+                <textarea id="debugOutput" readonly style="height: 100px; font-size: 0.8rem;"></textarea>
+                <button class="btn-danger" onclick="clearStorage()" style="margin-top: 10px;">Clear Storage</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import noble libraries for Bitcoin operations
+        import * as secp256k1 from 'https://esm.run/@noble/secp256k1@2.1.0';
+        import { sha256 } from 'https://esm.run/@noble/hashes@1.3.3/sha256';
+        import { ripemd160 } from 'https://esm.run/@noble/hashes@1.3.3/ripemd160';
+        
+        // Base58 alphabet (Bitcoin)
+        const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        
+        function base58Decode(str) {
+            const bytes = [];
+            for (let i = 0; i < str.length; i++) {
+                const char = str[i];
+                const index = BASE58_ALPHABET.indexOf(char);
+                if (index === -1) throw new Error('Invalid base58 character');
+                
+                let carry = index;
+                for (let j = 0; j < bytes.length; j++) {
+                    carry += bytes[j] * 58;
+                    bytes[j] = carry & 0xff;
+                    carry >>= 8;
+                }
+                while (carry > 0) {
+                    bytes.push(carry & 0xff);
+                    carry >>= 8;
+                }
+            }
+            // Handle leading zeros
+            for (let i = 0; i < str.length && str[i] === '1'; i++) {
+                bytes.push(0);
+            }
+            return new Uint8Array(bytes.reverse());
+        }
+        
+        function base58Encode(bytes) {
+            const digits = [0];
+            for (let i = 0; i < bytes.length; i++) {
+                let carry = bytes[i];
+                for (let j = 0; j < digits.length; j++) {
+                    carry += digits[j] << 8;
+                    digits[j] = carry % 58;
+                    carry = (carry / 58) | 0;
+                }
+                while (carry > 0) {
+                    digits.push(carry % 58);
+                    carry = (carry / 58) | 0;
+                }
+            }
+            let result = '';
+            // Handle leading zeros
+            for (let i = 0; i < bytes.length && bytes[i] === 0; i++) {
+                result += '1';
+            }
+            for (let i = digits.length - 1; i >= 0; i--) {
+                result += BASE58_ALPHABET[digits[i]];
+            }
+            return result;
+        }
+        
+        // Convert WIF to private key bytes
+        function wifToPrivateKey(wif) {
+            const decoded = base58Decode(wif);
+            // Remove version byte (first) and checksum (last 4)
+            // If compressed (33 bytes after version), also remove compression flag
+            const privateKey = decoded.slice(1, decoded[0] === 0x80 ? (decoded.length > 37 ? 33 : 33) : 33);
+            if (privateKey.length === 33) {
+                return privateKey.slice(0, 32); // Remove compression flag
+            }
+            return privateKey.slice(0, 32);
+        }
+        
+        // Get public key from private key
+        function getPublicKey(privateKey, compressed = true) {
+            return secp256k1.getPublicKey(privateKey, compressed);
+        }
+        
+        // Convert public key to Bitcoin address
+        function publicKeyToAddress(publicKey) {
+            const sha = sha256(publicKey);
+            const hash160 = ripemd160(sha);
+            
+            // Add version byte (0x00 for mainnet)
+            const versioned = new Uint8Array(21);
+            versioned[0] = 0x00;
+            versioned.set(hash160, 1);
+            
+            // Double SHA256 for checksum
+            const checksum = sha256(sha256(versioned)).slice(0, 4);
+            
+            // Combine versioned + checksum
+            const addressBytes = new Uint8Array(25);
+            addressBytes.set(versioned);
+            addressBytes.set(checksum, 21);
+            
+            return base58Encode(addressBytes);
+        }
+        
+        // Derive Bitcoin address from WIF
+        function wifToAddress(wif) {
+            try {
+                const privateKey = wifToPrivateKey(wif);
+                const publicKey = getPublicKey(privateKey, true); // compressed
+                return publicKeyToAddress(publicKey);
+            } catch (e) {
+                console.error('Error deriving address:', e);
+                return null;
+            }
+        }
+        
+        // Encode varint for Bitcoin message format
+        function encodeVarInt(n) {
+            if (n < 253) {
+                return new Uint8Array([n]);
+            } else if (n < 0x10000) {
+                return new Uint8Array([253, n & 0xff, (n >> 8) & 0xff]);
+            } else if (n < 0x100000000) {
+                return new Uint8Array([254, n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >> 24) & 0xff]);
+            } else {
+                throw new Error('Message too long');
+            }
+        }
+        
+        // Sign a message with the private key (Bitcoin message signing)
+        async function signMessage(message, wif) {
+            const privateKey = wifToPrivateKey(wif);
+            
+            // Bitcoin message signing uses double SHA256 of the prefixed message
+            const prefix = 'Bitcoin Signed Message:\n';
+            const prefixBytes = new TextEncoder().encode(prefix);
+            const messageBytes = new TextEncoder().encode(message);
+            
+            // Encode lengths as varints
+            const prefixLen = encodeVarInt(prefixBytes.length);
+            const messageLen = encodeVarInt(messageBytes.length);
+            
+            // Construct: prefix_len + prefix + message_len + message
+            const fullMessage = new Uint8Array(prefixLen.length + prefixBytes.length + messageLen.length + messageBytes.length);
+            let offset = 0;
+            fullMessage.set(prefixLen, offset); offset += prefixLen.length;
+            fullMessage.set(prefixBytes, offset); offset += prefixBytes.length;
+            fullMessage.set(messageLen, offset); offset += messageLen.length;
+            fullMessage.set(messageBytes, offset);
+            
+            console.log('DEBUG - Full message bytes:', Array.from(fullMessage).map(b => b.toString(16).padStart(2, '0')).join(' '));
+            console.log('DEBUG - Full message as string:', new TextDecoder().decode(fullMessage));
+            
+            const messageHash = sha256(sha256(fullMessage));
+            console.log('DEBUG - Message hash:', Array.from(messageHash).map(b => b.toString(16).padStart(2, '0')).join(''));
+            
+            // Sign with recovery
+            const signature = await secp256k1.signAsync(messageHash, privateKey, { lowS: true });
+            const recovery = signature.recovery;
+            
+            console.log('DEBUG - Recovery:', recovery);
+            console.log('DEBUG - Signature r:', signature.r.toString(16));
+            console.log('DEBUG - Signature s:', signature.s.toString(16));
+            
+            // Construct recoverable signature (65 bytes: 1 byte header + 32 bytes r + 32 bytes s)
+            const header = 27 + recovery + 4; // 4 for compressed pubkey
+            const sigBytes = new Uint8Array(65);
+            sigBytes[0] = header;
+            sigBytes.set(signature.toCompactRawBytes(), 1);
+            
+            const base64Sig = btoa(String.fromCharCode(...sigBytes));
+            console.log('DEBUG - Final signature (base64):', base64Sig);
+            console.log('DEBUG - Signature bytes:', Array.from(sigBytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+            
+            return base64Sig;
+        }
+        
+        // Update Bitcoin address display when WIF changes
+        function updateAddressDisplay() {
+            const wif = document.getElementById('wifKey').value.trim();
+            const addressDisplay = document.getElementById('addressDisplay');
+            const addressInput = document.getElementById('bitcoinAddress');
+            
+            if (wif && wif.length > 40) {
+                const address = wifToAddress(wif);
+                if (address) {
+                    addressInput.value = address;
+                    addressDisplay.style.display = 'block';
+                } else {
+                    addressDisplay.style.display = 'none';
+                }
+            } else {
+                addressDisplay.style.display = 'none';
+            }
+        }
+        
+        // JSON encoder with sorted keys and 2-space indentation (matching Flutter's JsonSortedEncoder)
+        function jsonSortedEncode(obj, indent = '  ') {
+            function sortObject(o) {
+                if (o === null || typeof o !== 'object') {
+                    return o;
+                }
+                if (Array.isArray(o)) {
+                    return o.map(sortObject);
+                }
+                const sorted = {};
+                Object.keys(o).sort().forEach(key => {
+                    sorted[key] = sortObject(o[key]);
+                });
+                return sorted;
+            }
+            return JSON.stringify(sortObject(obj), null, indent);
+        }
+        
+        // Sign data the same way as the Flutter app
+        async function signData(messageData, wif) {
+            // 1. Convert to JSON with sorted keys and 2-space indentation
+            const jsonWithIndent = jsonSortedEncode(messageData, '  ');
+            console.log('JSON to hash:', jsonWithIndent);
+            
+            // 2. Calculate SHA256 hash of the JSON
+            const encoder = new TextEncoder();
+            const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(jsonWithIndent));
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const sha256Hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            // 3. Create message as /sha256/{hash}
+            const message = `/sha256/${sha256Hash}`;
+            console.log('Message to sign:', message);
+            
+            // 4. Sign the message
+            const signature = await signMessage(message, wif);
+            
+            // 5. Get address
+            const address = wifToAddress(wif);
+            
+            return {
+                message: message,
+                signature: signature,
+                address: address,
+                data: messageData
+            };
+        }
+        
+        // Test API call
+        async function testApiCall() {
+            const wif = document.getElementById('wifKey').value.trim();
+            const serverAddress = document.getElementById('serverAddress').value.trim();
+            const serverPort = document.getElementById('serverPort').value.trim();
+            const agentName = document.getElementById('agentName').value.trim();
+            const apiResult = document.getElementById('apiResult');
+            
+            if (!wif) {
+                apiResult.textContent = 'Please enter a WIF key first';
+                apiResult.className = 'status error';
+                apiResult.style.display = 'block';
+                return;
+            }
+            
+            apiResult.textContent = 'Signing and sending request...';
+            apiResult.className = 'status info';
+            apiResult.style.display = 'block';
+            
+            try {
+                const data = {
+                    conversationId: '',
+                    agent: agentName,
+                    folderName: 'default',
+                    content: 'Test message from web app',
+                    modelName: 'default',
+                    sender: 'User',
+                    respondAs: agentName,
+                    temperature: 0.7,
+                    enabledRoles: [],
+                    enabledTools: [],
+                    memory: 0,
+                    run: false,
+                    files: []
+                };
+                
+                const requestBody = await signData(data, wif);
+                
+                console.log('Request:', requestBody);
+                
+                const response = await fetch(`http://${serverAddress}:${serverPort}/api/AddMessage/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const responseText = await response.text();
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch {
+                    responseData = responseText;
+                }
+                
+                if (response.ok) {
+                    apiResult.textContent = 'Success! Response: ' + JSON.stringify(responseData).substring(0, 200) + '...';
+                    apiResult.className = 'status success';
+                } else {
+                    apiResult.textContent = `Error ${response.status}: ${JSON.stringify(responseData)}`;
+                    apiResult.className = 'status error';
+                }
+            } catch (err) {
+                apiResult.textContent = 'Error: ' + err.message;
+                apiResult.className = 'status error';
+            }
+        }
+        
+        // Make functions available globally
+        window.testApiCall = testApiCall;
+        window.updateAddressDisplay = updateAddressDisplay;
+        
+        // Add event listener for WIF key changes
+        document.getElementById('wifKey').addEventListener('input', updateAddressDisplay);
+
+        // Web Crypto API helpers
+        async function deriveKey(password, salt) {
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(password),
+                'PBKDF2',
+                false,
+                ['deriveKey']
+            );
+            
+            return crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        async function encryptData(plaintext, password) {
+            const encoder = new TextEncoder();
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const key = await deriveKey(password, salt);
+            
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encoder.encode(plaintext)
+            );
+            
+            // Combine salt + iv + encrypted data
+            const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
+            combined.set(salt, 0);
+            combined.set(iv, salt.length);
+            combined.set(new Uint8Array(encrypted), salt.length + iv.length);
+            
+            return btoa(String.fromCharCode(...combined));
+        }
+
+        async function decryptData(encryptedBase64, password) {
+            const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+            
+            const salt = combined.slice(0, 16);
+            const iv = combined.slice(16, 28);
+            const encrypted = combined.slice(28);
+            
+            const key = await deriveKey(password, salt);
+            
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encrypted
+            );
+            
+            return new TextDecoder().decode(decrypted);
+        }
+
+        // Storage functions
+        async function saveKey() {
+            const wifKey = document.getElementById('wifKey').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!wifKey) {
+                showStatus('Please enter a WIF key', 'error');
+                return;
+            }
+            
+            try {
+                const storageData = {
+                    encrypted: !!password,
+                    timestamp: new Date().toISOString()
+                };
+                
+                if (password) {
+                    storageData.data = await encryptData(wifKey, password);
+                } else {
+                    storageData.data = wifKey;
+                }
+                
+                localStorage.setItem('serendipity_wif', JSON.stringify(storageData));
+                
+                showStatus(`Key saved successfully (${password ? 'encrypted' : 'unencrypted'})`, 'success');
+                updateDebugOutput();
+            } catch (err) {
+                showStatus('Error saving key: ' + err.message, 'error');
+            }
+        }
+
+        async function unlockKey() {
+            const password = document.getElementById('unlockPassword').value;
+            const stored = JSON.parse(localStorage.getItem('serendipity_wif'));
+            
+            try {
+                const decrypted = await decryptData(stored.data, password);
+                
+                // Show setup section with decrypted key
+                document.getElementById('unlockSection').classList.add('hidden');
+                document.getElementById('setupSection').classList.remove('hidden');
+                document.getElementById('wifKey').value = decrypted;
+                showStatus('Key unlocked successfully!', 'success');
+                updateDebugOutput();
+                updateAddressDisplay();
+            } catch (err) {
+                document.getElementById('unlockStatus').innerHTML = 
+                    '<div class="status error">Invalid password</div>';
+            }
+        }
+
+        function clearStorage() {
+            if (confirm('Are you sure you want to clear the stored key?')) {
+                localStorage.removeItem('serendipity_wif');
+                document.getElementById('wifKey').value = '';
+                document.getElementById('password').value = '';
+                showStatus('Storage cleared', 'info');
+                updateDebugOutput();
+                checkExistingKey();
+            }
+        }
+
+        function generateTestKey() {
+            // Generate a cryptographically valid WIF key
+            // 1. Generate 32 random bytes for private key
+            const privateKey = crypto.getRandomValues(new Uint8Array(32));
+            
+            // 2. Add version byte (0x80 for mainnet) and compression flag (0x01)
+            const extended = new Uint8Array(34);
+            extended[0] = 0x80;
+            extended.set(privateKey, 1);
+            extended[33] = 0x01; // compressed
+            
+            // 3. Double SHA256 for checksum
+            const checksum = window._sha256(window._sha256(extended)).slice(0, 4);
+            
+            // 4. Append checksum
+            const full = new Uint8Array(38);
+            full.set(extended);
+            full.set(checksum, 34);
+            
+            // 5. Base58 encode
+            const wif = window._base58Encode(full);
+            
+            document.getElementById('wifKey').value = wif;
+            showStatus('New WIF key generated', 'success');
+            updateAddressDisplay();
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+
+        function updateDebugOutput() {
+            const stored = localStorage.getItem('serendipity_wif');
+            document.getElementById('debugOutput').value = stored || '(empty)';
+        }
+
+        function checkExistingKey() {
+            const stored = localStorage.getItem('serendipity_wif');
+            
+            if (stored) {
+                const data = JSON.parse(stored);
+                
+                if (data.encrypted) {
+                    // Show unlock section
+                    document.getElementById('unlockSection').classList.remove('hidden');
+                    document.getElementById('setupSection').classList.add('hidden');
+                } else {
+                    // Show setup section with existing key
+                    document.getElementById('unlockSection').classList.add('hidden');
+                    document.getElementById('setupSection').classList.remove('hidden');
+                    document.getElementById('wifKey').value = data.data;
+                    showStatus('Unencrypted key loaded from storage', 'success');
+                    updateDebugOutput();
+                    updateAddressDisplay();
+                }
+            } else {
+                // No key, show setup section
+                document.getElementById('unlockSection').classList.add('hidden');
+                document.getElementById('setupSection').classList.remove('hidden');
+                updateDebugOutput();
+            }
+        }
+
+        // Make functions available globally
+        window.saveKey = saveKey;
+        window.unlockKey = unlockKey;
+        window.clearStorage = clearStorage;
+        window.generateTestKey = generateTestKey;
+        window._sha256 = sha256;
+        window._base58Encode = base58Encode;
+        
+        // Initialize
+        checkExistingKey();
+    </script>
+</body>
+</html>
