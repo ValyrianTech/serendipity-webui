@@ -1,9 +1,9 @@
 // Bitcoin utilities for Serendipity Web UI
-// Uses noble libraries for cryptographic operations
+// Uses noble libraries for cryptographic operations (self-hosted)
 
-import * as secp256k1 from 'https://esm.run/@noble/secp256k1@2.1.0';
-import { sha256 } from 'https://esm.run/@noble/hashes@1.3.3/sha256';
-import { ripemd160 } from 'https://esm.run/@noble/hashes@1.3.3/ripemd160';
+import * as secp256k1 from '/static/js/vendor/secp256k1.js';
+import { sha256 } from '/static/js/vendor/sha256.js';
+import { ripemd160 } from '/static/js/vendor/ripemd160.js';
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
