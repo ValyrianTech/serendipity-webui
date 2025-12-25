@@ -58,16 +58,10 @@
             <p class="text-slate-400">Start the conversation by sending a message</p>
         </div>
         
-        <!-- Streaming indicator -->
-        <div id="streaming-indicator" class="hidden">
-            <div class="message-card bg-slate-800">
-                <div class="streaming-indicator">
-                    <span class="dot"></span>
-                    <span class="dot" style="animation-delay: 0.2s"></span>
-                    <span class="dot" style="animation-delay: 0.4s"></span>
-                    <span class="ml-2">Generating response...</span>
-                </div>
-            </div>
+        <!-- Streaming message (real-time from WebSocket) -->
+        <div id="streaming-message" class="message-card hidden">
+            <div class="sender" id="streaming-sender"></div>
+            <div class="content" id="streaming-content"></div>
         </div>
     </div>
     
@@ -336,14 +330,19 @@
         let contentHtml = '';
         if (msg.parts && msg.parts.length > 0) {
             msg.parts.forEach(part => {
-                if (part.type === 'text') {
-                    contentHtml += `<div class="markdown-content">${marked.parse(part.content || '')}</div>`;
-                } else if (part.type === 'code') {
-                    contentHtml += `<pre class="code-block"><code class="language-${part.language || 'plaintext'}">${escapeHtml(part.content || '')}</code></pre>`;
-                }
+                contentHtml += renderMessagePart(part);
             });
         } else {
             contentHtml = `<div class="markdown-content">${marked.parse(content)}</div>`;
+        }
+        
+        // Render images if present
+        if (msg.images && msg.images.length > 0) {
+            const settings = getSettings();
+            msg.images.forEach(img => {
+                const imgUrl = `http://${settings.serverAddress}:${settings.serverPort}/spellbook/files/${img}`;
+                contentHtml = `<img src="${imgUrl}" alt="Image" class="max-w-full rounded-lg mb-3">` + contentHtml;
+            });
         }
         
         div.innerHTML = `
@@ -356,8 +355,87 @@
             hljs.highlightElement(block);
         });
         
+        // Render mermaid diagrams
+        div.querySelectorAll('.mermaid-diagram').forEach(async (el, idx) => {
+            const code = el.dataset.code;
+            const id = `mermaid-${Date.now()}-${idx}`;
+            try {
+                const { svg } = await mermaid.render(id, code);
+                el.innerHTML = svg;
+            } catch (e) {
+                el.innerHTML = `<pre class="text-red-400">Mermaid error: ${e.message}</pre>`;
+            }
+        });
+        
         return div;
     }
+    
+    function renderMessagePart(part) {
+        const type = part.type || 'text';
+        const content = part.content || '';
+        
+        switch (type) {
+            case 'text':
+                return `<div class="markdown-content">${marked.parse(content)}</div>`;
+            
+            case 'code':
+                const lang = part.language || 'plaintext';
+                return `
+                    <div class="code-block-wrapper mb-3">
+                        <div class="flex items-center justify-between bg-slate-700 px-3 py-1 rounded-t-md text-xs text-slate-400">
+                            <span>${lang}</span>
+                            <button onclick="copyCode(this)" class="hover:text-white">Copy</button>
+                        </div>
+                        <pre class="code-block !mt-0 !rounded-t-none"><code class="language-${lang}">${escapeHtml(content)}</code></pre>
+                    </div>`;
+            
+            case 'mermaid':
+                return `<div class="mermaid-diagram bg-slate-700 p-4 rounded-lg mb-3 overflow-x-auto" data-code="${escapeHtml(content)}"></div>`;
+            
+            case 'image':
+                const settings = getSettings();
+                const imgUrl = content.startsWith('http') ? content : `http://${settings.serverAddress}:${settings.serverPort}/spellbook/files/${content}`;
+                return `<img src="${imgUrl}" alt="Image" class="max-w-full rounded-lg mb-3">`;
+            
+            case 'tool_request':
+                const toolName = part.tool_name || part.name || 'Unknown tool';
+                const toolArgs = part.arguments || part.args || {};
+                return `
+                    <div class="tool-request bg-slate-700 border-l-4 border-yellow-500 p-3 rounded-r-lg mb-3">
+                        <div class="flex items-center gap-2 text-yellow-400 text-sm font-medium mb-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            Tool: ${escapeHtml(toolName)}
+                        </div>
+                        <pre class="text-xs text-slate-300 overflow-x-auto">${escapeHtml(JSON.stringify(toolArgs, null, 2))}</pre>
+                    </div>`;
+            
+            case 'tool_response':
+                const respToolName = part.tool_name || part.name || 'Unknown tool';
+                return `
+                    <div class="tool-response bg-slate-700 border-l-4 border-green-500 p-3 rounded-r-lg mb-3">
+                        <div class="flex items-center gap-2 text-green-400 text-sm font-medium mb-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Response: ${escapeHtml(respToolName)}
+                        </div>
+                        <pre class="text-xs text-slate-300 overflow-x-auto max-h-40">${escapeHtml(content)}</pre>
+                    </div>`;
+            
+            default:
+                return `<div class="markdown-content">${marked.parse(content)}</div>`;
+        }
+    }
+    
+    window.copyCode = function(btn) {
+        const codeBlock = btn.closest('.code-block-wrapper').querySelector('code');
+        navigator.clipboard.writeText(codeBlock.textContent);
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+    };
     
     function escapeHtml(text) {
         const div = document.createElement('div');
@@ -423,9 +501,9 @@
         list.appendChild(userMsg);
         scrollToBottom();
         
-        // Show streaming indicator if run is enabled
-        if (run) {
-            document.getElementById('streaming-indicator').classList.remove('hidden');
+        // Connect to WebSocket if not already connected (for streaming)
+        if (run && !ws) {
+            connectWebSocket();
         }
         
         try {
@@ -449,7 +527,7 @@
         } catch (e) {
             console.error('Failed to send message:', e);
             showToast('Failed to send message: ' + e.message, 'error');
-            document.getElementById('streaming-indicator').classList.add('hidden');
+            document.getElementById('streaming-message').classList.add('hidden');
         }
     };
     
@@ -576,6 +654,8 @@
     };
     
     // WebSocket for streaming
+    let streamingParts = [];
+    
     function connectWebSocket() {
         if (!conversationId) return;
         
@@ -583,26 +663,104 @@
             ws.close();
         }
         
-        ws = createStreamingConnection(
-            conversationId,
-            (data) => {
-                // Handle streaming message
-                if (data.type === 'token' || data.content) {
-                    // Append to streaming message
-                    console.log('Streaming:', data);
+        const settings = getSettings();
+        const wsUrl = `ws://${settings.serverAddress}:${settings.websocketPort}`;
+        
+        try {
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                // Subscribe to conversation updates
+                ws.send(`subscribe:${conversationId}`);
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Check if this message is for our conversation
+                    if (data.channel === conversationId) {
+                        handleStreamingMessage(data);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', e);
                 }
-                if (data.type === 'done' || data.type === 'complete') {
-                    document.getElementById('streaming-indicator').classList.add('hidden');
-                    loadConversation();
-                }
-            },
-            (error) => {
+            };
+            
+            ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-            },
-            () => {
+            };
+            
+            ws.onclose = () => {
                 console.log('WebSocket closed');
-            }
-        );
+                // Attempt to reconnect after a delay
+                setTimeout(() => {
+                    if (conversationId) {
+                        connectWebSocket();
+                    }
+                }, 3000);
+            };
+        } catch (e) {
+            console.error('Failed to connect WebSocket:', e);
+        }
+    }
+    
+    function handleStreamingMessage(data) {
+        const streamingEl = document.getElementById('streaming-message');
+        const senderEl = document.getElementById('streaming-sender');
+        const contentEl = document.getElementById('streaming-content');
+        const list = document.getElementById('messages-list');
+        const noMessages = document.getElementById('no-messages');
+        
+        // Check for end of message
+        if (data.message === '<|end of message|>') {
+            streamingEl.classList.add('hidden');
+            streamingParts = [];
+            // Reload conversation to get the final message
+            loadConversation();
+            return;
+        }
+        
+        // Show streaming message
+        noMessages.classList.add('hidden');
+        list.classList.remove('hidden');
+        streamingEl.classList.remove('hidden');
+        
+        // Update sender
+        senderEl.textContent = data.sender || 'Assistant';
+        
+        // Update content - render parts if available, otherwise use message
+        if (data.parts && data.parts.length > 0) {
+            streamingParts = data.parts;
+            let html = '';
+            data.parts.forEach(part => {
+                html += renderMessagePart(part);
+            });
+            contentEl.innerHTML = html;
+            
+            // Highlight code blocks
+            contentEl.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+            
+            // Render mermaid diagrams
+            contentEl.querySelectorAll('.mermaid-diagram').forEach(async (el, idx) => {
+                const code = el.dataset.code;
+                const id = `stream-mermaid-${Date.now()}-${idx}`;
+                try {
+                    const { svg } = await mermaid.render(id, code);
+                    el.innerHTML = svg;
+                } catch (e) {
+                    el.innerHTML = `<pre class="text-red-400">Mermaid error: ${e.message}</pre>`;
+                }
+            });
+        } else if (data.message) {
+            contentEl.innerHTML = `<div class="markdown-content">${marked.parse(data.message)}</div>`;
+        }
+        
+        // Scroll to bottom
+        scrollToBottom();
     }
     
     function updateSidebarAgentInfo() {
