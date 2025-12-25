@@ -19,17 +19,69 @@
     background: #64748b;
 }
 
-/* Message card styles */
+/* Message card styles - Chat bubble style */
 .message-card {
-    @apply bg-slate-800 rounded-lg p-4 mb-3;
+    @apply flex gap-3 mb-4 max-w-4xl;
 }
 
-.message-card .sender {
-    @apply text-sm font-semibold text-slate-400 mb-2;
+.message-card.user-message {
+    @apply ml-auto flex-row-reverse;
 }
 
-.message-card .content {
-    @apply text-slate-200;
+.message-card.assistant-message {
+    @apply mr-auto;
+}
+
+.message-card.info-message {
+    @apply mx-auto max-w-md justify-center;
+}
+
+.message-avatar {
+    @apply w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold;
+}
+
+.message-card.user-message .message-avatar {
+    @apply bg-indigo-600 text-white;
+}
+
+.message-card.assistant-message .message-avatar {
+    @apply bg-emerald-600 text-white;
+}
+
+.message-card.info-message .message-avatar {
+    @apply bg-slate-600 text-slate-300 w-8 h-8 text-xs;
+}
+
+.message-bubble {
+    @apply rounded-2xl p-4 max-w-[85%];
+}
+
+.message-card.user-message .message-bubble {
+    @apply bg-indigo-600 text-white rounded-br-md;
+}
+
+.message-card.assistant-message .message-bubble {
+    @apply bg-slate-700 text-slate-100 rounded-bl-md;
+}
+
+.message-card.info-message .message-bubble {
+    @apply bg-slate-800 text-slate-400 text-sm py-2 px-4 rounded-full;
+}
+
+.message-bubble .sender {
+    @apply text-xs font-semibold mb-1 opacity-75;
+}
+
+.message-bubble .content {
+    @apply text-sm leading-relaxed;
+}
+
+.message-card.user-message .message-bubble .content {
+    @apply text-white;
+}
+
+.message-card.assistant-message .message-bubble .content {
+    @apply text-slate-100;
 }
 
 /* Code block styling */

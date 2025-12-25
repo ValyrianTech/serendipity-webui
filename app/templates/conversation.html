@@ -59,9 +59,12 @@
         </div>
         
         <!-- Streaming message (real-time from WebSocket) -->
-        <div id="streaming-message" class="message-card hidden">
-            <div class="sender" id="streaming-sender"></div>
-            <div class="content" id="streaming-content"></div>
+        <div id="streaming-message" class="message-card assistant-message hidden">
+            <div class="message-avatar" id="streaming-avatar">AI</div>
+            <div class="message-bubble">
+                <div class="sender" id="streaming-sender"></div>
+                <div class="content" id="streaming-content"></div>
+            </div>
         </div>
     </div>
     
@@ -432,11 +435,24 @@
     
     function createMessageElement(msg, isLast) {
         const div = document.createElement('div');
-        div.className = 'message-card';
         div.dataset.messageId = msg.message_id || '';
         
         const sender = msg.sender || 'Unknown';
         const content = msg.content || '';
+        
+        // Determine message type for styling
+        const senderLower = sender.toLowerCase();
+        const isInfo = senderLower === 'info';
+        const isUser = !isInfo && senderLower !== agentName.toLowerCase() && 
+                       !['assistant', 'system'].includes(senderLower);
+        
+        if (isInfo) {
+            div.className = 'message-card info-message';
+        } else if (isUser) {
+            div.className = 'message-card user-message';
+        } else {
+            div.className = 'message-card assistant-message';
+        }
         
         // Parse message parts if available
         let contentHtml = '';
@@ -457,10 +473,25 @@
             });
         }
         
-        div.innerHTML = `
-            <div class="sender">${escapeHtml(sender)}</div>
-            <div class="content">${contentHtml}</div>
-        `;
+        // Get avatar initials
+        const initials = sender.substring(0, 2).toUpperCase();
+        
+        // Build chat bubble HTML
+        if (isInfo) {
+            div.innerHTML = `
+                <div class="message-bubble">
+                    <div class="content">${escapeHtml(content)}</div>
+                </div>
+            `;
+        } else {
+            div.innerHTML = `
+                <div class="message-avatar">${initials}</div>
+                <div class="message-bubble">
+                    <div class="sender">${escapeHtml(sender)}</div>
+                    <div class="content">${contentHtml}</div>
+                </div>
+            `;
+        }
         
         // Highlight code blocks
         div.querySelectorAll('pre code').forEach(block => {
@@ -844,6 +875,7 @@
         const streamingEl = document.getElementById('streaming-message');
         const senderEl = document.getElementById('streaming-sender');
         const contentEl = document.getElementById('streaming-content');
+        const avatarEl = document.getElementById('streaming-avatar');
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         
@@ -863,8 +895,10 @@
         list.classList.remove('hidden');
         streamingEl.classList.remove('hidden');
         
-        // Update sender
-        senderEl.textContent = data.sender || 'Assistant';
+        // Update sender and avatar
+        const sender = data.sender || 'Assistant';
+        senderEl.textContent = sender;
+        avatarEl.textContent = sender.substring(0, 2).toUpperCase();
         
         // Update content - render parts if available, otherwise use message
         if (data.parts && data.parts.length > 0) {
