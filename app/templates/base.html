@@ -180,17 +180,25 @@
             const storage = loadWifStorage();
             console.log('WIF storage:', storage);
             
+            // Hide both modals first
+            document.getElementById('unlock-modal').classList.add('hidden');
+            document.getElementById('setup-wif-modal').classList.add('hidden');
+            
             if (storage && storage.data) {
+                console.log('Storage encrypted flag:', storage.encrypted);
                 if (storage.encrypted === true) {
                     // Show unlock modal
+                    console.log('Showing unlock modal');
                     document.getElementById('unlock-modal').classList.remove('hidden');
                 } else {
                     // Load unencrypted key
+                    console.log('Loading unencrypted key');
                     window.currentWif = storage.data;
                     updateWifStatus(true);
                 }
             } else {
                 // Show setup modal
+                console.log('No storage, showing setup modal');
                 document.getElementById('setup-wif-modal').classList.remove('hidden');
             }
             
