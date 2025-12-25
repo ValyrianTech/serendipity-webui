@@ -317,6 +317,10 @@ input:focus, textarea:focus, select:focus {
     z-index: 50;
 }
 
+.modal-backdrop.hidden {
+    display: none !important;
+}
+
 .modal-content {
     background-color: #1e293b;
     border-radius: 0.75rem;
