@@ -68,7 +68,24 @@ export async function getAvailableVoices(agentName) {
 
 // POST requests (require signed data)
 export async function addMessage(wif, data) {
-    const signedData = await signData(data, wif);
+    // Convert to snake_case keys as expected by the API
+    const apiData = {
+        conversation_id: data.conversationId || data.conversation_id || '',
+        sender: data.sender,
+        respond_as: data.respondAs || data.respond_as,
+        content: data.content,
+        agent: data.agent,
+        folder_name: data.folderName || data.folder_name,
+        enabled_tools: data.enabledTools || data.enabled_tools || [],
+        enabled_roles: data.enabledRoles || data.enabled_roles || [],
+        memory: data.memory || 0,
+        temperature: data.temperature,
+        model_name: data.modelName || data.model_name,
+        run: data.run,
+        files: data.files || []
+    };
+    
+    const signedData = await signData(apiData, wif);
     const response = await fetch(`${getBaseUrl()}/api/AddMessage/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
