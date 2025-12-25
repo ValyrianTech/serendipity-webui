@@ -182,7 +182,11 @@
     let stagedFiles = [];
     let ws = null;
     
+    let agentData = null;
+    
     document.addEventListener('DOMContentLoaded', async () => {
+        // Load agent data first to get default model
+        await loadAgentData();
         await loadModels();
         
         if (conversationId) {
@@ -190,6 +194,14 @@
         } else {
             document.getElementById('messages-loading').classList.add('hidden');
             document.getElementById('no-messages').classList.remove('hidden');
+            // For new conversations, set agent's default model
+            if (agentData?.agent?.model_name) {
+                document.getElementById('model-select').value = agentData.agent.model_name;
+            }
+            if (agentData?.agent?.temperature !== undefined) {
+                document.getElementById('temperature').value = agentData.agent.temperature;
+                document.getElementById('temp-value').textContent = agentData.agent.temperature;
+            }
         }
         
         // Auto-resize textarea
@@ -201,6 +213,32 @@
         
         updateSidebarAgentInfo();
     });
+    
+    async function loadAgentData() {
+        try {
+            agentData = await getAgent(agentName);
+            
+            // Update sender name from agent's user_name
+            if (agentData?.agent?.user_name) {
+                document.getElementById('sender-name').value = agentData.agent.user_name;
+            }
+            
+            // Update respond-as options for new conversations
+            const respondAs = document.getElementById('respond-as');
+            if (agentData?.agent?.participants) {
+                respondAs.innerHTML = '';
+                agentData.agent.participants.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p;
+                    option.textContent = p;
+                    if (p === agentName) option.selected = true;
+                    respondAs.appendChild(option);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load agent data:', e);
+        }
+    }
     
     async function loadModels() {
         try {
@@ -510,19 +548,27 @@
             const response = await addMessage(window.currentWif, messageData);
             
             if (response.conversation_id) {
+                const isNewConversation = !conversationId;
                 conversationId = response.conversation_id;
                 // Update URL without reload
                 window.history.replaceState({}, '', `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(conversationId)}`);
+                
+                // Connect to WebSocket for streaming (especially important for new conversations)
+                if (run && isNewConversation) {
+                    connectWebSocket();
+                }
             }
             
             // Clear staged files
             stagedFiles = [];
             updateStagedFilesDisplay();
             
-            // Refresh conversation to get updated messages
-            setTimeout(() => {
-                loadConversation();
-            }, run ? 2000 : 500);
+            // If not running, refresh immediately. If running, WebSocket will trigger refresh on completion.
+            if (!run) {
+                setTimeout(() => {
+                    loadConversation();
+                }, 500);
+            }
             
         } catch (e) {
             console.error('Failed to send message:', e);
@@ -655,58 +701,72 @@
     
     // WebSocket for streaming
     let streamingParts = [];
+    let wsSubscribedTo = '';
     
     function connectWebSocket() {
-        if (!conversationId) return;
-        
-        if (ws) {
-            ws.close();
+        if (!conversationId) {
+            console.log('WebSocket: No conversation ID, skipping connection');
+            return;
         }
         
         const settings = getSettings();
         const wsUrl = `ws://${settings.serverAddress}:${settings.websocketPort}`;
         
+        console.log('WebSocket: Connecting to', wsUrl, 'for conversation', conversationId);
+        
+        // If already connected and subscribed to same conversation, skip
+        if (ws && ws.readyState === WebSocket.OPEN && wsSubscribedTo === conversationId) {
+            console.log('WebSocket: Already connected and subscribed');
+            return;
+        }
+        
+        // Close existing connection if any
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        
         try {
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
-                console.log('WebSocket connected');
-                // Subscribe to conversation updates
+                console.log('WebSocket: Connected, subscribing to', conversationId);
                 ws.send(`subscribe:${conversationId}`);
+                wsSubscribedTo = conversationId;
             };
             
             ws.onmessage = (event) => {
+                console.log('WebSocket: Received message:', event.data.substring(0, 200));
                 try {
                     const data = JSON.parse(event.data);
                     
                     // Check if this message is for our conversation
                     if (data.channel === conversationId) {
                         handleStreamingMessage(data);
+                    } else {
+                        console.log('WebSocket: Message for different channel:', data.channel, 'vs', conversationId);
                     }
                 } catch (e) {
-                    console.error('Failed to parse WebSocket message:', e);
+                    console.error('WebSocket: Failed to parse message:', e);
                 }
             };
             
             ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
+                console.error('WebSocket: Error:', error);
             };
             
-            ws.onclose = () => {
-                console.log('WebSocket closed');
-                // Attempt to reconnect after a delay
-                setTimeout(() => {
-                    if (conversationId) {
-                        connectWebSocket();
-                    }
-                }, 3000);
+            ws.onclose = (event) => {
+                console.log('WebSocket: Closed, code:', event.code, 'reason:', event.reason);
+                wsSubscribedTo = '';
+                // Don't auto-reconnect, let the next message trigger it
             };
         } catch (e) {
-            console.error('Failed to connect WebSocket:', e);
+            console.error('WebSocket: Failed to connect:', e);
         }
     }
     
     function handleStreamingMessage(data) {
+        console.log('handleStreamingMessage:', data);
         const streamingEl = document.getElementById('streaming-message');
         const senderEl = document.getElementById('streaming-sender');
         const contentEl = document.getElementById('streaming-content');
@@ -715,6 +775,8 @@
         
         // Check for end of message
         if (data.message === '<|end of message|>') {
+            console.log('WebSocket: End of message received');
+
             streamingEl.classList.add('hidden');
             streamingParts = [];
             // Reload conversation to get the final message
