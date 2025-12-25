@@ -39,6 +39,10 @@
     max-width: 56rem;
 }
 
+.message-card.hidden {
+    display: none !important;
+}
+
 .message-card.user-message {
     margin-left: auto;
     flex-direction: row-reverse;
