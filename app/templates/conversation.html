@@ -289,11 +289,14 @@
         };
         
         try {
-            console.log('Initializing new conversation with info message');
+            console.log('Initializing new conversation with info message', messageData);
             const response = await addMessage(window.currentWif, messageData);
+            console.log('AddMessage response:', response);
             
-            if (response.conversation_id) {
-                conversationId = response.conversation_id;
+            // Response might have conversation_id in different places
+            const convId = response.conversation_id || response.conversation?.conversation_id;
+            if (convId) {
+                conversationId = convId;
                 window.history.replaceState({}, '', `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(conversationId)}`);
                 
                 // Connect WebSocket for this conversation
@@ -303,6 +306,8 @@
                 await loadConversation();
                 
                 console.log('New conversation initialized:', conversationId);
+            } else {
+                console.error('No conversation_id in response:', response);
             }
         } catch (e) {
             console.error('Failed to initialize conversation:', e);
