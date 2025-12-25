@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom color extensions */
+@layer base {
+    :root {
+        --color-slate-850: #172033;
+        --color-slate-950: #0a0f1a;
+    }
+}
+
+@layer utilities {
+    .bg-slate-850 {
+        background-color: #172033;
+    }
+    .bg-slate-950 {
+        background-color: #0a0f1a;
+    }
+}
