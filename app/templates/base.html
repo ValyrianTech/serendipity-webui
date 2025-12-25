@@ -112,7 +112,7 @@
                    class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 mb-4">
             <div class="flex gap-3">
                 <button onclick="unlockWif()" class="btn-primary flex-1">Unlock</button>
-                <button onclick="closeUnlockModal()" class="btn-secondary">Cancel</button>
+                <button onclick="clearAndSetupNewKey()" class="btn-danger">Use Different Key</button>
             </div>
             <div id="unlock-error" class="text-red-400 text-sm mt-2 hidden"></div>
         </div>
@@ -178,9 +178,10 @@
         
         async function initializeApp() {
             const storage = loadWifStorage();
+            console.log('WIF storage:', storage);
             
-            if (storage) {
-                if (storage.encrypted) {
+            if (storage && storage.data) {
+                if (storage.encrypted === true) {
                     // Show unlock modal
                     document.getElementById('unlock-modal').classList.remove('hidden');
                 } else {
@@ -290,6 +291,13 @@
             document.getElementById('unlock-modal').classList.add('hidden');
             // Show setup modal instead
             document.getElementById('setup-wif-modal').classList.remove('hidden');
+        };
+        
+        window.clearAndSetupNewKey = function() {
+            clearWifStorage();
+            document.getElementById('unlock-modal').classList.add('hidden');
+            document.getElementById('setup-wif-modal').classList.remove('hidden');
+            showToast('Previous key cleared', 'info');
         };
         
         // Setup WIF modal functions
