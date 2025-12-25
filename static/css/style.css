@@ -1,8 +1,15 @@
 /* Custom styles for Serendipity Web UI */
 
-/* Ensure hidden class works */
-.hidden {
-    display: none !important;
+/* Sidebar responsive behavior */
+.sidebar-desktop {
+    display: none;
+    flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+    .sidebar-desktop {
+        display: flex;
+    }
 }
 
 /* Scrollbar styling */
