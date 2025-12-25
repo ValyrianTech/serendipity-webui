@@ -345,6 +345,10 @@
         const loading = document.getElementById('messages-loading');
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
+        const streamingEl = document.getElementById('streaming-message');
+        
+        // Hide streaming message when loading conversation
+        streamingEl.classList.add('hidden');
         
         loading.classList.remove('hidden');
         list.classList.add('hidden');
@@ -890,18 +894,15 @@
             return;
         }
         
-        // Show streaming message
-        noMessages.classList.add('hidden');
-        list.classList.remove('hidden');
-        streamingEl.classList.remove('hidden');
-        
         // Update sender and avatar
         const sender = data.sender || 'Assistant';
         senderEl.textContent = sender;
         avatarEl.textContent = sender.substring(0, 2).toUpperCase();
         
         // Update content - render parts if available, otherwise use message
+        let hasContent = false;
         if (data.parts && data.parts.length > 0) {
+            hasContent = true;
             streamingParts = data.parts;
             let html = '';
             data.parts.forEach(part => {
@@ -926,11 +927,18 @@
                 }
             });
         } else if (data.message) {
+            hasContent = true;
             contentEl.innerHTML = `<div class="markdown-content">${marked.parse(data.message)}</div>`;
         }
         
-        // Scroll to bottom
-        scrollToBottom();
+        // Only show streaming message if there's actual content
+        if (hasContent) {
+            noMessages.classList.add('hidden');
+            list.classList.remove('hidden');
+            streamingEl.classList.remove('hidden');
+            // Scroll to bottom
+            scrollToBottom();
+        }
     }
     
     function updateSidebarAgentInfo() {
