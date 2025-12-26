@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+
+{% block title %}LLM Configurations - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <h1 class="text-xl font-bold">LLM Configurations</h1>
+        <button onclick="showAddNew()" class="btn-primary flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New
+        </button>
+    </div>
+    
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Default LLM -->
+            <div class="bg-slate-800 rounded-lg p-4 mb-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Default LLM</label>
+                        <select id="default-llm" class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 min-w-64">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <button onclick="saveDefaultLLM()" class="btn-secondary">Save Default</button>
+                </div>
+            </div>
+            
+            <!-- LLM Selection -->
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 block mb-2">Select LLM Configuration</label>
+                <select id="llm-select" onchange="loadLLMConfig()" 
+                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">-- Select an LLM --</option>
+                </select>
+            </div>
+            
+            <!-- Loading -->
+            <div id="loading" class="flex items-center justify-center py-12 hidden">
+                <div class="spinner"></div>
+            </div>
+            
+            <!-- Config Form -->
+            <div id="config-form" class="hidden">
+                <div class="bg-slate-800 rounded-lg p-6 space-y-6">
+                    <!-- Basic Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Name</label>
+                            <input type="text" id="llm-name" placeholder="LLM name"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Description</label>
+                            <input type="text" id="llm-description" placeholder="Description"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- Server Settings -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Host</label>
+                            <input type="text" id="llm-host" placeholder="localhost"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Port</label>
+                            <input type="number" id="llm-port" placeholder="8080"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Server Type</label>
+                            <select id="server-type" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                                <option value="openai">OpenAI</option>
+                                <option value="ollama">Ollama</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="vllm">vLLM</option>
+                                <option value="lmstudio">LM Studio</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Model Settings -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Model Name</label>
+                            <input type="text" id="model-name" placeholder="gpt-4"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Context Length</label>
+                            <input type="number" id="context-length" placeholder="4096"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- Cost Settings -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-4">Cost Settings</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Prompt Cost</label>
+                                <input type="number" id="prompt-cost" step="0.0001" placeholder="0.0001"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Prompt Multiplier</label>
+                                <input type="number" id="prompt-multiplier" placeholder="1"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Completion Cost</label>
+                                <input type="number" id="completion-cost" step="0.0001" placeholder="0.0002"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Completion Multiplier</label>
+                                <input type="number" id="completion-multiplier" placeholder="1"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- API Key -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">API Key</label>
+                        <input type="password" id="api-key" placeholder="Your API key (optional)"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    </div>
+                    
+                    <!-- Prompt Template -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Prompt Template</label>
+                        <textarea id="prompt-template" rows="3" placeholder="Optional prompt template..."
+                                  class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm"></textarea>
+                    </div>
+                    
+                    <!-- Capabilities -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-4">Capabilities</h3>
+                        <div class="flex flex-wrap gap-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="cap-chat" class="w-5 h-5 rounded">
+                                <span>Chat</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="cap-vision" class="w-5 h-5 rounded">
+                                <span>Vision</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="cap-audio" class="w-5 h-5 rounded">
+                                <span>Audio</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="cap-video" class="w-5 h-5 rounded">
+                                <span>Video</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="allow-auto-routing" class="w-5 h-5 rounded">
+                                <span>Allow Auto Routing</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="flex gap-3 pt-4 border-t border-slate-700">
+                        <button onclick="saveConfig()" class="btn-primary flex-1">Save</button>
+                        <button onclick="deleteConfig()" id="delete-btn" class="btn-danger hidden">Delete</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+                <p class="text-slate-400">Select an LLM configuration to edit or add a new one</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { getLLMs, getLLMConfig, getModels, saveLLMConfig, deleteLLMConfig, saveDefaultLLM as saveDefaultLLMApi } from '/static/js/api.js';
+    
+    let isNewLLM = false;
+    let currentLLMName = '';
+    let defaultModel = '';
+    
+    async function loadLLMs() {
+        try {
+            const [llmsData, modelsData] = await Promise.all([
+                getLLMs(),
+                getModels()
+            ]);
+            
+            defaultModel = modelsData.default_model || '';
+            
+            // Populate LLM select
+            const select = document.getElementById('llm-select');
+            const llmsList = llmsData || [];
+            select.innerHTML = '<option value="">-- Select an LLM --</option>' +
+                llmsList.map(name => `<option value="${name}">${name}</option>`).join('');
+            
+            // Populate default LLM select
+            const defaultSelect = document.getElementById('default-llm');
+            const modelNames = modelsData.model_names || [];
+            defaultSelect.innerHTML = modelNames.map(name => 
+                `<option value="${name}" ${name === defaultModel ? 'selected' : ''}>${name}</option>`
+            ).join('');
+        } catch (e) {
+            console.error('Failed to load LLMs:', e);
+            showToast('Failed to load LLMs', 'error');
+        }
+    }
+    
+    window.loadLLMConfig = async function() {
+        const llmName = document.getElementById('llm-select').value;
+        if (!llmName) {
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+            return;
+        }
+        
+        isNewLLM = false;
+        currentLLMName = llmName;
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('config-form').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        
+        try {
+            const config = await getLLMConfig(llmName);
+            
+            document.getElementById('llm-name').value = config.name || llmName;
+            document.getElementById('llm-description').value = config.description || '';
+            document.getElementById('llm-host').value = config.host || '';
+            document.getElementById('llm-port').value = config.port || '';
+            document.getElementById('server-type').value = config.server_type || 'openai';
+            document.getElementById('model-name').value = config.model_name || '';
+            document.getElementById('context-length').value = config.context_length || 4096;
+            document.getElementById('prompt-cost').value = config.prompt_tokens_cost || 0;
+            document.getElementById('prompt-multiplier').value = config.prompt_tokens_multiplier || 1;
+            document.getElementById('completion-cost').value = config.completion_tokens_cost || 0;
+            document.getElementById('completion-multiplier').value = config.completion_tokens_multiplier || 1;
+            document.getElementById('api-key').value = config.api_key || '';
+            document.getElementById('prompt-template').value = config.prompt_template || '';
+            document.getElementById('cap-chat').checked = config.chat !== false;
+            document.getElementById('cap-vision').checked = config.vision || false;
+            document.getElementById('cap-audio').checked = config.audio || false;
+            document.getElementById('cap-video').checked = config.video || false;
+            document.getElementById('allow-auto-routing').checked = config.allow_auto_routing || false;
+            
+            document.getElementById('delete-btn').classList.remove('hidden');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('config-form').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load LLM config:', e);
+            showToast('Failed to load LLM config', 'error');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        }
+    };
+    
+    window.showAddNew = function() {
+        isNewLLM = true;
+        currentLLMName = '';
+        
+        document.getElementById('llm-name').value = '';
+        document.getElementById('llm-description').value = '';
+        document.getElementById('llm-host').value = '';
+        document.getElementById('llm-port').value = '';
+        document.getElementById('server-type').value = 'openai';
+        document.getElementById('model-name').value = '';
+        document.getElementById('context-length').value = 4096;
+        document.getElementById('prompt-cost').value = 0;
+        document.getElementById('prompt-multiplier').value = 1;
+        document.getElementById('completion-cost').value = 0;
+        document.getElementById('completion-multiplier').value = 1;
+        document.getElementById('api-key').value = '';
+        document.getElementById('prompt-template').value = '';
+        document.getElementById('cap-chat').checked = true;
+        document.getElementById('cap-vision').checked = false;
+        document.getElementById('cap-audio').checked = false;
+        document.getElementById('cap-video').checked = false;
+        document.getElementById('allow-auto-routing').checked = false;
+        
+        document.getElementById('llm-select').value = '';
+        document.getElementById('delete-btn').classList.add('hidden');
+        
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('config-form').classList.remove('hidden');
+    };
+    
+    window.saveConfig = async function() {
+        const name = document.getElementById('llm-name').value.trim();
+        if (!name) {
+            showToast('Name is required', 'error');
+            return;
+        }
+        
+        const data = {
+            name: name,
+            description: document.getElementById('llm-description').value,
+            host: document.getElementById('llm-host').value,
+            port: parseInt(document.getElementById('llm-port').value) || 0,
+            serverType: document.getElementById('server-type').value,
+            modelName: document.getElementById('model-name').value,
+            contextLength: parseInt(document.getElementById('context-length').value) || 4096,
+            promptTokensCost: parseFloat(document.getElementById('prompt-cost').value) || 0,
+            promptTokensMultiplier: parseInt(document.getElementById('prompt-multiplier').value) || 1,
+            completionTokensCost: parseFloat(document.getElementById('completion-cost').value) || 0,
+            completionTokensMultiplier: parseInt(document.getElementById('completion-multiplier').value) || 1,
+            apiKey: document.getElementById('api-key').value,
+            promptTemplate: document.getElementById('prompt-template').value,
+            chat: document.getElementById('cap-chat').checked,
+            vision: document.getElementById('cap-vision').checked,
+            audio: document.getElementById('cap-audio').checked,
+            video: document.getElementById('cap-video').checked,
+            allowAutoRouting: document.getElementById('allow-auto-routing').checked
+        };
+        
+        try {
+            await saveLLMConfig(window.currentWif, data);
+            showToast('LLM configuration saved successfully', 'success');
+            await loadLLMs();
+            document.getElementById('llm-select').value = name;
+        } catch (e) {
+            showToast('Failed to save: ' + e.message, 'error');
+        }
+    };
+    
+    window.deleteConfig = async function() {
+        if (!currentLLMName) return;
+        
+        if (!confirm(`Are you sure you want to delete "${currentLLMName}"?`)) return;
+        
+        try {
+            await deleteLLMConfig(window.currentWif, { name: currentLLMName });
+            showToast('LLM configuration deleted', 'success');
+            await loadLLMs();
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
+        }
+    };
+    
+    window.saveDefaultLLM = async function() {
+        const llmName = document.getElementById('default-llm').value;
+        if (!llmName) {
+            showToast('Please select a default LLM', 'error');
+            return;
+        }
+        
+        try {
+            await saveDefaultLLMApi(window.currentWif, { llmName: llmName });
+            showToast('Default LLM saved', 'success');
+        } catch (e) {
+            showToast('Failed to save default LLM: ' + e.message, 'error');
+        }
+    };
+    
+    // Load LLMs on page load
+    loadLLMs();
+</script>
+{% endblock %}

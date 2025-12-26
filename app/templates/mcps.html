@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+
+{% block title %}MCP Servers - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <h1 class="text-xl font-bold">MCP Servers</h1>
+        <button onclick="showAddNew()" class="btn-primary flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New
+        </button>
+    </div>
+    
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Server Selection -->
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 block mb-2">Select MCP Server</label>
+                <select id="server-select" onchange="loadServerConfig()" 
+                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">-- Select a server --</option>
+                </select>
+            </div>
+            
+            <!-- Loading -->
+            <div id="loading" class="flex items-center justify-center py-12 hidden">
+                <div class="spinner"></div>
+            </div>
+            
+            <!-- Config Form -->
+            <div id="config-form" class="hidden">
+                <div class="bg-slate-800 rounded-lg p-6 space-y-6">
+                    <!-- Basic Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Name</label>
+                            <input type="text" id="mcp-name" placeholder="Server name"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Description</label>
+                            <input type="text" id="mcp-description" placeholder="Description"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- Transport -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Transport Type</label>
+                            <select id="transport-type" onchange="toggleTransportFields()"
+                                    class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                                <option value="sse">SSE (Server-Sent Events)</option>
+                                <option value="stdio">STDIO</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Base URL</label>
+                            <input type="text" id="base-url" placeholder="http://localhost:8000"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- SSE Endpoints -->
+                    <div id="sse-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">SSE Endpoint</label>
+                            <input type="text" id="sse-endpoint" placeholder="/sse"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Messages Endpoint</label>
+                            <input type="text" id="messages-endpoint" placeholder="/messages"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- STDIO Config -->
+                    <div id="stdio-fields" class="hidden space-y-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Command</label>
+                            <input type="text" id="stdio-command" placeholder="python"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Arguments (JSON array)</label>
+                            <input type="text" id="stdio-args" placeholder='["-m", "mcp_server"]'
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Environment (JSON object)</label>
+                            <input type="text" id="stdio-env" placeholder='{"KEY": "value"}'
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono">
+                        </div>
+                    </div>
+                    
+                    <!-- Authentication -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-4">Authentication</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Auth Type</label>
+                                <select id="auth-type" onchange="toggleAuthFields()"
+                                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                                    <option value="none">None</option>
+                                    <option value="api_key">API Key</option>
+                                    <option value="oauth">OAuth</option>
+                                </select>
+                            </div>
+                            <div id="api-key-header-field" class="hidden">
+                                <label class="text-sm text-slate-400 block mb-2">API Key Header</label>
+                                <input type="text" id="api-key-header" placeholder="Authorization"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div id="api-key-field" class="hidden">
+                                <label class="text-sm text-slate-400 block mb-2">API Key</label>
+                                <input type="password" id="api-key" placeholder="Your API key"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                        </div>
+                        
+                        <div id="oauth-fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Client ID</label>
+                                <input type="text" id="client-id" placeholder="Client ID"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Auth Endpoint</label>
+                                <input type="text" id="auth-endpoint" placeholder="/oauth/authorize"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Token Endpoint</label>
+                                <input type="text" id="token-endpoint" placeholder="/oauth/token"
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="text-sm text-slate-400 block mb-2">Resource Metadata URI</label>
+                                <input type="text" id="resource-metadata-uri" placeholder=""
+                                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Capabilities -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-4">Capabilities</h3>
+                        <div class="flex gap-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="streaming-enabled" class="w-5 h-5 rounded">
+                                <span>Streaming</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="tools-enabled" class="w-5 h-5 rounded">
+                                <span>Tools</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="enabled" class="w-5 h-5 rounded">
+                                <span>Enabled</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Tool Filter -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Tool Filter (comma-separated)</label>
+                        <input type="text" id="tool-filter" placeholder="tool1, tool2, tool3"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    </div>
+                    
+                    <!-- Cached Tools -->
+                    <div id="cached-tools-section" class="hidden">
+                        <h3 class="text-lg font-semibold mb-2">Cached Tools</h3>
+                        <div id="cached-tools" class="bg-slate-900 rounded-lg p-4 font-mono text-sm max-h-48 overflow-y-auto"></div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="flex gap-3 pt-4 border-t border-slate-700">
+                        <button onclick="saveConfig()" class="btn-primary flex-1">Save</button>
+                        <button onclick="deleteConfig()" id="delete-btn" class="btn-danger hidden">Delete</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                </svg>
+                <p class="text-slate-400">Select an MCP server to configure or add a new one</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { getMCPServers, getMCPServerConfig, saveMCPServerConfig, deleteMCPServerConfig } from '/static/js/api.js';
+    
+    let isNewServer = false;
+    let currentServerName = '';
+    
+    async function loadServers() {
+        try {
+            const data = await getMCPServers();
+            const select = document.getElementById('server-select');
+            select.innerHTML = '<option value="">-- Select a server --</option>' +
+                (data.mcp_servers || []).map(s => 
+                    `<option value="${s.name || s}">${s.name || s}</option>`
+                ).join('');
+        } catch (e) {
+            console.error('Failed to load MCP servers:', e);
+            showToast('Failed to load MCP servers', 'error');
+        }
+    }
+    
+    window.loadServerConfig = async function() {
+        const serverName = document.getElementById('server-select').value;
+        if (!serverName) {
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+            return;
+        }
+        
+        isNewServer = false;
+        currentServerName = serverName;
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('config-form').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        
+        try {
+            const data = await getMCPServerConfig(serverName);
+            const config = data.server_config || {};
+            
+            document.getElementById('mcp-name').value = config.name || serverName;
+            document.getElementById('mcp-description').value = config.description || '';
+            document.getElementById('transport-type').value = config.transport_type || 'sse';
+            document.getElementById('base-url').value = config.base_url || '';
+            document.getElementById('sse-endpoint').value = config.sse_endpoint || '';
+            document.getElementById('messages-endpoint').value = config.messages_endpoint || '';
+            
+            // STDIO config
+            if (config.stdio_config) {
+                document.getElementById('stdio-command').value = config.stdio_config.command || '';
+                document.getElementById('stdio-args').value = JSON.stringify(config.stdio_config.args || []);
+                document.getElementById('stdio-env').value = JSON.stringify(config.stdio_config.env || {});
+            }
+            
+            // Auth
+            const auth = config.auth || {};
+            document.getElementById('auth-type').value = auth.type || 'none';
+            document.getElementById('api-key-header').value = auth.api_key_header || '';
+            document.getElementById('api-key').value = auth.api_key || '';
+            document.getElementById('client-id').value = auth.client_id || '';
+            document.getElementById('auth-endpoint').value = auth.auth_endpoint || '';
+            document.getElementById('token-endpoint').value = auth.token_endpoint || '';
+            document.getElementById('resource-metadata-uri').value = auth.resource_metadata_uri || '';
+            
+            // Capabilities
+            const caps = config.capabilities || {};
+            document.getElementById('streaming-enabled').checked = caps.streaming || false;
+            document.getElementById('tools-enabled').checked = caps.tools || false;
+            document.getElementById('enabled').checked = config.enabled !== false;
+            
+            // Tool filter
+            document.getElementById('tool-filter').value = (config.tool_filter || []).join(', ');
+            
+            // Cached tools
+            if (config.cached_tools && config.cached_tools.length > 0) {
+                document.getElementById('cached-tools-section').classList.remove('hidden');
+                document.getElementById('cached-tools').textContent = JSON.stringify(config.cached_tools, null, 2);
+            } else {
+                document.getElementById('cached-tools-section').classList.add('hidden');
+            }
+            
+            toggleTransportFields();
+            toggleAuthFields();
+            
+            document.getElementById('delete-btn').classList.remove('hidden');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('config-form').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load server config:', e);
+            showToast('Failed to load server config', 'error');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        }
+    };
+    
+    window.showAddNew = function() {
+        isNewServer = true;
+        currentServerName = '';
+        
+        // Clear form
+        document.getElementById('mcp-name').value = '';
+        document.getElementById('mcp-description').value = '';
+        document.getElementById('transport-type').value = 'sse';
+        document.getElementById('base-url').value = '';
+        document.getElementById('sse-endpoint').value = '';
+        document.getElementById('messages-endpoint').value = '';
+        document.getElementById('stdio-command').value = '';
+        document.getElementById('stdio-args').value = '';
+        document.getElementById('stdio-env').value = '';
+        document.getElementById('auth-type').value = 'none';
+        document.getElementById('api-key-header').value = '';
+        document.getElementById('api-key').value = '';
+        document.getElementById('client-id').value = '';
+        document.getElementById('auth-endpoint').value = '';
+        document.getElementById('token-endpoint').value = '';
+        document.getElementById('resource-metadata-uri').value = '';
+        document.getElementById('streaming-enabled').checked = false;
+        document.getElementById('tools-enabled').checked = true;
+        document.getElementById('enabled').checked = true;
+        document.getElementById('tool-filter').value = '';
+        document.getElementById('cached-tools-section').classList.add('hidden');
+        
+        document.getElementById('server-select').value = '';
+        document.getElementById('delete-btn').classList.add('hidden');
+        
+        toggleTransportFields();
+        toggleAuthFields();
+        
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('config-form').classList.remove('hidden');
+    };
+    
+    window.toggleTransportFields = function() {
+        const type = document.getElementById('transport-type').value;
+        document.getElementById('sse-fields').classList.toggle('hidden', type !== 'sse');
+        document.getElementById('stdio-fields').classList.toggle('hidden', type !== 'stdio');
+    };
+    
+    window.toggleAuthFields = function() {
+        const type = document.getElementById('auth-type').value;
+        document.getElementById('api-key-header-field').classList.toggle('hidden', type !== 'api_key');
+        document.getElementById('api-key-field').classList.toggle('hidden', type !== 'api_key');
+        document.getElementById('oauth-fields').classList.toggle('hidden', type !== 'oauth');
+    };
+    
+    window.saveConfig = async function() {
+        const name = document.getElementById('mcp-name').value.trim();
+        if (!name) {
+            showToast('Name is required', 'error');
+            return;
+        }
+        
+        const toolFilterStr = document.getElementById('tool-filter').value;
+        const toolFilter = toolFilterStr ? toolFilterStr.split(',').map(t => t.trim()).filter(t => t) : [];
+        
+        let stdioConfig = null;
+        if (document.getElementById('transport-type').value === 'stdio') {
+            try {
+                stdioConfig = {
+                    command: document.getElementById('stdio-command').value,
+                    args: JSON.parse(document.getElementById('stdio-args').value || '[]'),
+                    env: JSON.parse(document.getElementById('stdio-env').value || '{}')
+                };
+            } catch (e) {
+                showToast('Invalid JSON in STDIO config', 'error');
+                return;
+            }
+        }
+        
+        const data = {
+            name: name,
+            description: document.getElementById('mcp-description').value,
+            transportType: document.getElementById('transport-type').value,
+            baseUrl: document.getElementById('base-url').value,
+            sseEndpoint: document.getElementById('sse-endpoint').value,
+            messagesEndpoint: document.getElementById('messages-endpoint').value,
+            authType: document.getElementById('auth-type').value,
+            apiKeyHeader: document.getElementById('api-key-header').value,
+            apiKey: document.getElementById('api-key').value,
+            clientId: document.getElementById('client-id').value,
+            authEndpoint: document.getElementById('auth-endpoint').value,
+            tokenEndpoint: document.getElementById('token-endpoint').value,
+            resourceMetadataUri: document.getElementById('resource-metadata-uri').value,
+            streamingEnabled: document.getElementById('streaming-enabled').checked,
+            toolsEnabled: document.getElementById('tools-enabled').checked,
+            enabled: document.getElementById('enabled').checked,
+            toolFilter: toolFilter,
+            stdioConfig: stdioConfig
+        };
+        
+        try {
+            await saveMCPServerConfig(window.currentWif, data);
+            showToast('MCP server saved successfully', 'success');
+            await loadServers();
+            document.getElementById('server-select').value = name;
+        } catch (e) {
+            showToast('Failed to save: ' + e.message, 'error');
+        }
+    };
+    
+    window.deleteConfig = async function() {
+        if (!currentServerName) return;
+        
+        if (!confirm(`Are you sure you want to delete "${currentServerName}"?`)) return;
+        
+        try {
+            await deleteMCPServerConfig(window.currentWif, { serverName: currentServerName });
+            showToast('MCP server deleted', 'success');
+            await loadServers();
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
+        }
+    };
+    
+    // Load servers on page load
+    loadServers();
+</script>
+{% endblock %}

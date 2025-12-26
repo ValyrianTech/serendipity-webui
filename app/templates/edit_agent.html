@@ -1,0 +1,499 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ agent_name }} - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <div class="flex items-center gap-4">
+            <a href="/agent/{{ agent_name }}" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <h1 class="text-xl font-bold">Edit Agent: <span id="agent-title">{{ agent_name }}</span></h1>
+        </div>
+        <button onclick="saveAgent()" class="btn-primary flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Save Changes
+        </button>
+    </div>
+    
+    <!-- Loading -->
+    <div id="loading" class="flex-1 flex items-center justify-center">
+        <div class="spinner"></div>
+    </div>
+    
+    <!-- Form -->
+    <div id="edit-form" class="flex-1 overflow-y-auto p-6 hidden">
+        <div class="max-w-4xl mx-auto space-y-6">
+            <!-- Basic Info -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Basic Information</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Profile Picture -->
+                    <div class="flex flex-col items-center">
+                        <img id="profile-preview" src="" alt="Profile" 
+                             class="w-48 h-48 rounded-full object-cover bg-slate-700 mb-4">
+                        <input type="text" id="profile-picture" placeholder="Profile picture URL"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm">
+                    </div>
+                    
+                    <!-- Name and Description -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Agent Name</label>
+                            <input type="text" id="agent-name" readonly
+                                   class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-slate-400">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Description</label>
+                            <textarea id="description" rows="3" placeholder="Agent description..."
+                                      class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"></textarea>
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">User Name</label>
+                            <input type="text" id="user-name" placeholder="Default user name"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Model Settings -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Model Settings</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Model</label>
+                        <select id="model-name" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Temperature: <span id="temp-value">0.0</span></label>
+                        <input type="range" id="temperature" min="0" max="2" step="0.1" value="0"
+                               class="w-full" oninput="document.getElementById('temp-value').textContent = this.value">
+                    </div>
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Memory: <span id="memory-value">0</span></label>
+                        <input type="range" id="memory" min="0" max="100" step="1" value="0"
+                               class="w-full" oninput="document.getElementById('memory-value').textContent = this.value">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Message -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">System Message</h2>
+                <textarea id="system-message" rows="6" placeholder="System message for the agent..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm"></textarea>
+            </div>
+            
+            <!-- Bootup Message -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Bootup Message</h2>
+                <textarea id="bootup-message" rows="4" placeholder="Message sent when agent starts..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm"></textarea>
+            </div>
+            
+            <!-- Tools -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Tools</h2>
+                <div id="tools-list" class="flex flex-wrap gap-2 mb-4"></div>
+                <div class="flex gap-2">
+                    <input type="text" id="new-tool" placeholder="Add new tool..."
+                           class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <button onclick="addTool()" class="btn-secondary">Add</button>
+                </div>
+            </div>
+            
+            <!-- Auto-Allow Tools -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Auto-Allow Tools</h2>
+                <div id="auto-allow-tools-list" class="flex flex-wrap gap-2 mb-4"></div>
+                <div class="flex gap-2">
+                    <input type="text" id="new-auto-allow-tool" placeholder="Add auto-allow tool..."
+                           class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <button onclick="addAutoAllowTool()" class="btn-secondary">Add</button>
+                </div>
+            </div>
+            
+            <!-- Toolsets -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Toolsets</h2>
+                <input type="text" id="toolsets" placeholder="Comma-separated toolset names..."
+                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+            </div>
+            
+            <!-- Participants -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Participants</h2>
+                <div id="participants-list" class="flex flex-wrap gap-2 mb-4"></div>
+                <div class="flex gap-2">
+                    <input type="text" id="new-participant" placeholder="Add participant..."
+                           class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <button onclick="addParticipant()" class="btn-secondary">Add</button>
+                </div>
+            </div>
+            
+            <!-- Order of Speakers -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Order of Speakers</h2>
+                <div id="speakers-list" class="space-y-2 mb-4"></div>
+                <p class="text-sm text-slate-400">Drag to reorder (coming soon). Current order shown above.</p>
+            </div>
+            
+            <!-- Voices -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Voices</h2>
+                <div id="voices-list" class="flex flex-wrap gap-2 mb-4"></div>
+                <div class="flex gap-2">
+                    <input type="text" id="new-voice" placeholder="Add voice..."
+                           class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <button onclick="addVoice()" class="btn-secondary">Add</button>
+                </div>
+            </div>
+            
+            <!-- Roles -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Roles</h2>
+                <div id="roles-list" class="space-y-3 mb-4"></div>
+                <button onclick="showAddRoleModal()" class="btn-secondary">Add Role</button>
+            </div>
+            
+            <!-- Flags -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Flags</h2>
+                <div class="flex gap-6">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="serendipity-flag" class="w-5 h-5 rounded">
+                        <span>SERENDIPITY</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="public-flag" class="w-5 h-5 rounded">
+                        <span>Public</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Role Modal -->
+<div id="add-role-modal" class="modal-backdrop hidden">
+    <div class="modal-content">
+        <h2 class="text-xl font-bold mb-4">Add Role</h2>
+        <div class="space-y-4">
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">Role Name</label>
+                <input type="text" id="role-name" placeholder="Role name..."
+                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+            </div>
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">Description</label>
+                <textarea id="role-description" rows="2" placeholder="Role description..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"></textarea>
+            </div>
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">System Message</label>
+                <textarea id="role-system-message" rows="4" placeholder="System message for this role..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"></textarea>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="saveRole()" class="btn-primary flex-1">Save Role</button>
+            <button onclick="closeAddRoleModal()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { getAgent, getModels, editAgent, editAgentRole } from '/static/js/api.js';
+    
+    const agentName = '{{ agent_name }}';
+    let agentData = null;
+    let tools = [];
+    let autoAllowTools = [];
+    let participants = [];
+    let orderOfSpeakers = [];
+    let voices = [];
+    let roles = [];
+    
+    async function loadAgent() {
+        try {
+            const [agentResponse, modelsResponse] = await Promise.all([
+                getAgent(agentName),
+                getModels()
+            ]);
+            
+            agentData = agentResponse.agent;
+            
+            // Populate model dropdown
+            const modelSelect = document.getElementById('model-name');
+            modelSelect.innerHTML = modelsResponse.model_names.map(name => 
+                `<option value="${name}" ${name === agentData.model_name ? 'selected' : ''}>${name}</option>`
+            ).join('');
+            
+            // Populate form fields
+            document.getElementById('agent-name').value = agentData.name || agentName;
+            document.getElementById('description').value = agentData.description || '';
+            document.getElementById('user-name').value = agentData.user_name || '';
+            document.getElementById('profile-picture').value = agentData.profile_picture || '';
+            document.getElementById('profile-preview').src = agentData.profile_picture || '';
+            document.getElementById('temperature').value = agentData.temperature || 0;
+            document.getElementById('temp-value').textContent = agentData.temperature || 0;
+            document.getElementById('memory').value = agentData.memory || 0;
+            document.getElementById('memory-value').textContent = agentData.memory || 0;
+            document.getElementById('system-message').value = agentData.system_message || '';
+            document.getElementById('bootup-message').value = agentData.bootup_message || '';
+            document.getElementById('serendipity-flag').checked = agentData.SERENDIPITY || false;
+            document.getElementById('public-flag').checked = agentData.public || false;
+            document.getElementById('toolsets').value = (agentData.toolsets || []).join(', ');
+            
+            // Initialize arrays
+            tools = agentData.tools || [];
+            autoAllowTools = agentData.auto_allow_tools || [];
+            participants = agentData.participants || [];
+            orderOfSpeakers = agentData.order_of_speakers || [];
+            voices = agentData.voices || [];
+            roles = agentData.roles || [];
+            
+            renderTools();
+            renderAutoAllowTools();
+            renderParticipants();
+            renderSpeakers();
+            renderVoices();
+            renderRoles();
+            
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('edit-form').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load agent:', e);
+            showToast('Failed to load agent: ' + e.message, 'error');
+        }
+    }
+    
+    function renderTools() {
+        const container = document.getElementById('tools-list');
+        container.innerHTML = tools.map((tool, idx) => `
+            <span class="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                ${tool}
+                <button onclick="removeTool(${idx})" class="hover:text-red-300">&times;</button>
+            </span>
+        `).join('');
+    }
+    
+    function renderAutoAllowTools() {
+        const container = document.getElementById('auto-allow-tools-list');
+        container.innerHTML = autoAllowTools.map((tool, idx) => `
+            <span class="bg-emerald-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                ${tool}
+                <button onclick="removeAutoAllowTool(${idx})" class="hover:text-red-300">&times;</button>
+            </span>
+        `).join('');
+    }
+    
+    function renderParticipants() {
+        const container = document.getElementById('participants-list');
+        container.innerHTML = participants.map((p, idx) => `
+            <span class="bg-slate-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                ${p}
+                <button onclick="removeParticipant(${idx})" class="hover:text-red-300">&times;</button>
+            </span>
+        `).join('');
+    }
+    
+    function renderSpeakers() {
+        const container = document.getElementById('speakers-list');
+        container.innerHTML = orderOfSpeakers.map((s, idx) => `
+            <div class="bg-slate-700 px-4 py-2 rounded-lg flex items-center justify-between">
+                <span>${idx + 1}. ${s}</span>
+            </div>
+        `).join('');
+    }
+    
+    function renderVoices() {
+        const container = document.getElementById('voices-list');
+        container.innerHTML = voices.map((v, idx) => `
+            <span class="bg-purple-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                ${v}
+                <button onclick="removeVoice(${idx})" class="hover:text-red-300">&times;</button>
+            </span>
+        `).join('');
+    }
+    
+    function renderRoles() {
+        const container = document.getElementById('roles-list');
+        if (roles.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No roles defined</p>';
+            return;
+        }
+        container.innerHTML = roles.map((role, idx) => `
+            <div class="bg-slate-700 p-4 rounded-lg">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-semibold">${role.name || role}</h3>
+                    <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                ${role.description ? `<p class="text-sm text-slate-400">${role.description}</p>` : ''}
+            </div>
+        `).join('');
+    }
+    
+    window.addTool = function() {
+        const input = document.getElementById('new-tool');
+        if (input.value.trim()) {
+            tools.push(input.value.trim());
+            input.value = '';
+            renderTools();
+        }
+    };
+    
+    window.removeTool = function(idx) {
+        tools.splice(idx, 1);
+        renderTools();
+    };
+    
+    window.addAutoAllowTool = function() {
+        const input = document.getElementById('new-auto-allow-tool');
+        if (input.value.trim()) {
+            autoAllowTools.push(input.value.trim());
+            input.value = '';
+            renderAutoAllowTools();
+        }
+    };
+    
+    window.removeAutoAllowTool = function(idx) {
+        autoAllowTools.splice(idx, 1);
+        renderAutoAllowTools();
+    };
+    
+    window.addParticipant = function() {
+        const input = document.getElementById('new-participant');
+        if (input.value.trim()) {
+            participants.push(input.value.trim());
+            if (!orderOfSpeakers.includes(input.value.trim())) {
+                orderOfSpeakers.push(input.value.trim());
+            }
+            input.value = '';
+            renderParticipants();
+            renderSpeakers();
+        }
+    };
+    
+    window.removeParticipant = function(idx) {
+        const removed = participants.splice(idx, 1)[0];
+        const speakerIdx = orderOfSpeakers.indexOf(removed);
+        if (speakerIdx > -1) orderOfSpeakers.splice(speakerIdx, 1);
+        renderParticipants();
+        renderSpeakers();
+    };
+    
+    window.addVoice = function() {
+        const input = document.getElementById('new-voice');
+        if (input.value.trim()) {
+            voices.push(input.value.trim());
+            input.value = '';
+            renderVoices();
+        }
+    };
+    
+    window.removeVoice = function(idx) {
+        voices.splice(idx, 1);
+        renderVoices();
+    };
+    
+    window.removeRole = function(idx) {
+        roles.splice(idx, 1);
+        renderRoles();
+    };
+    
+    window.showAddRoleModal = function() {
+        document.getElementById('role-name').value = '';
+        document.getElementById('role-description').value = '';
+        document.getElementById('role-system-message').value = '';
+        document.getElementById('add-role-modal').classList.remove('hidden');
+    };
+    
+    window.closeAddRoleModal = function() {
+        document.getElementById('add-role-modal').classList.add('hidden');
+    };
+    
+    window.saveRole = async function() {
+        const name = document.getElementById('role-name').value.trim();
+        const description = document.getElementById('role-description').value.trim();
+        const systemMessage = document.getElementById('role-system-message').value.trim();
+        
+        if (!name) {
+            showToast('Role name is required', 'error');
+            return;
+        }
+        
+        try {
+            await editAgentRole(window.currentWif, {
+                agent: agentName,
+                roleName: name,
+                roleDescription: description,
+                systemMessage: systemMessage,
+                action: 'add'
+            });
+            
+            roles.push({ name, description, system_message: systemMessage });
+            renderRoles();
+            closeAddRoleModal();
+            showToast('Role added successfully', 'success');
+        } catch (e) {
+            showToast('Failed to add role: ' + e.message, 'error');
+        }
+    };
+    
+    window.saveAgent = async function() {
+        const toolsetsStr = document.getElementById('toolsets').value;
+        const toolsetsList = toolsetsStr ? toolsetsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+        
+        const data = {
+            agent: agentName,
+            description: document.getElementById('description').value,
+            userName: document.getElementById('user-name').value,
+            profilePicture: document.getElementById('profile-picture').value,
+            modelName: document.getElementById('model-name').value,
+            temperature: parseFloat(document.getElementById('temperature').value),
+            memory: parseInt(document.getElementById('memory').value),
+            systemMessage: document.getElementById('system-message').value,
+            bootupMessage: document.getElementById('bootup-message').value,
+            serendipity: document.getElementById('serendipity-flag').checked,
+            public: document.getElementById('public-flag').checked,
+            tools: tools,
+            autoAllowTools: autoAllowTools,
+            participants: participants,
+            orderOfSpeakers: orderOfSpeakers,
+            voices: voices,
+            toolsets: toolsetsList
+        };
+        
+        try {
+            await editAgent(window.currentWif, data);
+            showToast('Agent saved successfully', 'success');
+        } catch (e) {
+            showToast('Failed to save agent: ' + e.message, 'error');
+        }
+    };
+    
+    // Update profile preview when URL changes
+    document.getElementById('profile-picture').addEventListener('input', (e) => {
+        document.getElementById('profile-preview').src = e.target.value;
+    });
+    
+    // Load agent on page load
+    loadAgent();
+</script>
+{% endblock %}

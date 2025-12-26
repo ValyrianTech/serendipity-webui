@@ -40,6 +40,26 @@ async def settings(request: Request):
     return templates.TemplateResponse("settings.html", {"request": request})
 
 
+@app.get("/agent/{agent_name}/edit", response_class=HTMLResponse)
+async def edit_agent(request: Request, agent_name: str):
+    return templates.TemplateResponse("edit_agent.html", {"request": request, "agent_name": agent_name})
+
+
+@app.get("/mcps", response_class=HTMLResponse)
+async def mcps(request: Request):
+    return templates.TemplateResponse("mcps.html", {"request": request})
+
+
+@app.get("/toolsets", response_class=HTMLResponse)
+async def toolsets(request: Request):
+    return templates.TemplateResponse("toolsets.html", {"request": request})
+
+
+@app.get("/llms", response_class=HTMLResponse)
+async def llms(request: Request):
+    return templates.TemplateResponse("llms.html", {"request": request})
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)

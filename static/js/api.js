@@ -66,6 +66,36 @@ export async function getAvailableVoices(agentName) {
     return response.json();
 }
 
+export async function getMCPServers() {
+    const response = await fetch(`${getBaseUrl()}/api/GetMCPServers`);
+    return response.json();
+}
+
+export async function getMCPServerConfig(serverName) {
+    const response = await fetch(`${getBaseUrl()}/api/GetMCPServerConfig?server_name=${encodeURIComponent(serverName)}`);
+    return response.json();
+}
+
+export async function getToolsets() {
+    const response = await fetch(`${getBaseUrl()}/api/GetToolsets`);
+    return response.json();
+}
+
+export async function getToolset(toolsetName) {
+    const response = await fetch(`${getBaseUrl()}/api/GetToolset?toolset_name=${encodeURIComponent(toolsetName)}`);
+    return response.json();
+}
+
+export async function getLLMs() {
+    const response = await fetch(`${getBaseUrl()}/spellbook/llms`);
+    return response.json();
+}
+
+export async function getLLMConfig(llmName) {
+    const response = await fetch(`${getBaseUrl()}/spellbook/llms/${encodeURIComponent(llmName)}`);
+    return response.json();
+}
+
 // POST requests (require signed data)
 export async function addMessage(wif, data) {
     // Convert to snake_case keys as expected by the API
@@ -157,6 +187,86 @@ export async function startWorkflow(wif, data) {
 export async function stopGeneration(wif, data) {
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/StopGeneration/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function saveMCPServerConfig(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveMCPServerConfig/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function deleteMCPServerConfig(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/DeleteMCPServerConfig/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function saveToolset(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveToolset/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function deleteToolset(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/DeleteToolset/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function saveLLMConfig(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveLLMConfig/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function deleteLLMConfig(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/DeleteLLMConfig/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function saveDefaultLLM(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveDefaultLLM/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function editAgentRole(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/EditAgentRole/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)

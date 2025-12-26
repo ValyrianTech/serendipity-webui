@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Toolsets - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <h1 class="text-xl font-bold">Toolsets</h1>
+        <button onclick="showAddNew()" class="btn-primary flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New
+        </button>
+    </div>
+    
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-4xl mx-auto">
+            <!-- Toolset Selection -->
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 block mb-2">Select Toolset</label>
+                <select id="toolset-select" onchange="loadToolsetConfig()" 
+                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">-- Select a toolset --</option>
+                </select>
+            </div>
+            
+            <!-- Loading -->
+            <div id="loading" class="flex items-center justify-center py-12 hidden">
+                <div class="spinner"></div>
+            </div>
+            
+            <!-- Config Form -->
+            <div id="config-form" class="hidden">
+                <div class="bg-slate-800 rounded-lg p-6 space-y-6">
+                    <!-- Basic Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Name</label>
+                            <input type="text" id="toolset-name" placeholder="Toolset name"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Description</label>
+                            <input type="text" id="toolset-description" placeholder="Description"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- Servers -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-4">Servers</h3>
+                        <div id="servers-list" class="space-y-3 mb-4"></div>
+                        <button onclick="addServer()" class="btn-secondary flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Server
+                        </button>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="flex gap-3 pt-4 border-t border-slate-700">
+                        <button onclick="saveToolset()" class="btn-primary flex-1">Save</button>
+                        <button onclick="deleteToolsetConfig()" id="delete-btn" class="btn-danger hidden">Delete</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+                <p class="text-slate-400">Select a toolset to configure or add a new one</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { getToolsets, getToolset, getMCPServers, saveToolset, deleteToolset } from '/static/js/api.js';
+    
+    let isNewToolset = false;
+    let currentToolsetName = '';
+    let servers = [];
+    let availableMCPServers = [];
+    
+    async function loadToolsets() {
+        try {
+            const [toolsetsData, mcpData] = await Promise.all([
+                getToolsets(),
+                getMCPServers()
+            ]);
+            
+            availableMCPServers = (mcpData.mcp_servers || []).map(s => s.name || s);
+            
+            const select = document.getElementById('toolset-select');
+            const toolsetsList = toolsetsData.toolsets || [];
+            select.innerHTML = '<option value="">-- Select a toolset --</option>' +
+                toolsetsList.map(t => `<option value="${t}">${t}</option>`).join('');
+        } catch (e) {
+            console.error('Failed to load toolsets:', e);
+            showToast('Failed to load toolsets', 'error');
+        }
+    }
+    
+    window.loadToolsetConfig = async function() {
+        const toolsetName = document.getElementById('toolset-select').value;
+        if (!toolsetName) {
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+            return;
+        }
+        
+        isNewToolset = false;
+        currentToolsetName = toolsetName;
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('config-form').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        
+        try {
+            const data = await getToolset(toolsetName);
+            const toolset = data.toolset || {};
+            
+            document.getElementById('toolset-name').value = data.name || toolsetName;
+            document.getElementById('toolset-description').value = toolset.description || '';
+            
+            servers = (toolset.servers || []).map(s => ({
+                serverName: s.server_name || s.serverName || s,
+                toolFilter: s.tool_filter || s.toolFilter || []
+            }));
+            
+            renderServers();
+            
+            document.getElementById('delete-btn').classList.remove('hidden');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('config-form').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load toolset config:', e);
+            showToast('Failed to load toolset config', 'error');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        }
+    };
+    
+    window.showAddNew = function() {
+        isNewToolset = true;
+        currentToolsetName = '';
+        
+        document.getElementById('toolset-name').value = '';
+        document.getElementById('toolset-description').value = '';
+        servers = [];
+        renderServers();
+        
+        document.getElementById('toolset-select').value = '';
+        document.getElementById('delete-btn').classList.add('hidden');
+        
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('config-form').classList.remove('hidden');
+    };
+    
+    function renderServers() {
+        const container = document.getElementById('servers-list');
+        if (servers.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No servers added yet</p>';
+            return;
+        }
+        
+        container.innerHTML = servers.map((server, idx) => `
+            <div class="bg-slate-700 p-4 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <select onchange="updateServerName(${idx}, this.value)" 
+                            class="bg-slate-600 border border-slate-500 rounded-lg px-3 py-2">
+                        <option value="">-- Select server --</option>
+                        ${availableMCPServers.map(s => 
+                            `<option value="${s}" ${s === server.serverName ? 'selected' : ''}>${s}</option>`
+                        ).join('')}
+                    </select>
+                    <button onclick="removeServer(${idx})" class="text-red-400 hover:text-red-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1">Tool Filter (comma-separated)</label>
+                    <input type="text" value="${(server.toolFilter || []).join(', ')}" 
+                           onchange="updateToolFilter(${idx}, this.value)"
+                           placeholder="Leave empty for all tools"
+                           class="w-full bg-slate-600 border border-slate-500 rounded-lg px-3 py-2 text-sm">
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    window.addServer = function() {
+        servers.push({ serverName: '', toolFilter: [] });
+        renderServers();
+    };
+    
+    window.removeServer = function(idx) {
+        servers.splice(idx, 1);
+        renderServers();
+    };
+    
+    window.updateServerName = function(idx, value) {
+        servers[idx].serverName = value;
+    };
+    
+    window.updateToolFilter = function(idx, value) {
+        servers[idx].toolFilter = value ? value.split(',').map(t => t.trim()).filter(t => t) : [];
+    };
+    
+    window.saveToolset = async function() {
+        const name = document.getElementById('toolset-name').value.trim();
+        if (!name) {
+            showToast('Name is required', 'error');
+            return;
+        }
+        
+        const validServers = servers.filter(s => s.serverName);
+        
+        const data = {
+            name: name,
+            description: document.getElementById('toolset-description').value,
+            servers: validServers
+        };
+        
+        try {
+            await saveToolset(window.currentWif, data);
+            showToast('Toolset saved successfully', 'success');
+            await loadToolsets();
+            document.getElementById('toolset-select').value = name;
+        } catch (e) {
+            showToast('Failed to save: ' + e.message, 'error');
+        }
+    };
+    
+    window.deleteToolsetConfig = async function() {
+        if (!currentToolsetName) return;
+        
+        if (!confirm(`Are you sure you want to delete "${currentToolsetName}"?`)) return;
+        
+        try {
+            await deleteToolset(window.currentWif, { toolsetName: currentToolsetName });
+            showToast('Toolset deleted', 'success');
+            await loadToolsets();
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
+        }
+    };
+    
+    // Load toolsets on page load
+    loadToolsets();
+</script>
+{% endblock %}
