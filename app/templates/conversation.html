@@ -218,6 +218,99 @@
                 <input type="checkbox" id="auto-play-voice" class="w-4 h-4 rounded">
             </div>
         </div>
+        
+        <!-- System Message (Collapsible) -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <button onclick="togglePanel('system-message-panel')" class="flex items-center justify-between w-full text-left">
+                <h3 class="text-sm font-medium text-slate-300">System Message</h3>
+                <svg id="system-message-panel-icon" class="w-4 h-4 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div id="system-message-panel" class="hidden mt-3">
+                <textarea id="system-message-edit" rows="6" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono" placeholder="System message..."></textarea>
+                <button onclick="saveSystemMessage()" class="btn-secondary w-full mt-2 text-sm">Save System Message</button>
+            </div>
+        </div>
+        
+        <!-- Todo List (Collapsible) -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <button onclick="togglePanel('todo-panel')" class="flex items-center justify-between w-full text-left">
+                <h3 class="text-sm font-medium text-slate-300">📋 Todo List</h3>
+                <svg id="todo-panel-icon" class="w-4 h-4 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div id="todo-panel" class="hidden mt-3">
+                <div id="todo-list" class="space-y-2 max-h-48 overflow-y-auto">
+                    <span class="text-slate-500 text-sm">Click to load...</span>
+                </div>
+                <button onclick="loadTodoList()" class="text-xs text-indigo-400 hover:text-indigo-300 mt-2">Refresh</button>
+            </div>
+        </div>
+        
+        <!-- Wishlist (Collapsible) -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <button onclick="togglePanel('wishlist-panel')" class="flex items-center justify-between w-full text-left">
+                <h3 class="text-sm font-medium text-slate-300">⭐ Wishlist</h3>
+                <svg id="wishlist-panel-icon" class="w-4 h-4 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div id="wishlist-panel" class="hidden mt-3">
+                <div id="wishlist-list" class="space-y-2 max-h-48 overflow-y-auto">
+                    <span class="text-slate-500 text-sm">Click to load...</span>
+                </div>
+                <button onclick="loadWishlist()" class="text-xs text-indigo-400 hover:text-indigo-300 mt-2">Refresh</button>
+            </div>
+        </div>
+        
+        <!-- Variables (Collapsible) -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <button onclick="togglePanel('variables-panel')" class="flex items-center justify-between w-full text-left">
+                <h3 class="text-sm font-medium text-slate-300">🔧 Variables</h3>
+                <svg id="variables-panel-icon" class="w-4 h-4 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div id="variables-panel" class="hidden mt-3">
+                <div id="variables-list" class="space-y-2 max-h-48 overflow-y-auto font-mono text-xs">
+                    <span class="text-slate-500 text-sm">Click to load...</span>
+                </div>
+                <button onclick="loadVariables()" class="text-xs text-indigo-400 hover:text-indigo-300 mt-2">Refresh</button>
+            </div>
+        </div>
+        
+        <!-- Workspace (Collapsible) -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <button onclick="togglePanel('workspace-panel')" class="flex items-center justify-between w-full text-left">
+                <h3 class="text-sm font-medium text-slate-300">📁 Workspace</h3>
+                <svg id="workspace-panel-icon" class="w-4 h-4 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div id="workspace-panel" class="hidden mt-3">
+                <div id="workspace-tree" class="max-h-64 overflow-y-auto text-sm">
+                    <span class="text-slate-500 text-sm">Click to load...</span>
+                </div>
+                <button onclick="loadWorkspace()" class="text-xs text-indigo-400 hover:text-indigo-300 mt-2">Refresh</button>
+            </div>
+        </div>
+        
+        <!-- Open Files (Collapsible) -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <button onclick="togglePanel('open-files-panel')" class="flex items-center justify-between w-full text-left">
+                <h3 class="text-sm font-medium text-slate-300">📄 Open Files</h3>
+                <svg id="open-files-panel-icon" class="w-4 h-4 text-slate-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div id="open-files-panel" class="hidden mt-3">
+                <div id="open-files-list" class="space-y-2 max-h-48 overflow-y-auto">
+                    <span class="text-slate-500 text-sm">No files in context</span>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -384,7 +477,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -1920,5 +2013,207 @@
             showToast('Transcription failed: ' + e.message, 'error');
         }
     }
+    
+    // Collapsible panel functions
+    window.togglePanel = function(panelId) {
+        const panel = document.getElementById(panelId);
+        const icon = document.getElementById(panelId + '-icon');
+        
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+            icon.classList.add('rotate-180');
+            
+            // Auto-load content when opening
+            if (panelId === 'todo-panel') loadTodoList();
+            else if (panelId === 'wishlist-panel') loadWishlist();
+            else if (panelId === 'variables-panel') loadVariables();
+            else if (panelId === 'workspace-panel') loadWorkspace();
+            else if (panelId === 'system-message-panel') loadSystemMessage();
+        } else {
+            panel.classList.add('hidden');
+            icon.classList.remove('rotate-180');
+        }
+    };
+    
+    function loadSystemMessage() {
+        const textarea = document.getElementById('system-message-edit');
+        if (agentData?.agent?.system_message) {
+            textarea.value = agentData.agent.system_message;
+        }
+    }
+    
+    window.saveSystemMessage = async function() {
+        showToast('System message editing requires EditAgent API - save via Edit Agent page', 'info');
+    };
+    
+    window.loadTodoList = async function() {
+        const container = document.getElementById('todo-list');
+        container.innerHTML = '<span class="text-slate-500 text-sm">Loading...</span>';
+        
+        try {
+            const data = await getTodo(agentName);
+            const todos = data.todo || data.todos || [];
+            
+            if (todos.length === 0) {
+                container.innerHTML = '<span class="text-slate-500 text-sm">No todo items</span>';
+                return;
+            }
+            
+            container.innerHTML = todos.map(item => {
+                const text = typeof item === 'string' ? item : (item.text || item.content || JSON.stringify(item));
+                const done = typeof item === 'object' && item.done;
+                return `
+                    <div class="flex items-start gap-2 p-2 bg-slate-700/50 rounded text-sm ${done ? 'opacity-50' : ''}">
+                        <span class="${done ? 'line-through' : ''}">${escapeHtml(text)}</span>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Failed to load todo:', e);
+            container.innerHTML = '<span class="text-red-400 text-sm">Failed to load</span>';
+        }
+    };
+    
+    window.loadWishlist = async function() {
+        const container = document.getElementById('wishlist-list');
+        container.innerHTML = '<span class="text-slate-500 text-sm">Loading...</span>';
+        
+        try {
+            const data = await getWishlist(agentName);
+            const items = data.wishlist || [];
+            
+            if (items.length === 0) {
+                container.innerHTML = '<span class="text-slate-500 text-sm">No wishlist items</span>';
+                return;
+            }
+            
+            container.innerHTML = items.map(item => {
+                const text = typeof item === 'string' ? item : (item.text || item.content || JSON.stringify(item));
+                return `
+                    <div class="p-2 bg-slate-700/50 rounded text-sm">
+                        ${escapeHtml(text)}
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Failed to load wishlist:', e);
+            container.innerHTML = '<span class="text-red-400 text-sm">Failed to load</span>';
+        }
+    };
+    
+    window.loadVariables = async function() {
+        const container = document.getElementById('variables-list');
+        container.innerHTML = '<span class="text-slate-500 text-sm">Loading...</span>';
+        
+        try {
+            const data = await getVariables(agentName);
+            const vars = data.variables || {};
+            const entries = Object.entries(vars);
+            
+            if (entries.length === 0) {
+                container.innerHTML = '<span class="text-slate-500 text-sm">No variables</span>';
+                return;
+            }
+            
+            container.innerHTML = entries.map(([key, value]) => {
+                const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                return `
+                    <div class="p-2 bg-slate-700/50 rounded">
+                        <span class="text-indigo-400">${escapeHtml(key)}</span>: 
+                        <span class="text-slate-300">${escapeHtml(valueStr.substring(0, 100))}${valueStr.length > 100 ? '...' : ''}</span>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Failed to load variables:', e);
+            container.innerHTML = '<span class="text-red-400 text-sm">Failed to load</span>';
+        }
+    };
+    
+    window.loadWorkspace = async function() {
+        const container = document.getElementById('workspace-tree');
+        container.innerHTML = '<span class="text-slate-500 text-sm">Loading...</span>';
+        
+        try {
+            const data = await getWorkspace(agentName);
+            const files = data.workspace || data.files || [];
+            
+            if (files.length === 0) {
+                container.innerHTML = '<span class="text-slate-500 text-sm">Workspace is empty</span>';
+                return;
+            }
+            
+            container.innerHTML = renderFileTree(files);
+        } catch (e) {
+            console.error('Failed to load workspace:', e);
+            container.innerHTML = '<span class="text-red-400 text-sm">Failed to load</span>';
+        }
+    };
+    
+    function renderFileTree(items, indent = 0) {
+        if (!Array.isArray(items)) {
+            // If it's an object, convert to array format
+            if (typeof items === 'object') {
+                items = Object.entries(items).map(([name, content]) => ({
+                    name,
+                    type: typeof content === 'object' && content !== null ? 'folder' : 'file',
+                    children: typeof content === 'object' && content !== null ? content : null
+                }));
+            } else {
+                return `<span class="text-slate-500 text-sm">Invalid workspace format</span>`;
+            }
+        }
+        
+        return items.map(item => {
+            const name = item.name || item;
+            const isFolder = item.type === 'folder' || item.type === 'directory' || item.children;
+            const icon = isFolder ? '📁' : '📄';
+            const paddingLeft = indent * 16;
+            
+            let html = `
+                <div class="py-1 hover:bg-slate-700/50 rounded px-2 cursor-default" style="padding-left: ${paddingLeft}px">
+                    <span>${icon}</span>
+                    <span class="ml-1">${escapeHtml(name)}</span>
+                </div>
+            `;
+            
+            if (isFolder && item.children) {
+                html += renderFileTree(item.children, indent + 1);
+            }
+            
+            return html;
+        }).join('');
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function updateOpenFilesList() {
+        const container = document.getElementById('open-files-list');
+        
+        if (stagedFiles.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-sm">No files in context</span>';
+            return;
+        }
+        
+        container.innerHTML = stagedFiles.map((file, idx) => `
+            <div class="flex items-center justify-between p-2 bg-slate-700/50 rounded text-sm">
+                <span class="truncate flex-1">📄 ${escapeHtml(file.name || file.filename || 'File ' + (idx + 1))}</span>
+                <button onclick="removeOpenFile(${idx})" class="text-red-400 hover:text-red-300 ml-2">×</button>
+            </div>
+        `).join('');
+    }
+    
+    window.removeOpenFile = function(idx) {
+        if (stagedFiles[idx]) {
+            removeStagedFile(stagedFiles[idx].id);
+            stagedFiles.splice(idx, 1);
+            updateOpenFilesList();
+            updateStagedFilesDisplay();
+        }
+    };
 </script>
 {% endblock %}

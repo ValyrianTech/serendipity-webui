@@ -97,6 +97,26 @@ export async function getToolset(toolsetName) {
     return response.json();
 }
 
+export async function getTodo(agentName) {
+    const response = await fetch(`${getBaseUrl()}/api/GetTodo?agent=${encodeURIComponent(agentName)}`);
+    return response.json();
+}
+
+export async function getWishlist(agentName) {
+    const response = await fetch(`${getBaseUrl()}/api/GetWishlist?agent=${encodeURIComponent(agentName)}`);
+    return response.json();
+}
+
+export async function getVariables(agentName) {
+    const response = await fetch(`${getBaseUrl()}/api/GetVariables?agent=${encodeURIComponent(agentName)}`);
+    return response.json();
+}
+
+export async function getWorkspace(agentName) {
+    const response = await fetch(`${getBaseUrl()}/api/GetWorkspace?agent=${encodeURIComponent(agentName)}`);
+    return response.json();
+}
+
 export async function getLLMs() {
     const response = await fetch(`${getBaseUrl()}/spellbook/llms`);
     return response.json();
