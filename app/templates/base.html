@@ -105,6 +105,16 @@
                 </a>
             </nav>
             
+            <!-- Dark Mode Toggle -->
+            <div class="p-4 border-t border-slate-700">
+                <button onclick="toggleDarkMode()" class="flex items-center gap-3 w-full p-2 hover:bg-slate-700 rounded-lg transition-colors">
+                    <svg id="dark-mode-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <span id="dark-mode-label" class="text-sm text-slate-400">Dark Mode</span>
+                </button>
+            </div>
+            
             <!-- WIF Key Status -->
             <div class="p-4 border-t border-slate-700">
                 <div id="wif-status" class="flex items-center gap-2 text-sm">
@@ -428,6 +438,46 @@
             sidebar.classList.toggle('inset-0');
             sidebar.classList.toggle('z-40');
         });
+        
+        // Dark mode toggle
+        function initDarkMode() {
+            const isDark = localStorage.getItem('serendipity_dark_mode') !== 'false';
+            applyTheme(isDark);
+        }
+        
+        function applyTheme(isDark) {
+            const html = document.documentElement;
+            const body = document.body;
+            const icon = document.getElementById('dark-mode-icon');
+            const label = document.getElementById('dark-mode-label');
+            
+            if (isDark) {
+                // Dark mode (default)
+                html.classList.remove('light-mode');
+                body.classList.remove('bg-slate-100', 'text-slate-900');
+                body.classList.add('bg-slate-900', 'text-slate-100');
+                if (icon) icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
+                if (label) label.textContent = 'Dark Mode';
+            } else {
+                // Light mode
+                html.classList.add('light-mode');
+                body.classList.remove('bg-slate-900', 'text-slate-100');
+                body.classList.add('bg-slate-100', 'text-slate-900');
+                if (icon) icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>';
+                if (label) label.textContent = 'Light Mode';
+            }
+        }
+        
+        window.toggleDarkMode = function() {
+            const isDark = localStorage.getItem('serendipity_dark_mode') !== 'false';
+            const newMode = !isDark;
+            localStorage.setItem('serendipity_dark_mode', newMode);
+            applyTheme(newMode);
+            showToast(newMode ? 'Dark mode enabled' : 'Light mode enabled', 'info');
+        };
+        
+        // Initialize dark mode on load
+        initDarkMode();
     </script>
     
     {% block scripts %}{% endblock %}

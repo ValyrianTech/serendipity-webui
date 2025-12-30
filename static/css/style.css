@@ -402,3 +402,105 @@ input:focus, textarea:focus, select:focus {
         transform: translateY(-8px);
     }
 }
+
+/* Light mode styles */
+.light-mode {
+    --bg-primary: #f1f5f9;
+    --bg-secondary: #e2e8f0;
+    --bg-tertiary: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --border-color: #cbd5e1;
+}
+
+.light-mode .bg-slate-800,
+.light-mode .bg-slate-900 {
+    background-color: #f1f5f9 !important;
+}
+
+.light-mode .bg-slate-700 {
+    background-color: #e2e8f0 !important;
+}
+
+.light-mode .border-slate-700,
+.light-mode .border-slate-600 {
+    border-color: #cbd5e1 !important;
+}
+
+.light-mode .text-slate-100,
+.light-mode .text-white {
+    color: #0f172a !important;
+}
+
+.light-mode .text-slate-400,
+.light-mode .text-slate-500 {
+    color: #64748b !important;
+}
+
+.light-mode .text-slate-300 {
+    color: #475569 !important;
+}
+
+.light-mode .hover\:bg-slate-700:hover {
+    background-color: #cbd5e1 !important;
+}
+
+.light-mode .hover\:bg-slate-600:hover {
+    background-color: #94a3b8 !important;
+}
+
+.light-mode .message-bubble {
+    background-color: #e2e8f0 !important;
+}
+
+.light-mode .message-card.user-message .message-bubble {
+    background-color: #6366f1 !important;
+    color: white !important;
+}
+
+.light-mode .modal-content {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+}
+
+.light-mode ::-webkit-scrollbar-track {
+    background: #e2e8f0;
+}
+
+.light-mode ::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+}
+
+.light-mode ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+.light-mode .sidebar-nav-item {
+    color: #475569;
+}
+
+.light-mode .sidebar-nav-item:hover {
+    background-color: #e2e8f0;
+}
+
+.light-mode .btn-secondary {
+    background-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+.light-mode .btn-secondary:hover {
+    background-color: #94a3b8 !important;
+}
+
+.light-mode input,
+.light-mode textarea,
+.light-mode select {
+    background-color: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+.light-mode input::placeholder,
+.light-mode textarea::placeholder {
+    color: #64748b !important;
+}
