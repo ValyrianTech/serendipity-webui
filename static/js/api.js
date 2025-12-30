@@ -296,28 +296,58 @@ export async function transcribeAudio(audioBlob) {
 }
 
 // Archive conversation
-export async function archiveConversation(wifKey, data) {
-    return signedPost(wifKey, '/api/ArchiveConversation', data);
+export async function archiveConversation(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/ArchiveConversation/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
 }
 
 // Summarize conversation
-export async function summarizeConversation(wifKey, data) {
-    return signedPost(wifKey, '/api/SummarizeConversation', data);
+export async function summarizeConversation(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SummarizeConversation/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
 }
 
 // Generate memory
-export async function generateMemory(wifKey, data) {
-    return signedPost(wifKey, '/api/GenerateMemory', data);
+export async function generateMemory(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/GenerateMemory/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
 }
 
 // Update knowledge base
-export async function updateKnowledgeBase(wifKey, data) {
-    return signedPost(wifKey, '/api/UpdateKnowledgeBase', data);
+export async function updateKnowledgeBase(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/UpdateKnowledgeBase/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
 }
 
 // Move to folder
-export async function moveToFolder(wifKey, data) {
-    return signedPost(wifKey, '/api/MoveToFolder', data);
+export async function moveToFolder(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/MoveToFolder/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
 }
 
 // WebSocket connection for streaming
