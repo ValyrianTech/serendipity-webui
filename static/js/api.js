@@ -295,6 +295,16 @@ export async function transcribeAudio(audioBlob) {
     return response.json();
 }
 
+// Archive conversation
+export async function archiveConversation(wifKey, data) {
+    return signedPost(wifKey, '/api/ArchiveConversation', data);
+}
+
+// Delete conversation
+export async function deleteConversation(wifKey, data) {
+    return signedPost(wifKey, '/api/DeleteConversation', data);
+}
+
 // WebSocket connection for streaming
 export function createStreamingConnection(conversationId, onMessage, onError, onClose) {
     const settings = getSettings();

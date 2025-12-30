@@ -16,14 +16,20 @@
                 <h1 id="conversation-title" class="text-lg font-semibold truncate">New Conversation</h1>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="refreshConversation()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700">
+                <button onclick="refreshConversation()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700" title="Refresh">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
                 </button>
-                <button onclick="toggleSettings()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700">
+                <button onclick="toggleConversationMenu()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700" title="Conversation Actions">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <button onclick="toggleSettings()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700" title="Settings">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
                 </button>
             </div>
@@ -171,11 +177,48 @@
         </div>
     </div>
 </div>
+
+<!-- Conversation Manager Dialog -->
+<div id="conversation-menu" class="modal-backdrop hidden">
+    <div class="modal-content max-w-sm">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold">Conversation Actions</h2>
+            <button onclick="toggleConversationMenu()" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="space-y-3">
+            <button onclick="startNewConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span>New Conversation</span>
+            </button>
+            
+            <button onclick="archiveCurrentConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                </svg>
+                <span>Archive Conversation</span>
+            </button>
+            
+            <button onclick="deleteCurrentConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-red-600/20 rounded-lg transition-colors text-red-400 hover:text-red-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                <span>Delete Conversation</span>
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -694,6 +737,65 @@
     window.toggleSettings = function() {
         const panel = document.getElementById('settings-panel');
         panel.classList.toggle('translate-x-full');
+    };
+    
+    window.toggleConversationMenu = function() {
+        const menu = document.getElementById('conversation-menu');
+        menu.classList.toggle('hidden');
+    };
+    
+    window.startNewConversation = function() {
+        toggleConversationMenu();
+        // Navigate to new conversation (no conversation_id)
+        window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation`;
+    };
+    
+    window.archiveCurrentConversation = async function() {
+        if (!conversationId) {
+            showToast('No conversation to archive', 'error');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to archive this conversation?')) return;
+        
+        try {
+            const settings = getSettings();
+            await archiveConversation(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                conversation_id: conversationId
+            });
+            showToast('Conversation archived', 'success');
+            toggleConversationMenu();
+            // Navigate back to conversations list
+            window.location.href = `/agent/${encodeURIComponent(agentName)}/conversations`;
+        } catch (e) {
+            showToast('Failed to archive: ' + e.message, 'error');
+        }
+    };
+    
+    window.deleteCurrentConversation = async function() {
+        if (!conversationId) {
+            showToast('No conversation to delete', 'error');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to delete this conversation? This cannot be undone.')) return;
+        
+        try {
+            const settings = getSettings();
+            await deleteConversation(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                conversation_id: conversationId
+            });
+            showToast('Conversation deleted', 'success');
+            toggleConversationMenu();
+            // Navigate back to conversations list
+            window.location.href = `/agent/${encodeURIComponent(agentName)}/conversations`;
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
+        }
     };
     
     function updateToolsList(enabledTools) {
