@@ -334,19 +334,24 @@
             container.innerHTML = '<p class="text-slate-400">No roles defined</p>';
             return;
         }
-        container.innerHTML = roles.map((role, idx) => `
-            <div class="bg-slate-700 p-4 rounded-lg">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="font-semibold">${role.name || role}</h3>
-                    <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
+        container.innerHTML = roles.map((role, idx) => {
+            // Handle both string roles and object roles
+            const roleName = typeof role === 'string' ? role : (role.name || role.role_name || 'Unknown');
+            const roleDesc = typeof role === 'object' ? (role.description || role.role_description || '') : '';
+            return `
+                <div class="bg-slate-700 p-4 rounded-lg">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-semibold">${roleName}</h3>
+                        <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    ${roleDesc ? `<p class="text-sm text-slate-400">${roleDesc}</p>` : ''}
                 </div>
-                ${role.description ? `<p class="text-sm text-slate-400">${role.description}</p>` : ''}
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
     
     window.addTool = function() {
