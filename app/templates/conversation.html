@@ -2052,7 +2052,23 @@
         
         try {
             const data = await getTodo(agentName);
-            const todos = data.todo || data.todos || [];
+            console.log('Todo data:', data);
+            
+            // Handle various response formats
+            let todos = [];
+            if (Array.isArray(data)) {
+                todos = data;
+            } else if (Array.isArray(data.todo)) {
+                todos = data.todo;
+            } else if (Array.isArray(data.todos)) {
+                todos = data.todos;
+            } else if (typeof data.todo === 'string') {
+                // Single string todo
+                todos = data.todo ? [data.todo] : [];
+            } else if (typeof data === 'object' && data.todo) {
+                // Object format - display as text
+                todos = [JSON.stringify(data.todo)];
+            }
             
             if (todos.length === 0) {
                 container.innerHTML = '<span class="text-slate-500 text-sm">No todo items</span>';
@@ -2060,8 +2076,8 @@
             }
             
             container.innerHTML = todos.map(item => {
-                const text = typeof item === 'string' ? item : (item.text || item.content || JSON.stringify(item));
-                const done = typeof item === 'object' && item.done;
+                const text = typeof item === 'string' ? item : (item.text || item.content || item.task || JSON.stringify(item));
+                const done = typeof item === 'object' && (item.done || item.completed);
                 return `
                     <div class="flex items-start gap-2 p-2 bg-slate-700/50 rounded text-sm ${done ? 'opacity-50' : ''}">
                         <span class="${done ? 'line-through' : ''}">${escapeHtml(text)}</span>
