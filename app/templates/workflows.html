@@ -526,16 +526,15 @@
         // Show agent info section
         agentInfo.classList.remove('hidden');
         agentNameDisplay.textContent = agentName;
+        agentDescDisplay.textContent = localStorage.getItem('serendipity_agent_description') || '';
         
-        // Load agent details for avatar and description
-        if (agentData?.agent) {
-            agentDescDisplay.textContent = agentData.agent.description || '';
-            if (agentData.agent.profile_image) {
-                agentAvatar.src = `http://${settings.serverAddress}:${settings.serverPort}/spellbook/files/${agentData.agent.profile_image}`;
-            } else {
-                agentAvatar.src = '';
-                agentAvatar.style.display = 'none';
-            }
+        // Load profile image from localStorage (stored with placeholders)
+        const profileImage = localStorage.getItem('serendipity_agent_profile_image');
+        if (profileImage) {
+            const imgUrl = profileImage
+                .replace('<serverhost>', settings.serverAddress)
+                .replace('<serverport>', settings.serverPort);
+            agentAvatar.src = imgUrl;
         }
         
         // Update navigation links
