@@ -2185,12 +2185,6 @@
         }).join('');
     }
     
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-    
     function updateOpenFilesList() {
         const container = document.getElementById('open-files-list');
         
