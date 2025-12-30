@@ -698,34 +698,43 @@
     
     function updateToolsList(enabledTools) {
         const container = document.getElementById('tools-list');
-        // For now, just show enabled tools
-        if (enabledTools.length > 0) {
-            container.innerHTML = enabledTools.map(tool => `
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" value="${tool}" checked class="w-4 h-4 rounded">
-                    <span class="text-sm">${tool}</span>
-                </label>
-            `).join('');
+        // Show all available tools from agent, check only those in enabledTools
+        const allTools = agentData?.agent?.tools || [];
+        if (allTools.length > 0) {
+            container.innerHTML = allTools.map(tool => {
+                const isEnabled = enabledTools.includes(tool);
+                return `
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" value="${tool}" ${isEnabled ? 'checked' : ''} class="w-4 h-4 rounded">
+                        <span class="text-sm">${tool}</span>
+                    </label>
+                `;
+            }).join('');
         } else {
-            container.innerHTML = '<span class="text-slate-500 text-sm">No tools enabled</span>';
+            container.innerHTML = '<span class="text-slate-500 text-sm">No tools available</span>';
         }
     }
     
     function updateRolesList(enabledRoles) {
         const container = document.getElementById('roles-list');
-        if (enabledRoles.length > 0) {
-            container.innerHTML = enabledRoles.map(role => {
-                // Handle both string roles and object roles
+        // Show all available roles from agent, check only those in enabledRoles
+        const allRoles = agentData?.agent?.roles || [];
+        // Convert enabledRoles to array of role names for comparison
+        const enabledRoleNames = enabledRoles.map(r => typeof r === 'string' ? r : (r.role_name || r.name || ''));
+        
+        if (allRoles.length > 0) {
+            container.innerHTML = allRoles.map(role => {
                 const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
+                const isEnabled = enabledRoleNames.includes(roleName);
                 return `
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" value="${roleName}" checked class="w-4 h-4 rounded">
+                        <input type="checkbox" value="${roleName}" ${isEnabled ? 'checked' : ''} class="w-4 h-4 rounded">
                         <span class="text-sm">${roleName}</span>
                     </label>
                 `;
             }).join('');
         } else {
-            container.innerHTML = '<span class="text-slate-500 text-sm">No roles enabled</span>';
+            container.innerHTML = '<span class="text-slate-500 text-sm">No roles available</span>';
         }
     }
     
