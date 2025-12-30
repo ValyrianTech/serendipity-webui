@@ -190,6 +190,7 @@
         await loadWorkflows();
         await loadModels();
         await loadAgentData();
+        updateSidebarAgentInfo();
         
         if (initialWorkflowId) {
             document.getElementById('workflow-select').value = initialWorkflowId;
@@ -511,5 +512,36 @@
         source.classList.toggle('hidden');
         icon.classList.toggle('rotate-180');
     };
+    
+    function updateSidebarAgentInfo() {
+        const settings = getSettings();
+        const agentInfo = document.getElementById('agent-info');
+        const agentAvatar = document.getElementById('agent-avatar');
+        const agentNameDisplay = document.getElementById('agent-name-display');
+        const agentDescDisplay = document.getElementById('agent-description-display');
+        
+        // Save current agent to settings
+        saveSettings({ agentName: agentName });
+        
+        // Show agent info section
+        agentInfo.classList.remove('hidden');
+        agentNameDisplay.textContent = agentName;
+        
+        // Load agent details for avatar and description
+        if (agentData?.agent) {
+            agentDescDisplay.textContent = agentData.agent.description || '';
+            if (agentData.agent.profile_image) {
+                agentAvatar.src = `http://${settings.serverAddress}:${settings.serverPort}/spellbook/files/${agentData.agent.profile_image}`;
+            } else {
+                agentAvatar.src = '';
+                agentAvatar.style.display = 'none';
+            }
+        }
+        
+        // Update navigation links
+        if (typeof updateNavigation === 'function') {
+            updateNavigation();
+        }
+    }
 </script>
 {% endblock %}
