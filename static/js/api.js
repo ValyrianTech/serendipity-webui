@@ -300,6 +300,26 @@ export async function archiveConversation(wifKey, data) {
     return signedPost(wifKey, '/api/ArchiveConversation', data);
 }
 
+// Summarize conversation
+export async function summarizeConversation(wifKey, data) {
+    return signedPost(wifKey, '/api/SummarizeConversation', data);
+}
+
+// Generate memory
+export async function generateMemory(wifKey, data) {
+    return signedPost(wifKey, '/api/GenerateMemory', data);
+}
+
+// Update knowledge base
+export async function updateKnowledgeBase(wifKey, data) {
+    return signedPost(wifKey, '/api/UpdateKnowledgeBase', data);
+}
+
+// Move to folder
+export async function moveToFolder(wifKey, data) {
+    return signedPost(wifKey, '/api/MoveToFolder', data);
+}
+
 // WebSocket connection for streaming
 export function createStreamingConnection(conversationId, onMessage, onError, onClose) {
     const settings = getSettings();

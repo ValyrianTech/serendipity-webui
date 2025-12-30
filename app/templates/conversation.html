@@ -198,6 +198,34 @@
                 <span>New Conversation</span>
             </button>
             
+            <button onclick="summarizeCurrentConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span>Summarize Conversation</span>
+            </button>
+            
+            <button onclick="generateMemoryFromConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                <span>Generate Memory</span>
+            </button>
+            
+            <button onclick="updateKnowledgeBaseFromConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+                <span>Update Knowledge Base</span>
+            </button>
+            
+            <button onclick="showMoveToFolderDialog()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+                <span>Move to Folder</span>
+            </button>
+            
             <button onclick="archiveCurrentConversation()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
                 <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
@@ -214,11 +242,39 @@
         </div>
     </div>
 </div>
+
+<!-- Move to Folder Dialog -->
+<div id="move-folder-dialog" class="modal-backdrop hidden">
+    <div class="modal-content max-w-sm">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold">Move to Folder</h2>
+            <button onclick="closeMoveToFolderDialog()" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">Select Folder</label>
+                <select id="move-folder-select" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">Loading folders...</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-3">
+                <button onclick="moveConversationToFolder()" class="btn-primary flex-1">Move</button>
+                <button onclick="closeMoveToFolderDialog()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -795,6 +851,139 @@
             window.location.href = `/agent/${encodeURIComponent(agentName)}/conversations`;
         } catch (e) {
             showToast('Failed to delete: ' + e.message, 'error');
+        }
+    };
+    
+    window.summarizeCurrentConversation = async function() {
+        if (!conversationId) {
+            showToast('No conversation to summarize', 'error');
+            return;
+        }
+        
+        try {
+            const settings = getSettings();
+            const model = document.getElementById('model-select').value;
+            showToast('Summarizing conversation...', 'info');
+            toggleConversationMenu();
+            
+            await summarizeConversation(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                conversation_id: conversationId,
+                model_name: model
+            });
+            showToast('Conversation summarized', 'success');
+            await loadConversation();
+        } catch (e) {
+            showToast('Failed to summarize: ' + e.message, 'error');
+        }
+    };
+    
+    window.generateMemoryFromConversation = async function() {
+        if (!conversationId) {
+            showToast('No conversation to generate memory from', 'error');
+            return;
+        }
+        
+        try {
+            const settings = getSettings();
+            const model = document.getElementById('model-select').value;
+            showToast('Generating memory...', 'info');
+            toggleConversationMenu();
+            
+            await generateMemory(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                conversation_id: conversationId,
+                model_name: model
+            });
+            showToast('Memory generated', 'success');
+        } catch (e) {
+            showToast('Failed to generate memory: ' + e.message, 'error');
+        }
+    };
+    
+    window.updateKnowledgeBaseFromConversation = async function() {
+        if (!conversationId) {
+            showToast('No conversation to update knowledge base from', 'error');
+            return;
+        }
+        
+        try {
+            const settings = getSettings();
+            const model = document.getElementById('model-select').value;
+            showToast('Updating knowledge base...', 'info');
+            toggleConversationMenu();
+            
+            await updateKnowledgeBase(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                conversation_id: conversationId,
+                model_name: model
+            });
+            showToast('Knowledge base updated', 'success');
+        } catch (e) {
+            showToast('Failed to update knowledge base: ' + e.message, 'error');
+        }
+    };
+    
+    window.showMoveToFolderDialog = async function() {
+        toggleConversationMenu();
+        
+        // Load folders
+        try {
+            const foldersData = await getFolders(agentName);
+            const select = document.getElementById('move-folder-select');
+            select.innerHTML = '';
+            
+            const folders = foldersData.folders || [];
+            folders.forEach(folder => {
+                const option = document.createElement('option');
+                option.value = folder;
+                option.textContent = folder;
+                select.appendChild(option);
+            });
+            
+            if (folders.length === 0) {
+                select.innerHTML = '<option value="">No folders available</option>';
+            }
+        } catch (e) {
+            console.error('Failed to load folders:', e);
+        }
+        
+        document.getElementById('move-folder-dialog').classList.remove('hidden');
+    };
+    
+    window.closeMoveToFolderDialog = function() {
+        document.getElementById('move-folder-dialog').classList.add('hidden');
+    };
+    
+    window.moveConversationToFolder = async function() {
+        if (!conversationId) {
+            showToast('No conversation to move', 'error');
+            return;
+        }
+        
+        const targetFolder = document.getElementById('move-folder-select').value;
+        if (!targetFolder) {
+            showToast('Please select a folder', 'error');
+            return;
+        }
+        
+        try {
+            const settings = getSettings();
+            await moveToFolder(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                conversation_id: conversationId,
+                folder: targetFolder
+            });
+            showToast('Conversation moved to ' + targetFolder, 'success');
+            closeMoveToFolderDialog();
+            // Navigate back to conversations list
+            window.location.href = `/agent/${encodeURIComponent(agentName)}/conversations`;
+        } catch (e) {
+            showToast('Failed to move: ' + e.message, 'error');
         }
     };
     
