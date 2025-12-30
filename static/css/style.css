@@ -405,26 +405,26 @@ input:focus, textarea:focus, select:focus {
 
 /* Light mode styles */
 .light-mode {
-    --bg-primary: #f1f5f9;
-    --bg-secondary: #e2e8f0;
-    --bg-tertiary: #cbd5e1;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f1f5f9;
+    --bg-tertiary: #e2e8f0;
     --text-primary: #0f172a;
-    --text-secondary: #475569;
+    --text-secondary: #334155;
     --border-color: #cbd5e1;
 }
 
 .light-mode .bg-slate-800,
 .light-mode .bg-slate-900 {
-    background-color: #f1f5f9 !important;
+    background-color: #ffffff !important;
 }
 
 .light-mode .bg-slate-700 {
-    background-color: #e2e8f0 !important;
+    background-color: #f1f5f9 !important;
 }
 
 .light-mode .border-slate-700,
 .light-mode .border-slate-600 {
-    border-color: #cbd5e1 !important;
+    border-color: #e2e8f0 !important;
 }
 
 .light-mode .text-slate-100,
@@ -434,23 +434,30 @@ input:focus, textarea:focus, select:focus {
 
 .light-mode .text-slate-400,
 .light-mode .text-slate-500 {
-    color: #64748b !important;
-}
-
-.light-mode .text-slate-300 {
     color: #475569 !important;
 }
 
+.light-mode .text-slate-300 {
+    color: #334155 !important;
+}
+
 .light-mode .hover\:bg-slate-700:hover {
-    background-color: #cbd5e1 !important;
+    background-color: #e2e8f0 !important;
 }
 
 .light-mode .hover\:bg-slate-600:hover {
-    background-color: #94a3b8 !important;
+    background-color: #cbd5e1 !important;
 }
 
 .light-mode .message-bubble {
-    background-color: #e2e8f0 !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+.light-mode .message-bubble p,
+.light-mode .message-bubble span,
+.light-mode .message-bubble div {
+    color: #0f172a !important;
 }
 
 .light-mode .message-card.user-message .message-bubble {
@@ -458,49 +465,66 @@ input:focus, textarea:focus, select:focus {
     color: white !important;
 }
 
+.light-mode .message-card.user-message .message-bubble p,
+.light-mode .message-card.user-message .message-bubble span,
+.light-mode .message-card.user-message .message-bubble div {
+    color: white !important;
+}
+
 .light-mode .modal-content {
-    background-color: #f1f5f9 !important;
-    border-color: #cbd5e1 !important;
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
 }
 
 .light-mode ::-webkit-scrollbar-track {
-    background: #e2e8f0;
+    background: #f1f5f9;
 }
 
 .light-mode ::-webkit-scrollbar-thumb {
-    background: #94a3b8;
+    background: #cbd5e1;
 }
 
 .light-mode ::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: #94a3b8;
 }
 
 .light-mode .sidebar-nav-item {
-    color: #475569;
+    color: #334155;
 }
 
 .light-mode .sidebar-nav-item:hover {
-    background-color: #e2e8f0;
+    background-color: #f1f5f9;
 }
 
 .light-mode .btn-secondary {
-    background-color: #cbd5e1 !important;
+    background-color: #e2e8f0 !important;
     color: #0f172a !important;
 }
 
 .light-mode .btn-secondary:hover {
-    background-color: #94a3b8 !important;
+    background-color: #cbd5e1 !important;
 }
 
 .light-mode input,
 .light-mode textarea,
 .light-mode select {
-    background-color: #e2e8f0 !important;
-    border-color: #cbd5e1 !important;
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
     color: #0f172a !important;
 }
 
 .light-mode input::placeholder,
 .light-mode textarea::placeholder {
     color: #64748b !important;
+}
+
+/* Light mode code blocks */
+.light-mode pre,
+.light-mode code {
+    background-color: #f1f5f9 !important;
+    color: #334155 !important;
+}
+
+.light-mode .hljs {
+    background-color: #f1f5f9 !important;
 }
