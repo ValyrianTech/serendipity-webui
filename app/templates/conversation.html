@@ -641,16 +641,19 @@
     }
     
     // Process thinking tags - make them collapsible
-    function processThinkingTags(content) {
+    // isStreaming: if true, show thinking content expanded; if false, collapsed
+    function processThinkingTags(content, isStreaming = false) {
         // Match <think>...</think> tags (case insensitive, multiline)
         const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
         
         return content.replace(thinkRegex, (match, thinkContent) => {
             const uniqueId = 'think-' + Math.random().toString(36).substr(2, 9);
+            const isHidden = isStreaming ? '' : 'hidden';
+            const isRotated = isStreaming ? 'rotate-90' : '';
             return `
                 <div class="thinking-block mb-3">
                     <button onclick="toggleThinking('${uniqueId}')" class="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors">
-                        <svg id="${uniqueId}-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg id="${uniqueId}-icon" class="w-4 h-4 transform transition-transform ${isRotated}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                         </svg>
                         <span class="flex items-center gap-1.5">
@@ -660,7 +663,7 @@
                             Thinking...
                         </span>
                     </button>
-                    <div id="${uniqueId}" class="thinking-content hidden mt-2 pl-6 border-l-2 border-purple-500/30 text-slate-400 text-sm italic">${escapeHtml(thinkContent.trim())}</div>
+                    <div id="${uniqueId}" class="thinking-content ${isHidden} mt-2 pl-6 border-l-2 border-purple-500/30 text-slate-400 text-sm italic">${escapeHtml(thinkContent.trim())}</div>
                 </div>
             `;
         });
@@ -1304,8 +1307,8 @@
             });
         } else if (data.message) {
             hasContent = true;
-            // Process thinking tags in streaming message
-            const processedContent = processThinkingTags(data.message);
+            // Process thinking tags in streaming message - show expanded during streaming
+            const processedContent = processThinkingTags(data.message, true);
             if (processedContent !== data.message) {
                 const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
                 contentEl.innerHTML = `<div class="markdown-content">${parts.map(p => {
