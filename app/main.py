@@ -60,6 +60,16 @@ async def llms(request: Request):
     return templates.TemplateResponse("llms.html", {"request": request})
 
 
+@app.get("/agent/{agent_name}/workflows", response_class=HTMLResponse)
+async def workflows(request: Request, agent_name: str, workflow_id: str = "", node_id: str = ""):
+    return templates.TemplateResponse("workflows.html", {
+        "request": request,
+        "agent_name": agent_name,
+        "workflow_id": workflow_id,
+        "node_id": node_id
+    })
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)

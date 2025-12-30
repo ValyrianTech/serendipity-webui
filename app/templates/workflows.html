@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+
+{% block title %}Workflows - {{ agent_name }} - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex-1 flex flex-col overflow-hidden">
+    <!-- Header -->
+    <div class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="/agent/{{ agent_name }}" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <h1 class="text-2xl font-bold">Workflows</h1>
+                <span class="text-slate-400">{{ agent_name }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="startSelectedWorkflow()" class="btn-primary flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Start Workflow
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Left Panel: Workflow Selection & Generation -->
+        <div class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col overflow-hidden">
+            <!-- Workflow Selection -->
+            <div class="p-4 border-b border-slate-700">
+                <label class="text-sm text-slate-400 block mb-2">Select Workflow</label>
+                <select id="workflow-select" onchange="loadSelectedWorkflow()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">Select a workflow...</option>
+                </select>
+            </div>
+            
+            <!-- Node Selection (shown when workflow selected) -->
+            <div id="node-selection" class="p-4 border-b border-slate-700 hidden">
+                <label class="text-sm text-slate-400 block mb-2">Select Node to Edit</label>
+                <select id="node-select" onchange="loadSelectedNode()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">Select a node...</option>
+                </select>
+            </div>
+            
+            <!-- Generate Workflow -->
+            <div class="p-4 border-b border-slate-700">
+                <h3 class="text-sm font-medium text-slate-300 mb-3">Generate New Workflow</h3>
+                
+                <div class="mb-3">
+                    <label class="text-sm text-slate-400 block mb-1">Workflow ID</label>
+                    <input type="text" id="new-workflow-id" placeholder="my-workflow" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="text-sm text-slate-400 block mb-1">Instructions</label>
+                    <textarea id="workflow-instructions" rows="4" placeholder="Describe what this workflow should do..." class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm resize-none"></textarea>
+                </div>
+                
+                <button onclick="generateNewWorkflow()" class="btn-secondary w-full flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    Generate Workflow
+                </button>
+            </div>
+            
+            <!-- Start Workflow Input -->
+            <div class="p-4 flex-1">
+                <h3 class="text-sm font-medium text-slate-300 mb-3">Workflow Input</h3>
+                <textarea id="workflow-input" rows="6" placeholder="Enter input for the workflow..." class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm resize-none"></textarea>
+            </div>
+        </div>
+        
+        <!-- Center Panel: Flowchart Preview -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-slate-700 bg-slate-800/50">
+                <h3 class="text-sm font-medium text-slate-300">Flowchart Preview</h3>
+            </div>
+            <div id="flowchart-container" class="flex-1 overflow-auto p-4 bg-slate-900/50">
+                <div id="flowchart-loading" class="text-center py-12 text-slate-500">
+                    Select a workflow to view its flowchart
+                </div>
+                <div id="flowchart-preview" class="hidden"></div>
+            </div>
+            
+            <!-- Flowchart Source (collapsible) -->
+            <div class="border-t border-slate-700">
+                <button onclick="toggleFlowchartSource()" class="w-full p-3 bg-slate-800 text-left text-sm text-slate-400 hover:text-white flex items-center justify-between">
+                    <span>Flowchart Source (Mermaid)</span>
+                    <svg id="flowchart-source-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="flowchart-source" class="hidden p-4 bg-slate-800">
+                    <textarea id="flowchart-code" rows="6" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm font-mono resize-none" placeholder="Mermaid flowchart code..."></textarea>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Panel: Node Editor (shown when node selected) -->
+        <div id="node-editor" class="w-96 bg-slate-800 border-l border-slate-700 flex flex-col overflow-hidden hidden">
+            <div class="p-4 border-b border-slate-700">
+                <h3 class="text-lg font-medium">Edit Node</h3>
+                <p id="node-id-display" class="text-sm text-slate-400"></p>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <!-- Step Type -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Step Type</label>
+                    <select id="step-type" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                        <option value="prompt">Prompt</option>
+                        <option value="decision">Decision</option>
+                        <option value="action">Action</option>
+                        <option value="end">End</option>
+                    </select>
+                </div>
+                
+                <!-- Prompt -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Prompt</label>
+                    <textarea id="step-prompt" rows="4" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm resize-none" placeholder="Enter the prompt for this step..."></textarea>
+                </div>
+                
+                <!-- Model -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Model</label>
+                    <select id="step-model" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Default</option>
+                    </select>
+                </div>
+                
+                <!-- Temperature -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Temperature: <span id="step-temp-value">0.7</span></label>
+                    <input type="range" id="step-temperature" min="0" max="2" step="0.1" value="0.7" class="w-full" oninput="document.getElementById('step-temp-value').textContent = this.value">
+                </div>
+                
+                <!-- Tools -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Tools</label>
+                    <div id="step-tools" class="space-y-1 max-h-32 overflow-y-auto bg-slate-700 rounded-lg p-2">
+                        <span class="text-slate-500 text-sm">Loading...</span>
+                    </div>
+                </div>
+                
+                <!-- Roles -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Roles</label>
+                    <div id="step-roles" class="space-y-1 max-h-32 overflow-y-auto bg-slate-700 rounded-lg p-2">
+                        <span class="text-slate-500 text-sm">Loading...</span>
+                    </div>
+                </div>
+                
+                <!-- Next Nodes -->
+                <div>
+                    <label class="text-sm text-slate-400 block mb-1">Next Nodes (comma-separated)</label>
+                    <input type="text" id="step-next-nodes" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm" placeholder="node1, node2">
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-slate-700">
+                <button onclick="saveNodeChanges()" class="btn-primary w-full">Save Node</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getWorkflows, getWorkflow, getModels, getAgent, getSettings, startWorkflow, generateWorkflow, editWorkflowStep } from '/static/js/api.js';
+    
+    const agentName = '{{ agent_name }}';
+    const initialWorkflowId = '{{ workflow_id }}';
+    const initialNodeId = '{{ node_id }}';
+    
+    let workflowsData = [];
+    let currentWorkflow = null;
+    let currentNode = null;
+    let agentData = null;
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadWorkflows();
+        await loadModels();
+        await loadAgentData();
+        
+        if (initialWorkflowId) {
+            document.getElementById('workflow-select').value = initialWorkflowId;
+            await loadSelectedWorkflow();
+            
+            if (initialNodeId) {
+                document.getElementById('node-select').value = initialNodeId;
+                loadSelectedNode();
+            }
+        }
+    });
+    
+    async function loadWorkflows() {
+        try {
+            const data = await getWorkflows(agentName);
+            workflowsData = data.workflows || [];
+            
+            const select = document.getElementById('workflow-select');
+            select.innerHTML = '<option value="">Select a workflow...</option>';
+            
+            workflowsData.forEach(wf => {
+                const option = document.createElement('option');
+                option.value = wf;
+                option.textContent = wf;
+                select.appendChild(option);
+            });
+        } catch (e) {
+            console.error('Failed to load workflows:', e);
+            showToast('Failed to load workflows', 'error');
+        }
+    }
+    
+    async function loadModels() {
+        try {
+            const data = await getModels();
+            const models = data.models || [];
+            
+            const select = document.getElementById('step-model');
+            select.innerHTML = '<option value="">Default</option>';
+            
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.name || model;
+                option.textContent = model.name || model;
+                select.appendChild(option);
+            });
+        } catch (e) {
+            console.error('Failed to load models:', e);
+        }
+    }
+    
+    async function loadAgentData() {
+        try {
+            agentData = await getAgent(agentName);
+            updateToolsAndRoles();
+        } catch (e) {
+            console.error('Failed to load agent data:', e);
+        }
+    }
+    
+    function updateToolsAndRoles() {
+        const tools = agentData?.agent?.tools || [];
+        const roles = agentData?.agent?.roles || [];
+        
+        const toolsContainer = document.getElementById('step-tools');
+        if (tools.length > 0) {
+            toolsContainer.innerHTML = tools.map(tool => `
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" value="${tool}" class="w-4 h-4 rounded">
+                    <span class="text-sm">${tool}</span>
+                </label>
+            `).join('');
+        } else {
+            toolsContainer.innerHTML = '<span class="text-slate-500 text-sm">No tools available</span>';
+        }
+        
+        const rolesContainer = document.getElementById('step-roles');
+        if (roles.length > 0) {
+            rolesContainer.innerHTML = roles.map(role => {
+                const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
+                return `
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" value="${roleName}" class="w-4 h-4 rounded">
+                        <span class="text-sm">${roleName}</span>
+                    </label>
+                `;
+            }).join('');
+        } else {
+            rolesContainer.innerHTML = '<span class="text-slate-500 text-sm">No roles available</span>';
+        }
+    }
+    
+    window.loadSelectedWorkflow = async function() {
+        const workflowId = document.getElementById('workflow-select').value;
+        
+        if (!workflowId) {
+            currentWorkflow = null;
+            document.getElementById('node-selection').classList.add('hidden');
+            document.getElementById('node-editor').classList.add('hidden');
+            document.getElementById('flowchart-preview').classList.add('hidden');
+            document.getElementById('flowchart-loading').classList.remove('hidden');
+            document.getElementById('flowchart-code').value = '';
+            return;
+        }
+        
+        try {
+            const data = await getWorkflow(agentName, workflowId);
+            currentWorkflow = data.workflow || data;
+            
+            // Update URL
+            window.history.replaceState({}, '', `/agent/${encodeURIComponent(agentName)}/workflows?workflow_id=${encodeURIComponent(workflowId)}`);
+            
+            // Populate node dropdown
+            const nodeSelect = document.getElementById('node-select');
+            nodeSelect.innerHTML = '<option value="">Select a node...</option>';
+            
+            const nodeIds = currentWorkflow.nodeIds || currentWorkflow.node_ids || [];
+            nodeIds.forEach(nodeId => {
+                const option = document.createElement('option');
+                option.value = nodeId;
+                option.textContent = nodeId;
+                nodeSelect.appendChild(option);
+            });
+            
+            document.getElementById('node-selection').classList.remove('hidden');
+            
+            // Display flowchart
+            const flowchart = currentWorkflow.flowchart || '';
+            document.getElementById('flowchart-code').value = flowchart;
+            
+            if (flowchart) {
+                renderFlowchart(flowchart);
+            } else {
+                document.getElementById('flowchart-preview').classList.add('hidden');
+                document.getElementById('flowchart-loading').textContent = 'No flowchart defined for this workflow';
+                document.getElementById('flowchart-loading').classList.remove('hidden');
+            }
+            
+        } catch (e) {
+            console.error('Failed to load workflow:', e);
+            showToast('Failed to load workflow', 'error');
+        }
+    };
+    
+    async function renderFlowchart(code) {
+        const container = document.getElementById('flowchart-preview');
+        const loading = document.getElementById('flowchart-loading');
+        
+        try {
+            loading.classList.add('hidden');
+            container.classList.remove('hidden');
+            
+            const id = `flowchart-${Date.now()}`;
+            const { svg } = await mermaid.render(id, code);
+            container.innerHTML = svg;
+        } catch (e) {
+            console.error('Mermaid render error:', e);
+            container.innerHTML = `<pre class="text-red-400 text-sm">Flowchart error: ${e.message}</pre>`;
+        }
+    }
+    
+    window.loadSelectedNode = function() {
+        const nodeId = document.getElementById('node-select').value;
+        
+        if (!nodeId || !currentWorkflow) {
+            document.getElementById('node-editor').classList.add('hidden');
+            currentNode = null;
+            return;
+        }
+        
+        // Update URL
+        const workflowId = document.getElementById('workflow-select').value;
+        window.history.replaceState({}, '', `/agent/${encodeURIComponent(agentName)}/workflows?workflow_id=${encodeURIComponent(workflowId)}&node_id=${encodeURIComponent(nodeId)}`);
+        
+        // Find node data
+        const nodes = currentWorkflow.nodes || {};
+        currentNode = nodes[nodeId] || {};
+        
+        // Populate editor
+        document.getElementById('node-id-display').textContent = `Node: ${nodeId}`;
+        document.getElementById('step-type').value = currentNode.step_type || currentNode.stepType || 'prompt';
+        document.getElementById('step-prompt').value = currentNode.prompt || '';
+        document.getElementById('step-model').value = currentNode.model || currentNode.model_name || '';
+        document.getElementById('step-temperature').value = currentNode.temperature || 0.7;
+        document.getElementById('step-temp-value').textContent = currentNode.temperature || 0.7;
+        document.getElementById('step-next-nodes').value = (currentNode.next_nodes || currentNode.nextNodes || []).join(', ');
+        
+        // Check tools
+        const nodeTools = currentNode.tools || [];
+        document.querySelectorAll('#step-tools input[type="checkbox"]').forEach(cb => {
+            cb.checked = nodeTools.includes(cb.value);
+        });
+        
+        // Check roles
+        const nodeRoles = currentNode.roles || [];
+        document.querySelectorAll('#step-roles input[type="checkbox"]').forEach(cb => {
+            cb.checked = nodeRoles.includes(cb.value);
+        });
+        
+        document.getElementById('node-editor').classList.remove('hidden');
+    };
+    
+    window.saveNodeChanges = async function() {
+        if (!currentWorkflow || !currentNode) {
+            showToast('No node selected', 'error');
+            return;
+        }
+        
+        const workflowId = document.getElementById('workflow-select').value;
+        const nodeId = document.getElementById('node-select').value;
+        
+        const selectedTools = Array.from(document.querySelectorAll('#step-tools input[type="checkbox"]:checked')).map(cb => cb.value);
+        const selectedRoles = Array.from(document.querySelectorAll('#step-roles input[type="checkbox"]:checked')).map(cb => cb.value);
+        const nextNodes = document.getElementById('step-next-nodes').value.split(',').map(s => s.trim()).filter(s => s);
+        
+        try {
+            await editWorkflowStep(window.currentWif, {
+                agent: agentName,
+                workflow_id: workflowId,
+                node_id: nodeId,
+                step_type: document.getElementById('step-type').value,
+                prompt: document.getElementById('step-prompt').value,
+                model: document.getElementById('step-model').value,
+                temperature: parseFloat(document.getElementById('step-temperature').value),
+                tools: selectedTools,
+                roles: selectedRoles,
+                next_nodes: nextNodes
+            });
+            
+            showToast('Node saved', 'success');
+            await loadSelectedWorkflow();
+            
+        } catch (e) {
+            console.error('Failed to save node:', e);
+            showToast('Failed to save node: ' + e.message, 'error');
+        }
+    };
+    
+    window.generateNewWorkflow = async function() {
+        const workflowId = document.getElementById('new-workflow-id').value.trim();
+        const instructions = document.getElementById('workflow-instructions').value.trim();
+        
+        if (!workflowId) {
+            showToast('Please enter a workflow ID', 'error');
+            return;
+        }
+        
+        if (!instructions) {
+            showToast('Please enter instructions', 'error');
+            return;
+        }
+        
+        try {
+            showToast('Generating workflow...', 'info');
+            
+            await generateWorkflow(window.currentWif, {
+                agent: agentName,
+                workflow_id: workflowId,
+                instructions: instructions
+            });
+            
+            showToast('Workflow generated', 'success');
+            
+            // Reload workflows and select the new one
+            await loadWorkflows();
+            document.getElementById('workflow-select').value = workflowId;
+            await loadSelectedWorkflow();
+            
+            // Clear inputs
+            document.getElementById('new-workflow-id').value = '';
+            document.getElementById('workflow-instructions').value = '';
+            
+        } catch (e) {
+            console.error('Failed to generate workflow:', e);
+            showToast('Failed to generate workflow: ' + e.message, 'error');
+        }
+    };
+    
+    window.startSelectedWorkflow = async function() {
+        const workflowId = document.getElementById('workflow-select').value;
+        
+        if (!workflowId) {
+            showToast('Please select a workflow', 'error');
+            return;
+        }
+        
+        const workflowInput = document.getElementById('workflow-input').value.trim();
+        const settings = getSettings();
+        
+        try {
+            showToast('Starting workflow...', 'info');
+            
+            const response = await startWorkflow(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                workflow_id: workflowId,
+                workflow_input: workflowInput,
+                conversation_id: '',
+                task_id: ''
+            });
+            
+            if (response.conversation_id) {
+                showToast('Workflow started', 'success');
+                // Navigate to conversation
+                window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(response.conversation_id)}`;
+            } else {
+                showToast('Workflow started', 'success');
+            }
+            
+        } catch (e) {
+            console.error('Failed to start workflow:', e);
+            showToast('Failed to start workflow: ' + e.message, 'error');
+        }
+    };
+    
+    window.toggleFlowchartSource = function() {
+        const source = document.getElementById('flowchart-source');
+        const icon = document.getElementById('flowchart-source-icon');
+        source.classList.toggle('hidden');
+        icon.classList.toggle('rotate-180');
+    };
+</script>
+{% endblock %}

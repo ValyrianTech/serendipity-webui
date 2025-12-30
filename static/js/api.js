@@ -67,6 +67,11 @@ export async function getWorkflows(agentName) {
     return response.json();
 }
 
+export async function getWorkflow(agentName, workflowId) {
+    const response = await fetch(`${getBaseUrl()}/api/GetWorkflow?agent=${encodeURIComponent(agentName)}&workflow_id=${encodeURIComponent(workflowId)}`);
+    return response.json();
+}
+
 export async function getAvailableVoices(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetAvailableVoices?agent=${encodeURIComponent(agentName)}`);
     return response.json();
@@ -360,6 +365,39 @@ export async function moveToFolder(wif, data) {
 export async function initializeAgentVoices(wif, data) {
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/InitializeAgentVoices/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+// Start workflow
+export async function startWorkflow(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/StartWorkflow/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+// Generate workflow from instructions
+export async function generateWorkflow(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/GenerateWorkflow/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+// Edit workflow step
+export async function editWorkflowStep(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/EditWorkflowStep/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
