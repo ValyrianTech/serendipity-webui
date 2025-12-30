@@ -89,6 +89,27 @@
             </div>
         </div>
         
+        <!-- ComfyUI Server Configuration -->
+        <div class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700">
+            <h2 class="text-xl font-semibold mb-4">ComfyUI Server</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">ComfyUI Server Address</label>
+                    <input type="text" id="comfyui-address" placeholder="192.168.0.124"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">ComfyUI Server Port</label>
+                    <input type="text" id="comfyui-port" placeholder="8188"
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                
+                <button onclick="saveComfyUISettings()" class="btn-primary">Save ComfyUI Settings</button>
+            </div>
+        </div>
+        
         <!-- About -->
         <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
             <h2 class="text-xl font-semibold mb-4">About</h2>
@@ -151,6 +172,10 @@
         document.getElementById('openvoice-server').value = localStorage.getItem('serendipity_openvoice_server') || '';
         document.getElementById('auto-play').checked = localStorage.getItem('serendipity_auto_play') === 'true';
         document.getElementById('auto-send').checked = localStorage.getItem('serendipity_auto_send') === 'true';
+        
+        // ComfyUI settings
+        document.getElementById('comfyui-address').value = localStorage.getItem('serendipity_comfyui_address') || '';
+        document.getElementById('comfyui-port').value = localStorage.getItem('serendipity_comfyui_port') || '8188';
     }
     
     function updateWifDisplay() {
@@ -183,6 +208,12 @@
         localStorage.setItem('serendipity_auto_play', document.getElementById('auto-play').checked);
         localStorage.setItem('serendipity_auto_send', document.getElementById('auto-send').checked);
         showToast('Voice settings saved', 'success');
+    };
+    
+    window.saveComfyUISettings = function() {
+        localStorage.setItem('serendipity_comfyui_address', document.getElementById('comfyui-address').value);
+        localStorage.setItem('serendipity_comfyui_port', document.getElementById('comfyui-port').value);
+        showToast('ComfyUI settings saved', 'success');
     };
     
     window.showChangeWifModal = function() {
