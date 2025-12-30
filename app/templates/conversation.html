@@ -272,14 +272,11 @@
         const temperature = parseFloat(document.getElementById('temperature').value);
         
         // Create initial info message with current datetime (like Flutter app)
-        const now = new Date();
-        const dateStr = now.toISOString();
-        
         const messageData = {
             conversation_id: '',
-            sender: 'INFO',
+            sender: agentName,
             respond_as: agentName,
-            content: dateStr,
+            content: '',
             agent: agentName,
             folder_name: settings.folderName,
             enabled_tools: agentData?.agent?.tools || [],
@@ -292,7 +289,7 @@
         };
         
         try {
-            console.log('Initializing new conversation with info message', messageData);
+            console.log('Initializing new conversation', messageData);
             const response = await addMessage(window.currentWif, messageData);
             console.log('AddMessage response:', response);
             
@@ -305,7 +302,7 @@
                 // Connect WebSocket for this conversation
                 connectWebSocket();
                 
-                // Load the conversation to show the info message
+                // Load the conversation to show any server-added messages
                 await loadConversation();
                 
                 console.log('New conversation initialized:', conversationId);
