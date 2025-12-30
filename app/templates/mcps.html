@@ -371,22 +371,22 @@
         const data = {
             name: name,
             description: document.getElementById('mcp-description').value,
-            transportType: document.getElementById('transport-type').value,
-            baseUrl: document.getElementById('base-url').value,
-            sseEndpoint: document.getElementById('sse-endpoint').value,
-            messagesEndpoint: document.getElementById('messages-endpoint').value,
-            authType: document.getElementById('auth-type').value,
-            apiKeyHeader: document.getElementById('api-key-header').value,
-            apiKey: document.getElementById('api-key').value,
-            clientId: document.getElementById('client-id').value,
-            authEndpoint: document.getElementById('auth-endpoint').value,
-            tokenEndpoint: document.getElementById('token-endpoint').value,
-            resourceMetadataUri: document.getElementById('resource-metadata-uri').value,
-            streamingEnabled: document.getElementById('streaming-enabled').checked,
-            toolsEnabled: document.getElementById('tools-enabled').checked,
+            transport_type: document.getElementById('transport-type').value,
+            base_url: document.getElementById('base-url').value,
+            sse_endpoint: document.getElementById('sse-endpoint').value,
+            messages_endpoint: document.getElementById('messages-endpoint').value,
+            auth_type: document.getElementById('auth-type').value,
+            api_key_header: document.getElementById('api-key-header').value,
+            api_key: document.getElementById('api-key').value,
+            client_id: document.getElementById('client-id').value,
+            auth_endpoint: document.getElementById('auth-endpoint').value,
+            token_endpoint: document.getElementById('token-endpoint').value,
+            resource_metadata_uri: document.getElementById('resource-metadata-uri').value,
+            streaming_enabled: document.getElementById('streaming-enabled').checked,
+            tools_enabled: document.getElementById('tools-enabled').checked,
             enabled: document.getElementById('enabled').checked,
-            toolFilter: toolFilter,
-            stdioConfig: stdioConfig
+            tool_filter: toolFilter,
+            stdio_config: stdioConfig
         };
         
         try {
@@ -405,7 +405,7 @@
         if (!confirm(`Are you sure you want to delete "${currentServerName}"?`)) return;
         
         try {
-            await deleteMCPServerConfig(window.currentWif, { serverName: currentServerName });
+            await deleteMCPServerConfig(window.currentWif, { server_name: currentServerName });
             showToast('MCP server deleted', 'success');
             await loadServers();
             document.getElementById('config-form').classList.add('hidden');
