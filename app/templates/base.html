@@ -274,6 +274,24 @@
                 document.getElementById('nav-conversations').href = `/agent/${encodeURIComponent(agentName)}/conversations`;
                 
                 document.getElementById('folder-selector').classList.remove('hidden');
+                
+                // Show agent info section
+                const agentInfo = document.getElementById('agent-info');
+                const agentNameDisplay = document.getElementById('agent-name-display');
+                const agentDescDisplay = document.getElementById('agent-description-display');
+                const agentAvatar = document.getElementById('agent-avatar');
+                
+                agentInfo.classList.remove('hidden');
+                agentNameDisplay.textContent = agentName;
+                agentDescDisplay.textContent = localStorage.getItem('serendipity_agent_description') || '';
+                
+                const profileImage = localStorage.getItem('serendipity_agent_profile_image');
+                if (profileImage) {
+                    const imgUrl = profileImage
+                        .replace('<serverhost>', settings.serverAddress)
+                        .replace('<serverport>', settings.serverPort);
+                    agentAvatar.src = imgUrl;
+                }
             }
         }
         
