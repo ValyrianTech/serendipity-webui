@@ -714,12 +714,16 @@
     function updateRolesList(enabledRoles) {
         const container = document.getElementById('roles-list');
         if (enabledRoles.length > 0) {
-            container.innerHTML = enabledRoles.map(role => `
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" value="${role}" checked class="w-4 h-4 rounded">
-                    <span class="text-sm">${role}</span>
-                </label>
-            `).join('');
+            container.innerHTML = enabledRoles.map(role => {
+                // Handle both string roles and object roles
+                const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
+                return `
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" value="${roleName}" checked class="w-4 h-4 rounded">
+                        <span class="text-sm">${roleName}</span>
+                    </label>
+                `;
+            }).join('');
         } else {
             container.innerHTML = '<span class="text-slate-500 text-sm">No roles enabled</span>';
         }
