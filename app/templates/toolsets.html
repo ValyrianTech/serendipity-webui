@@ -192,19 +192,29 @@
                         </svg>
                     </button>
                 </div>
-                <div>
-                    <label class="text-xs text-slate-400 block mb-1">Tool Filter (comma-separated)</label>
-                    <input type="text" value="${(server.toolFilter || []).join(', ')}" 
-                           onchange="updateToolFilter(${idx}, this.value)"
-                           placeholder="Leave empty for all tools"
-                           class="w-full bg-slate-600 border border-slate-500 rounded-lg px-3 py-2 text-sm">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Permission Type</label>
+                        <select onchange="updatePermissionType(${idx}, this.value)"
+                                class="w-full bg-slate-600 border border-slate-500 rounded-lg px-3 py-2 text-sm">
+                            <option value="always_allow" ${(server.permissionType || 'always_allow') === 'always_allow' ? 'selected' : ''}>Always Allow</option>
+                            <option value="ask_permission" ${server.permissionType === 'ask_permission' ? 'selected' : ''}>Ask Permission</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Tool Filter (comma-separated)</label>
+                        <input type="text" value="${(server.toolFilter || []).join(', ')}" 
+                               onchange="updateToolFilter(${idx}, this.value)"
+                               placeholder="Leave empty for all tools"
+                               class="w-full bg-slate-600 border border-slate-500 rounded-lg px-3 py-2 text-sm">
+                    </div>
                 </div>
             </div>
         `).join('');
     }
     
     window.addServer = function() {
-        servers.push({ serverName: '', toolFilter: [] });
+        servers.push({ serverName: '', toolFilter: [], permissionType: 'always_allow' });
         renderServers();
     };
     
@@ -221,6 +231,10 @@
         servers[idx].toolFilter = value ? value.split(',').map(t => t.trim()).filter(t => t) : [];
     };
     
+    window.updatePermissionType = function(idx, value) {
+        servers[idx].permissionType = value;
+    };
+    
     window.saveToolset = async function() {
         const name = document.getElementById('toolset-name').value.trim();
         if (!name) {
@@ -228,11 +242,12 @@
             return;
         }
         
-        // Convert to snake_case for API
+        // Convert to API format - requires 'name' and 'permission_type'
         const validServers = servers
             .filter(s => s.serverName)
             .map(s => ({
-                server_name: s.serverName,
+                name: s.serverName,
+                permission_type: s.permissionType || 'always_allow',
                 tool_filter: s.toolFilter || []
             }));
         
