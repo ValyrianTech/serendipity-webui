@@ -328,6 +328,12 @@
         `).join('');
     }
     
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
     function renderRoles() {
         const container = document.getElementById('roles-list');
         if (roles.length === 0) {
@@ -338,17 +344,18 @@
             // Handle both string roles and object roles
             const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
             const rolePrompt = typeof role === 'object' ? (role.role_prompt || '') : '';
+            const escapedPrompt = escapeHtml(rolePrompt);
             return `
-                <div class="bg-slate-700 p-4 rounded-lg">
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="font-semibold">${roleName}</h3>
-                        <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300">
+                <div class="bg-slate-700 p-4 rounded-lg mb-3">
+                    <div class="flex items-start justify-between mb-2">
+                        <h3 class="font-semibold">${escapeHtml(roleName)}</h3>
+                        <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300 flex-shrink-0 ml-4">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
                         </button>
                     </div>
-                    ${rolePrompt ? `<p class="text-sm text-slate-400 truncate" title="${rolePrompt}">${rolePrompt.substring(0, 100)}${rolePrompt.length > 100 ? '...' : ''}</p>` : ''}
+                    ${rolePrompt ? `<p class="text-sm text-slate-400 whitespace-pre-wrap break-words">${escapedPrompt}</p>` : ''}
                 </div>
             `;
         }).join('');
