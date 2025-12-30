@@ -228,7 +228,13 @@
             return;
         }
         
-        const validServers = servers.filter(s => s.serverName);
+        // Convert to snake_case for API
+        const validServers = servers
+            .filter(s => s.serverName)
+            .map(s => ({
+                server_name: s.serverName,
+                tool_filter: s.toolFilter || []
+            }));
         
         const data = {
             name: name,
