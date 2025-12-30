@@ -463,21 +463,22 @@
         const data = {
             agent: agentName,
             description: document.getElementById('description').value,
-            userName: document.getElementById('user-name').value,
-            profilePicture: document.getElementById('profile-picture').value,
-            modelName: document.getElementById('model-name').value,
+            user_name: document.getElementById('user-name').value,
+            profile_picture: document.getElementById('profile-picture').value,
+            model_name: document.getElementById('model-name').value,
             temperature: parseFloat(document.getElementById('temperature').value),
             memory: parseInt(document.getElementById('memory').value),
-            systemMessage: document.getElementById('system-message').value,
-            bootupMessage: document.getElementById('bootup-message').value,
+            system_message: document.getElementById('system-message').value,
+            bootup_message: document.getElementById('bootup-message').value,
             serendipity: document.getElementById('serendipity-flag').checked,
             public: document.getElementById('public-flag').checked,
             tools: tools,
-            autoAllowTools: autoAllowTools,
+            auto_allow_tools: autoAllowTools,
             participants: participants,
-            orderOfSpeakers: orderOfSpeakers,
+            order_of_speakers: orderOfSpeakers,
             voices: voices,
-            toolsets: toolsetsList
+            toolsets: toolsetsList,
+            roles: roles
         };
         
         try {
