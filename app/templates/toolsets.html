@@ -99,7 +99,12 @@
             availableMCPServers = (mcpData.mcp_servers || []).map(s => s.name || s);
             
             const select = document.getElementById('toolset-select');
-            const toolsetsList = toolsetsData.toolsets || [];
+            // Handle both array and object responses
+            let toolsetsList = toolsetsData.toolsets || [];
+            if (!Array.isArray(toolsetsList)) {
+                // If it's an object, get the keys as toolset names
+                toolsetsList = Object.keys(toolsetsList);
+            }
             select.innerHTML = '<option value="">-- Select a toolset --</option>' +
                 toolsetsList.map(t => `<option value="${t}">${t}</option>`).join('');
         } catch (e) {
