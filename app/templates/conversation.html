@@ -258,6 +258,58 @@
     </div>
 </div>
 
+<!-- Message Actions Dialog -->
+<div id="message-actions-dialog" class="modal-backdrop hidden">
+    <div class="modal-content max-w-sm">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold">Message Actions</h2>
+            <button onclick="closeMessageActionsDialog()" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Message Preview -->
+        <div id="message-preview" class="mb-4 p-3 bg-slate-800/50 rounded-lg text-sm text-slate-400 max-h-20 overflow-hidden">
+            <span id="message-preview-sender" class="font-medium text-slate-300"></span>: <span id="message-preview-content"></span>
+        </div>
+        
+        <!-- Actions -->
+        <div class="space-y-2">
+            <button onclick="continueMessage()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                </svg>
+                <div class="text-left">
+                    <div class="font-medium">Continue</div>
+                    <div class="text-xs text-slate-400">Continue generating from this message</div>
+                </div>
+            </button>
+            
+            <button onclick="regenerateMessage()" class="w-full flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">
+                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <div class="text-left">
+                    <div class="font-medium">Regenerate</div>
+                    <div class="text-xs text-slate-400">Delete and regenerate this response</div>
+                </div>
+            </button>
+            
+            <button onclick="deleteMessage()" class="w-full flex items-center gap-3 p-3 bg-red-600/10 hover:bg-red-600/20 border border-red-600/20 rounded-lg transition-colors text-red-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                <div class="text-left">
+                    <div class="font-medium">Delete</div>
+                    <div class="text-xs text-red-400/70">Delete this and all following messages</div>
+                </div>
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Move to Folder Dialog -->
 <div id="move-folder-dialog" class="modal-backdrop hidden">
     <div class="modal-content max-w-sm">
@@ -289,7 +341,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -300,6 +352,9 @@
     let ws = null;
     
     let agentData = null;
+    let selectedMessageId = null;
+    let selectedMessageSender = null;
+    let selectedMessageContent = null;
     
     // Wait for WIF key to be available (set by base template)
     async function waitForWifKey(maxWaitMs = 5000) {
@@ -636,6 +691,32 @@
                 el.innerHTML = `<pre class="text-red-400">Mermaid error: ${e.message}</pre>`;
             }
         });
+        
+        // Add right-click and long-press handler for message actions (skip INFO messages)
+        if (!isInfo && msg.message_id) {
+            const messageId = msg.message_id;
+            const msgSender = sender;
+            const msgContent = content;
+            
+            // Right-click (desktop)
+            div.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                openMessageActionsDialog(messageId, msgSender, msgContent);
+            });
+            
+            // Long-press (mobile)
+            let pressTimer;
+            div.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(() => {
+                    openMessageActionsDialog(messageId, msgSender, msgContent);
+                }, 500);
+            });
+            div.addEventListener('touchend', () => clearTimeout(pressTimer));
+            div.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            
+            // Add cursor style to indicate interactivity
+            div.style.cursor = 'context-menu';
+        }
         
         return div;
     }
@@ -1002,6 +1083,119 @@
             showToast('Knowledge base updated', 'success');
         } catch (e) {
             showToast('Failed to update knowledge base: ' + e.message, 'error');
+        }
+    };
+    
+    // Message Actions
+    window.openMessageActionsDialog = function(messageId, sender, content) {
+        selectedMessageId = messageId;
+        selectedMessageSender = sender;
+        selectedMessageContent = content;
+        
+        // Update preview
+        document.getElementById('message-preview-sender').textContent = sender;
+        document.getElementById('message-preview-content').textContent = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+        
+        document.getElementById('message-actions-dialog').classList.remove('hidden');
+    };
+    
+    window.closeMessageActionsDialog = function() {
+        document.getElementById('message-actions-dialog').classList.add('hidden');
+        selectedMessageId = null;
+        selectedMessageSender = null;
+        selectedMessageContent = null;
+    };
+    
+    window.continueMessage = async function() {
+        if (!selectedMessageId) {
+            showToast('No message selected', 'error');
+            return;
+        }
+        
+        try {
+            const settings = getSettings();
+            const model = document.getElementById('model-select').value;
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            
+            closeMessageActionsDialog();
+            showToast('Continuing message...', 'info');
+            
+            await editConversation(window.currentWif, {
+                conversation_id: conversationId,
+                agent: agentName,
+                folder_name: settings.folderName,
+                message_id: selectedMessageId,
+                action: 'continue_message',
+                model_name: model,
+                temperature: temperature
+            });
+            
+            // Connect WebSocket for streaming response
+            connectWebSocket();
+            
+        } catch (e) {
+            showToast('Failed to continue: ' + e.message, 'error');
+        }
+    };
+    
+    window.regenerateMessage = async function() {
+        if (!selectedMessageId) {
+            showToast('No message selected', 'error');
+            return;
+        }
+        
+        try {
+            const settings = getSettings();
+            const model = document.getElementById('model-select').value;
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            
+            closeMessageActionsDialog();
+            showToast('Regenerating message...', 'info');
+            
+            await editConversation(window.currentWif, {
+                conversation_id: conversationId,
+                agent: agentName,
+                folder_name: settings.folderName,
+                message_id: selectedMessageId,
+                action: 'regenerate_message',
+                model_name: model,
+                temperature: temperature
+            });
+            
+            // Connect WebSocket for streaming response
+            connectWebSocket();
+            
+        } catch (e) {
+            showToast('Failed to regenerate: ' + e.message, 'error');
+        }
+    };
+    
+    window.deleteMessage = async function() {
+        if (!selectedMessageId) {
+            showToast('No message selected', 'error');
+            return;
+        }
+        
+        if (!confirm('Delete this message and all messages after it?')) return;
+        
+        try {
+            const settings = getSettings();
+            
+            closeMessageActionsDialog();
+            
+            await editConversation(window.currentWif, {
+                conversation_id: conversationId,
+                agent: agentName,
+                folder_name: settings.folderName,
+                message_id: selectedMessageId,
+                action: 'delete_message'
+            });
+            
+            showToast('Message deleted', 'success');
+            await loadConversation();
+            
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
         }
     };
     
