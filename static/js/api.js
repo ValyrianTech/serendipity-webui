@@ -372,17 +372,6 @@ export async function initializeAgentVoices(wif, data) {
     return response.json();
 }
 
-// Start workflow
-export async function startWorkflow(wif, data) {
-    const signedData = await signData(data, wif);
-    const response = await fetch(`${getBaseUrl()}/api/StartWorkflow/message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(signedData)
-    });
-    return response.json();
-}
-
 // Generate workflow from instructions
 export async function generateWorkflow(wif, data) {
     const signedData = await signData(data, wif);
