@@ -112,9 +112,20 @@
                     <input type="text" id="sender-name" value="User" 
                            class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm w-32">
                 </div>
-                <textarea id="message-input" rows="1" placeholder="Type your message..."
-                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none"
-                          onkeydown="handleKeyDown(event)"></textarea>
+                <div class="flex gap-2">
+                    <textarea id="message-input" rows="1" placeholder="Type your message..."
+                              class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none"
+                              onkeydown="handleKeyDown(event)"></textarea>
+                    <button id="mic-btn" onclick="toggleRecording()" class="p-3 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 transition-colors" title="Record voice">
+                        <svg id="mic-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                        </svg>
+                        <svg id="mic-recording-icon" class="w-5 h-5 text-red-500 hidden animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
             <!-- Respond as selector -->
@@ -373,7 +384,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -393,6 +404,11 @@
     let currentAudio = null;
     let playingMessageId = null;
     let playedAudioMessages = new Set();
+    
+    // Voice recording state
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
     
     // Wait for WIF key to be available (set by base template)
     async function waitForWifKey(maxWaitMs = 5000) {
@@ -1804,6 +1820,104 @@
                 .replace('<serverhost>', settings.serverAddress)
                 .replace('<serverport>', settings.serverPort);
             agentAvatar.src = imgUrl;
+        }
+    }
+    
+    // Voice recording functions
+    window.toggleRecording = async function() {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            await startRecording();
+        }
+    };
+    
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+            
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                stream.getTracks().forEach(track => track.stop());
+                await transcribeRecording(audioBlob);
+            };
+            
+            mediaRecorder.start();
+            isRecording = true;
+            updateRecordingUI(true);
+            showToast('Recording...', 'info');
+            
+        } catch (e) {
+            console.error('Failed to start recording:', e);
+            showToast('Failed to access microphone: ' + e.message, 'error');
+        }
+    }
+    
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            isRecording = false;
+            updateRecordingUI(false);
+        }
+    }
+    
+    function updateRecordingUI(recording) {
+        const micBtn = document.getElementById('mic-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const micRecordingIcon = document.getElementById('mic-recording-icon');
+        
+        if (recording) {
+            micBtn.classList.add('bg-red-600', 'border-red-500');
+            micBtn.classList.remove('bg-slate-700', 'border-slate-600');
+            micIcon.classList.add('hidden');
+            micRecordingIcon.classList.remove('hidden');
+        } else {
+            micBtn.classList.remove('bg-red-600', 'border-red-500');
+            micBtn.classList.add('bg-slate-700', 'border-slate-600');
+            micIcon.classList.remove('hidden');
+            micRecordingIcon.classList.add('hidden');
+        }
+    }
+    
+    async function transcribeRecording(audioBlob) {
+        try {
+            showToast('Transcribing...', 'info');
+            
+            const result = await transcribeAudio(audioBlob);
+            
+            if (result.text) {
+                const input = document.getElementById('message-input');
+                // Append to existing text with a space if needed
+                if (input.value && !input.value.endsWith(' ')) {
+                    input.value += ' ';
+                }
+                input.value += result.text;
+                
+                // Trigger resize
+                input.dispatchEvent(new Event('input'));
+                
+                showToast('Transcription complete', 'success');
+                
+                // Auto-send if enabled
+                const autoSend = localStorage.getItem('serendipity_auto_send') === 'true';
+                if (autoSend && input.value.trim()) {
+                    sendMessage();
+                }
+            } else {
+                showToast('No speech detected', 'info');
+            }
+            
+        } catch (e) {
+            console.error('Transcription failed:', e);
+            showToast('Transcription failed: ' + e.message, 'error');
         }
     }
 </script>
