@@ -34,7 +34,7 @@
             
             <!-- Config Form -->
             <div id="config-form" class="hidden">
-                <div class="bg-slate-800 rounded-lg p-6 space-y-8">
+                <div class="bg-slate-800 rounded-lg p-8 space-y-8">
                     <!-- Basic Info -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
@@ -178,8 +178,8 @@
         }
         
         container.innerHTML = servers.map((server, idx) => `
-            <div class="bg-slate-700 p-5 rounded-lg">
-                <div class="flex items-center justify-between mb-4">
+            <div class="bg-slate-700 p-6 rounded-lg mb-2">
+                <div class="flex items-start justify-between mb-5">
                     <div>
                         <label class="text-xs text-slate-400 block mb-2">MCP Server</label>
                         <select onchange="updateServerName(${idx}, this.value)" 
@@ -190,13 +190,13 @@
                             ).join('')}
                         </select>
                     </div>
-                    <button onclick="removeServer(${idx})" class="text-red-400 hover:text-red-300 p-2">
+                    <button onclick="removeServer(${idx})" class="text-red-400 hover:text-red-300 p-2 mt-5">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                     </button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                         <label class="text-xs text-slate-400 block mb-2">Permission Type</label>
                         <select onchange="updatePermissionType(${idx}, this.value)"
