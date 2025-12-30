@@ -39,8 +39,17 @@
                     <div class="flex flex-col items-center">
                         <img id="profile-preview" src="" alt="Profile" 
                              class="w-48 h-48 rounded-full object-cover bg-slate-700 mb-4">
-                        <input type="text" id="profile-picture" placeholder="Profile picture URL"
-                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm">
+                        <div class="w-full space-y-2">
+                            <input type="text" id="profile-picture" placeholder="Profile picture URL"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm">
+                            <label class="btn-secondary w-full flex items-center justify-center gap-2 cursor-pointer">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                Upload Image
+                                <input type="file" id="profile-upload" accept="image/*" class="hidden" onchange="uploadProfilePicture(this)">
+                            </label>
+                        </div>
                     </div>
                     
                     <!-- Name and Description -->
@@ -146,18 +155,26 @@
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Order of Speakers</h2>
                 <div id="speakers-list" class="space-y-2 mb-4"></div>
-                <p class="text-sm text-slate-400">Drag to reorder (coming soon). Current order shown above.</p>
+                <p class="text-sm text-slate-400">Drag items to reorder. Use the handle on the left.</p>
             </div>
             
             <!-- Voices -->
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Voices</h2>
                 <div id="voices-list" class="flex flex-wrap gap-2 mb-4"></div>
-                <div class="flex gap-2">
-                    <input type="text" id="new-voice" placeholder="Add voice..."
+                <div class="flex gap-2 mb-3">
+                    <input type="text" id="new-voice" placeholder="voice_name:filename.mp3"
                            class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
                     <button onclick="addVoice()" class="btn-secondary">Add</button>
                 </div>
+                <label class="btn-secondary inline-flex items-center gap-2 cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                    </svg>
+                    Upload Voice File
+                    <input type="file" id="voice-upload" accept="audio/*" class="hidden" onchange="uploadVoiceFile(this)">
+                </label>
+                <p class="text-xs text-slate-500 mt-2">Format: voice_name:filename.mp3 (e.g., "narrator:voice1.mp3")</p>
             </div>
             
             <!-- Roles -->
@@ -185,10 +202,10 @@
     </div>
 </div>
 
-<!-- Add Role Modal -->
+<!-- Add/Edit Role Modal -->
 <div id="add-role-modal" class="modal-backdrop hidden">
     <div class="modal-content">
-        <h2 class="text-xl font-bold mb-4">Add Role</h2>
+        <h2 id="role-modal-title" class="text-xl font-bold mb-4">Add Role</h2>
         <div class="space-y-4">
             <div>
                 <label class="text-sm text-slate-400 block mb-2">Role Name</label>
@@ -209,7 +226,7 @@
 </div>
 
 <script type="module">
-    import { getAgent, getModels, editAgent, editAgentRole } from '/static/js/api.js';
+    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, getSettings } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
@@ -219,6 +236,7 @@
     let orderOfSpeakers = [];
     let voices = [];
     let roles = [];
+    let editingRoleIndex = -1; // -1 means adding new, >= 0 means editing existing
     
     async function loadAgent() {
         try {
@@ -307,11 +325,85 @@
     function renderSpeakers() {
         const container = document.getElementById('speakers-list');
         container.innerHTML = orderOfSpeakers.map((s, idx) => `
-            <div class="bg-slate-700 px-4 py-2 rounded-lg flex items-center justify-between">
-                <span>${idx + 1}. ${s}</span>
+            <div class="bg-slate-700 px-4 py-2 rounded-lg flex items-center justify-between speaker-item" draggable="true" data-index="${idx}">
+                <div class="flex items-center gap-3">
+                    <span class="cursor-grab text-slate-400 hover:text-white drag-handle">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
+                        </svg>
+                    </span>
+                    <span>${idx + 1}. ${s}</span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="moveSpeakerUp(${idx})" class="text-slate-400 hover:text-white" ${idx === 0 ? 'disabled' : ''}>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                        </svg>
+                    </button>
+                    <button onclick="moveSpeakerDown(${idx})" class="text-slate-400 hover:text-white" ${idx === orderOfSpeakers.length - 1 ? 'disabled' : ''}>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         `).join('');
+        
+        // Add drag and drop handlers
+        setupSpeakerDragDrop();
     }
+    
+    function setupSpeakerDragDrop() {
+        const container = document.getElementById('speakers-list');
+        const items = container.querySelectorAll('.speaker-item');
+        
+        items.forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', item.dataset.index);
+                item.classList.add('opacity-50');
+            });
+            
+            item.addEventListener('dragend', () => {
+                item.classList.remove('opacity-50');
+            });
+            
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                item.classList.add('bg-slate-600');
+            });
+            
+            item.addEventListener('dragleave', () => {
+                item.classList.remove('bg-slate-600');
+            });
+            
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                item.classList.remove('bg-slate-600');
+                const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                const toIndex = parseInt(item.dataset.index);
+                
+                if (fromIndex !== toIndex) {
+                    const [moved] = orderOfSpeakers.splice(fromIndex, 1);
+                    orderOfSpeakers.splice(toIndex, 0, moved);
+                    renderSpeakers();
+                }
+            });
+        });
+    }
+    
+    window.moveSpeakerUp = function(idx) {
+        if (idx > 0) {
+            [orderOfSpeakers[idx - 1], orderOfSpeakers[idx]] = [orderOfSpeakers[idx], orderOfSpeakers[idx - 1]];
+            renderSpeakers();
+        }
+    };
+    
+    window.moveSpeakerDown = function(idx) {
+        if (idx < orderOfSpeakers.length - 1) {
+            [orderOfSpeakers[idx], orderOfSpeakers[idx + 1]] = [orderOfSpeakers[idx + 1], orderOfSpeakers[idx]];
+            renderSpeakers();
+        }
+    };
     
     function renderVoices() {
         const container = document.getElementById('voices-list');
@@ -344,11 +436,18 @@
                 <div class="bg-slate-700 p-4 rounded-lg mb-3">
                     <div class="flex items-start justify-between mb-2">
                         <h3 class="font-semibold">${escapeHtml(roleName)}</h3>
-                        <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300 flex-shrink-0 ml-4">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                            </svg>
-                        </button>
+                        <div class="flex gap-2 flex-shrink-0 ml-4">
+                            <button onclick="editRole(${idx})" class="text-indigo-400 hover:text-indigo-300">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </button>
+                            <button onclick="removeRole(${idx})" class="text-red-400 hover:text-red-300">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     ${rolePrompt ? `<p class="text-sm text-slate-400 whitespace-pre-wrap break-words">${escapedPrompt}</p>` : ''}
                 </div>
@@ -440,13 +539,30 @@
     };
     
     window.showAddRoleModal = function() {
+        editingRoleIndex = -1;
+        document.getElementById('role-modal-title').textContent = 'Add Role';
         document.getElementById('role-name').value = '';
+        document.getElementById('role-name').readOnly = false;
         document.getElementById('role-system-message').value = '';
+        document.getElementById('add-role-modal').classList.remove('hidden');
+    };
+    
+    window.editRole = function(idx) {
+        editingRoleIndex = idx;
+        const role = roles[idx];
+        const roleName = typeof role === 'string' ? role : (role.role_name || role.name || '');
+        const rolePrompt = typeof role === 'object' ? (role.role_prompt || '') : '';
+        
+        document.getElementById('role-modal-title').textContent = 'Edit Role';
+        document.getElementById('role-name').value = roleName;
+        document.getElementById('role-name').readOnly = true; // Can't change name when editing
+        document.getElementById('role-system-message').value = rolePrompt;
         document.getElementById('add-role-modal').classList.remove('hidden');
     };
     
     window.closeAddRoleModal = function() {
         document.getElementById('add-role-modal').classList.add('hidden');
+        editingRoleIndex = -1;
     };
     
     window.saveRole = async function() {
@@ -459,20 +575,98 @@
         }
         
         try {
+            const action = editingRoleIndex >= 0 ? 'edit' : 'add';
+            
             await editAgentRole(window.currentWif, {
                 agent: agentName,
                 role_name: name,
                 role_prompt: rolePrompt,
-                action: 'add'
+                action: action
             });
             
-            roles.push({ role_name: name, role_prompt: rolePrompt });
+            if (editingRoleIndex >= 0) {
+                // Update existing role
+                roles[editingRoleIndex] = { role_name: name, role_prompt: rolePrompt };
+                showToast('Role updated successfully', 'success');
+            } else {
+                // Add new role
+                roles.push({ role_name: name, role_prompt: rolePrompt });
+                showToast('Role added successfully', 'success');
+            }
+            
             renderRoles();
             closeAddRoleModal();
-            showToast('Role added successfully', 'success');
         } catch (e) {
-            showToast('Failed to add role: ' + e.message, 'error');
+            showToast('Failed to save role: ' + e.message, 'error');
         }
+    };
+    
+    // Upload profile picture
+    window.uploadProfilePicture = async function(input) {
+        if (!input.files || !input.files[0]) return;
+        
+        const file = input.files[0];
+        const settings = getSettings();
+        
+        try {
+            showToast('Uploading image...', 'info');
+            
+            const response = await uploadFile(agentName, file);
+            
+            if (response.url) {
+                // The URL comes with placeholders, use it directly
+                document.getElementById('profile-picture').value = response.url;
+                
+                // For preview, replace placeholders
+                const previewUrl = response.url
+                    .replace('<serverhost>', settings.serverAddress)
+                    .replace('<serverport>', settings.serverPort);
+                document.getElementById('profile-preview').src = previewUrl;
+                
+                showToast('Image uploaded successfully', 'success');
+            } else {
+                showToast('Upload failed: No URL returned', 'error');
+            }
+        } catch (e) {
+            console.error('Upload failed:', e);
+            showToast('Failed to upload image: ' + e.message, 'error');
+        }
+        
+        input.value = ''; // Reset file input
+    };
+    
+    // Upload voice file
+    window.uploadVoiceFile = async function(input) {
+        if (!input.files || !input.files[0]) return;
+        
+        const file = input.files[0];
+        const voiceName = prompt('Enter a name for this voice (e.g., "narrator"):');
+        
+        if (!voiceName) {
+            input.value = '';
+            return;
+        }
+        
+        try {
+            showToast('Uploading voice file...', 'info');
+            
+            const response = await uploadFile(agentName, file);
+            
+            if (response.filename) {
+                // Add voice in format voice_name:filename
+                const voiceEntry = `${voiceName}:${response.filename}`;
+                voices.push(voiceEntry);
+                renderVoices();
+                showToast('Voice file uploaded successfully', 'success');
+            } else {
+                showToast('Upload failed: No filename returned', 'error');
+            }
+        } catch (e) {
+            console.error('Upload failed:', e);
+            showToast('Failed to upload voice file: ' + e.message, 'error');
+        }
+        
+        input.value = ''; // Reset file input
     };
     
     window.saveAgent = async function() {
