@@ -64,6 +64,21 @@
             <p class="text-slate-400">Start the conversation by sending a message</p>
         </div>
         
+        <!-- Typing indicator (shown while waiting for model to load) -->
+        <div id="typing-indicator" class="message-card assistant-message hidden">
+            <div class="message-avatar" id="typing-avatar">AI</div>
+            <div class="message-bubble">
+                <div class="sender" id="typing-sender"></div>
+                <div class="content">
+                    <div class="typing-dots flex gap-1 items-center py-2">
+                        <span class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                        <span class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                        <span class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Streaming message (real-time from WebSocket) -->
         <div id="streaming-message" class="message-card assistant-message hidden">
             <div class="message-avatar" id="streaming-avatar">AI</div>
@@ -512,9 +527,11 @@
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         const streamingEl = document.getElementById('streaming-message');
+        const typingIndicator = document.getElementById('typing-indicator');
         
-        // Hide streaming message when loading conversation
+        // Hide streaming message and typing indicator when loading conversation
         streamingEl.classList.add('hidden');
+        typingIndicator.classList.add('hidden');
         
         loading.classList.remove('hidden');
         list.classList.add('hidden');
@@ -894,6 +911,17 @@
         list.appendChild(userMsg);
         scrollToBottom();
         
+        // Show typing indicator if we're expecting a response
+        if (run) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            const typingSender = document.getElementById('typing-sender');
+            const typingAvatar = document.getElementById('typing-avatar');
+            typingSender.textContent = respondAs;
+            typingAvatar.textContent = respondAs.substring(0, 2).toUpperCase();
+            typingIndicator.classList.remove('hidden');
+            scrollToBottom();
+        }
+        
         // Connect to WebSocket if not already connected (for streaming)
         if (run && !ws) {
             connectWebSocket();
@@ -929,6 +957,7 @@
             console.error('Failed to send message:', e);
             showToast('Failed to send message: ' + e.message, 'error');
             document.getElementById('streaming-message').classList.add('hidden');
+            document.getElementById('typing-indicator').classList.add('hidden');
         }
     };
     
@@ -1453,8 +1482,12 @@
         const senderEl = document.getElementById('streaming-sender');
         const contentEl = document.getElementById('streaming-content');
         const avatarEl = document.getElementById('streaming-avatar');
+        const typingIndicator = document.getElementById('typing-indicator');
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
+        
+        // Hide typing indicator when streaming starts
+        typingIndicator.classList.add('hidden');
         
         // Check for end of message
         if (data.message === '<|end of message|>') {
