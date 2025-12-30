@@ -31,8 +31,18 @@
     window.getAgent = getAgent;
     window.saveSettings = saveSettings;
     
-    document.addEventListener('DOMContentLoaded', () => {
-        loadAgents();
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadAgents();
+        
+        // Auto-select Serendipity if no agent is currently selected in localStorage
+        const currentAgent = localStorage.getItem('serendipity_agent_name');
+        if (!currentAgent) {
+            // Find Serendipity agent and select it
+            const serendipityCard = document.querySelector('[data-agent-name="Serendipity"]');
+            if (serendipityCard) {
+                serendipityCard.click();
+            }
+        }
     });
     
     window.loadAgents = async function() {
@@ -75,6 +85,7 @@
         
         const card = document.createElement('div');
         card.className = 'agent-card bg-slate-800 rounded-xl p-6 cursor-pointer hover:bg-slate-750 border border-slate-700';
+        card.dataset.agentName = agent.name;
         card.onclick = () => selectAgent(agent);
         
         const profileImage = agent.profile_image 
