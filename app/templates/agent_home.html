@@ -23,7 +23,7 @@
         </div>
         
         <!-- Quick Actions -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <button onclick="startNewConversation()" class="bg-indigo-600 hover:bg-indigo-700 rounded-xl p-6 text-left transition-colors">
                 <div class="flex items-center gap-4">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -32,6 +32,19 @@
                     <div>
                         <h3 class="text-lg font-semibold">New Conversation</h3>
                         <p class="text-indigo-200 text-sm">Start a fresh chat</p>
+                    </div>
+                </div>
+            </button>
+            
+            <button onclick="showStartWorkflowDialog()" class="bg-emerald-600 hover:bg-emerald-700 rounded-xl p-6 text-left transition-colors">
+                <div class="flex items-center gap-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                        <h3 class="text-lg font-semibold">Start Workflow</h3>
+                        <p class="text-emerald-200 text-sm">Run an automation</p>
                     </div>
                 </div>
             </button>
@@ -55,7 +68,7 @@
                     </svg>
                     <div>
                         <h3 class="text-lg font-semibold">Workflows</h3>
-                        <p class="text-slate-400 text-sm">Create & run workflows</p>
+                        <p class="text-slate-400 text-sm">Create & edit workflows</p>
                     </div>
                 </div>
             </a>
@@ -110,11 +123,42 @@
         </div>
     </div>
 </div>
+
+<!-- Start Workflow Dialog -->
+<div id="start-workflow-dialog" class="modal-backdrop hidden">
+    <div class="modal-content max-w-md">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold">Start Workflow</h2>
+            <button onclick="closeStartWorkflowDialog()" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Select Workflow</label>
+            <select id="workflow-select" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                <option value="">Loading workflows...</option>
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Workflow Input (optional)</label>
+            <textarea id="workflow-input" rows="4" placeholder="Enter input for the workflow..." class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 resize-none"></textarea>
+        </div>
+        
+        <div class="flex gap-3">
+            <button onclick="runSelectedWorkflow()" class="btn-primary flex-1">Start</button>
+            <button onclick="closeStartWorkflowDialog()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script type="module">
-    import { getAgent, getSettings, saveSettings, addMessage, initializeAgentVoices } from '/static/js/api.js';
+    import { getAgent, getSettings, saveSettings, addMessage, initializeAgentVoices, getWorkflows, startWorkflow } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
@@ -256,6 +300,83 @@
         } catch (e) {
             console.error('Failed to initialize voices:', e);
             showToast('Failed to initialize voices: ' + e.message, 'error');
+        }
+    };
+    
+    // Start Workflow Dialog functions
+    window.showStartWorkflowDialog = async function() {
+        const dialog = document.getElementById('start-workflow-dialog');
+        const select = document.getElementById('workflow-select');
+        
+        // Load workflows
+        select.innerHTML = '<option value="">Loading workflows...</option>';
+        dialog.classList.remove('hidden');
+        
+        try {
+            const data = await getWorkflows(agentName);
+            const workflows = data.workflows || [];
+            
+            if (workflows.length > 0) {
+                select.innerHTML = '<option value="">Select a workflow...</option>';
+                workflows.forEach(wf => {
+                    const option = document.createElement('option');
+                    option.value = wf;
+                    option.textContent = wf;
+                    select.appendChild(option);
+                });
+            } else {
+                select.innerHTML = '<option value="">No workflows available</option>';
+            }
+        } catch (e) {
+            console.error('Failed to load workflows:', e);
+            select.innerHTML = '<option value="">Failed to load workflows</option>';
+        }
+    };
+    
+    window.closeStartWorkflowDialog = function() {
+        document.getElementById('start-workflow-dialog').classList.add('hidden');
+        document.getElementById('workflow-input').value = '';
+    };
+    
+    window.runSelectedWorkflow = async function() {
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        const workflowId = document.getElementById('workflow-select').value;
+        if (!workflowId) {
+            showToast('Please select a workflow', 'error');
+            return;
+        }
+        
+        const workflowInput = document.getElementById('workflow-input').value.trim();
+        const settings = getSettings();
+        
+        try {
+            showToast('Starting workflow...', 'info');
+            
+            const response = await startWorkflow(window.currentWif, {
+                agent: agentName,
+                folder_name: settings.folderName,
+                workflow_id: workflowId,
+                workflow_input: workflowInput,
+                conversation_id: '',
+                task_id: ''
+            });
+            
+            closeStartWorkflowDialog();
+            
+            if (response.conversation_id) {
+                showToast('Workflow started!', 'success');
+                window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(response.conversation_id)}`;
+            } else {
+                showToast('Workflow started', 'success');
+            }
+            
+        } catch (e) {
+            console.error('Failed to start workflow:', e);
+            showToast('Failed to start workflow: ' + e.message, 'error');
         }
     };
 </script>
