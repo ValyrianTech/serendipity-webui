@@ -669,14 +669,14 @@
         });
     }
     
-    function renderMessagePart(part) {
+    function renderMessagePart(part, isStreaming = false) {
         const type = part.type || 'text';
         const content = part.content || '';
         
         switch (type) {
             case 'text':
                 // Process thinking tags before markdown parsing
-                const processedContent = processThinkingTags(content);
+                const processedContent = processThinkingTags(content, isStreaming);
                 // Only parse markdown on non-thinking parts
                 if (processedContent !== content) {
                     // Has thinking tags - parse the non-thinking parts
@@ -1285,7 +1285,7 @@
             streamingParts = data.parts;
             let html = '';
             data.parts.forEach(part => {
-                html += renderMessagePart(part);
+                html += renderMessagePart(part, true); // isStreaming = true
             });
             contentEl.innerHTML = html;
             
