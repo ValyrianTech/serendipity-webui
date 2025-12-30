@@ -55,7 +55,8 @@
                             <label class="text-sm text-slate-400 block mb-2">Transport Type</label>
                             <select id="transport-type" onchange="toggleTransportFields()"
                                     class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
-                                <option value="sse">SSE (Server-Sent Events)</option>
+                                <option value="http+sse">HTTP + SSE</option>
+                                <option value="streamable_http">Streamable HTTP</option>
                                 <option value="stdio">STDIO</option>
                             </select>
                         </div>
@@ -301,7 +302,7 @@
         // Clear form
         document.getElementById('mcp-name').value = '';
         document.getElementById('mcp-description').value = '';
-        document.getElementById('transport-type').value = 'sse';
+        document.getElementById('transport-type').value = 'http+sse';
         document.getElementById('base-url').value = '';
         document.getElementById('sse-endpoint').value = '';
         document.getElementById('messages-endpoint').value = '';
@@ -333,7 +334,8 @@
     
     window.toggleTransportFields = function() {
         const type = document.getElementById('transport-type').value;
-        document.getElementById('sse-fields').classList.toggle('hidden', type !== 'sse');
+        const isHttp = type === 'http+sse' || type === 'streamable_http';
+        document.getElementById('sse-fields').classList.toggle('hidden', !isHttp);
         document.getElementById('stdio-fields').classList.toggle('hidden', type !== 'stdio');
     };
     
