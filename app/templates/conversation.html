@@ -576,7 +576,19 @@
                 contentHtml += renderMessagePart(part);
             });
         } else {
-            contentHtml = `<div class="markdown-content">${marked.parse(content)}</div>`;
+            // Process thinking tags in raw content too
+            const processedContent = processThinkingTags(content);
+            if (processedContent !== content) {
+                const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
+                contentHtml = `<div class="markdown-content">${parts.map(p => {
+                    if (p.startsWith('<div class="thinking-block')) {
+                        return p;
+                    }
+                    return marked.parse(p);
+                }).join('')}</div>`;
+            } else {
+                contentHtml = `<div class="markdown-content">${marked.parse(content)}</div>`;
+            }
         }
         
         // Render images if present
@@ -628,12 +640,51 @@
         return div;
     }
     
+    // Process thinking tags - make them collapsible
+    function processThinkingTags(content) {
+        // Match <think>...</think> tags (case insensitive, multiline)
+        const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+        
+        return content.replace(thinkRegex, (match, thinkContent) => {
+            const uniqueId = 'think-' + Math.random().toString(36).substr(2, 9);
+            return `
+                <div class="thinking-block mb-3">
+                    <button onclick="toggleThinking('${uniqueId}')" class="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors">
+                        <svg id="${uniqueId}-icon" class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                        <span class="flex items-center gap-1.5">
+                            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                            </svg>
+                            Thinking...
+                        </span>
+                    </button>
+                    <div id="${uniqueId}" class="thinking-content hidden mt-2 pl-6 border-l-2 border-purple-500/30 text-slate-400 text-sm italic">${escapeHtml(thinkContent.trim())}</div>
+                </div>
+            `;
+        });
+    }
+    
     function renderMessagePart(part) {
         const type = part.type || 'text';
         const content = part.content || '';
         
         switch (type) {
             case 'text':
+                // Process thinking tags before markdown parsing
+                const processedContent = processThinkingTags(content);
+                // Only parse markdown on non-thinking parts
+                if (processedContent !== content) {
+                    // Has thinking tags - parse the non-thinking parts
+                    const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
+                    return `<div class="markdown-content">${parts.map(p => {
+                        if (p.startsWith('<div class="thinking-block')) {
+                            return p; // Keep thinking blocks as-is
+                        }
+                        return marked.parse(p);
+                    }).join('')}</div>`;
+                }
                 return `<div class="markdown-content">${marked.parse(content)}</div>`;
             
             case 'code':
@@ -808,6 +859,15 @@
     window.toggleSettings = function() {
         const panel = document.getElementById('settings-panel');
         panel.classList.toggle('translate-x-full');
+    };
+    
+    window.toggleThinking = function(id) {
+        const content = document.getElementById(id);
+        const icon = document.getElementById(id + '-icon');
+        if (content && icon) {
+            content.classList.toggle('hidden');
+            icon.classList.toggle('rotate-90');
+        }
     };
     
     window.toggleConversationMenu = function() {
@@ -1244,7 +1304,19 @@
             });
         } else if (data.message) {
             hasContent = true;
-            contentEl.innerHTML = `<div class="markdown-content">${marked.parse(data.message)}</div>`;
+            // Process thinking tags in streaming message
+            const processedContent = processThinkingTags(data.message);
+            if (processedContent !== data.message) {
+                const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
+                contentEl.innerHTML = `<div class="markdown-content">${parts.map(p => {
+                    if (p.startsWith('<div class="thinking-block')) {
+                        return p;
+                    }
+                    return marked.parse(p);
+                }).join('')}</div>`;
+            } else {
+                contentEl.innerHTML = `<div class="markdown-content">${marked.parse(data.message)}</div>`;
+            }
         }
         
         // Only show streaming message if there's actual content
