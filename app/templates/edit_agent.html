@@ -336,8 +336,8 @@
         }
         container.innerHTML = roles.map((role, idx) => {
             // Handle both string roles and object roles
-            const roleName = typeof role === 'string' ? role : (role.name || role.role_name || 'Unknown');
-            const roleDesc = typeof role === 'object' ? (role.description || role.role_description || '') : '';
+            const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
+            const rolePrompt = typeof role === 'object' ? (role.role_prompt || '') : '';
             return `
                 <div class="bg-slate-700 p-4 rounded-lg">
                     <div class="flex items-center justify-between mb-2">
@@ -348,7 +348,7 @@
                             </svg>
                         </button>
                     </div>
-                    ${roleDesc ? `<p class="text-sm text-slate-400">${roleDesc}</p>` : ''}
+                    ${rolePrompt ? `<p class="text-sm text-slate-400 truncate" title="${rolePrompt}">${rolePrompt.substring(0, 100)}${rolePrompt.length > 100 ? '...' : ''}</p>` : ''}
                 </div>
             `;
         }).join('');
@@ -417,9 +417,24 @@
         renderVoices();
     };
     
-    window.removeRole = function(idx) {
-        roles.splice(idx, 1);
-        renderRoles();
+    window.removeRole = async function(idx) {
+        const role = roles[idx];
+        const roleName = typeof role === 'string' ? role : (role.role_name || role.name);
+        
+        if (!confirm(`Are you sure you want to delete the role "${roleName}"?`)) return;
+        
+        try {
+            await editAgentRole(window.currentWif, {
+                agent: agentName,
+                role_name: roleName,
+                action: 'delete'
+            });
+            roles.splice(idx, 1);
+            renderRoles();
+            showToast('Role deleted', 'success');
+        } catch (e) {
+            showToast('Failed to delete role: ' + e.message, 'error');
+        }
     };
     
     window.showAddRoleModal = function() {
@@ -435,8 +450,7 @@
     
     window.saveRole = async function() {
         const name = document.getElementById('role-name').value.trim();
-        const description = document.getElementById('role-description').value.trim();
-        const systemMessage = document.getElementById('role-system-message').value.trim();
+        const rolePrompt = document.getElementById('role-system-message').value.trim();
         
         if (!name) {
             showToast('Role name is required', 'error');
@@ -446,13 +460,12 @@
         try {
             await editAgentRole(window.currentWif, {
                 agent: agentName,
-                roleName: name,
-                roleDescription: description,
-                systemMessage: systemMessage,
+                role_name: name,
+                role_prompt: rolePrompt,
                 action: 'add'
             });
             
-            roles.push({ name, description, system_message: systemMessage });
+            roles.push({ role_name: name, role_prompt: rolePrompt });
             renderRoles();
             closeAddRoleModal();
             showToast('Role added successfully', 'success');
