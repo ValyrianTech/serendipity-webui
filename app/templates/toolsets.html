@@ -273,7 +273,7 @@
         if (!confirm(`Are you sure you want to delete "${currentToolsetName}"?`)) return;
         
         try {
-            await deleteToolset(window.currentWif, { toolsetName: currentToolsetName });
+            await deleteToolset(window.currentWif, { toolset_name: currentToolsetName });
             showToast('Toolset deleted', 'success');
             await loadToolsets();
             document.getElementById('config-form').classList.add('hidden');
