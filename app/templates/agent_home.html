@@ -61,6 +61,32 @@
             </a>
         </div>
         
+        <!-- Voice Settings -->
+        <div id="voice-settings" class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700 hidden">
+            <h2 class="text-xl font-semibold mb-4">Voice Settings</h2>
+            
+            <div class="flex flex-col md:flex-row gap-4 items-start md:items-end">
+                <div class="flex-1">
+                    <label class="text-sm text-slate-400 block mb-2">OpenVoice Server</label>
+                    <input type="text" id="openvoice-server-input" placeholder="http://localhost:8000" 
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                <button onclick="initializeVoices()" class="btn-primary flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                    </svg>
+                    Initialize Voices
+                </button>
+            </div>
+            
+            <div id="agent-voices" class="mt-4">
+                <label class="text-sm text-slate-400 block mb-2">Configured Voices</label>
+                <div id="voices-list" class="flex flex-wrap gap-2">
+                    <span class="text-slate-500">Loading...</span>
+                </div>
+            </div>
+        </div>
+        
         <!-- Agent Details -->
         <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
             <h2 class="text-xl font-semibold mb-4">Agent Details</h2>
@@ -94,7 +120,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getAgent, getSettings, saveSettings, addMessage } from '/static/js/api.js';
+    import { getAgent, getSettings, saveSettings, addMessage, initializeAgentVoices } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
@@ -156,6 +182,21 @@
             localStorage.setItem('serendipity_agent_profile_image', agentData.profile_picture || '');
             localStorage.setItem('serendipity_agent_description', agentData.description || '');
             
+            // Show voice settings if agent has voices configured
+            if (agentData.voices && agentData.voices.length > 0) {
+                document.getElementById('voice-settings').classList.remove('hidden');
+                
+                // Populate voices list
+                const voicesList = document.getElementById('voices-list');
+                voicesList.innerHTML = agentData.voices.map(voice => 
+                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${voice}</span>`
+                ).join('');
+                
+                // Load OpenVoice server from settings
+                const settings = getSettings();
+                document.getElementById('openvoice-server-input').value = settings.openvoiceServer || '';
+            }
+            
         } catch (e) {
             console.error('Failed to load agent details:', e);
             showToast('Failed to load agent details', 'error');
@@ -192,6 +233,42 @@
         
         // Navigate to conversation page with empty conversation_id
         window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation`;
+    };
+    
+    window.initializeVoices = async function() {
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        const openvoiceServer = document.getElementById('openvoice-server-input').value.trim();
+        
+        if (!openvoiceServer) {
+            showToast('Please enter the OpenVoice server URL', 'error');
+            return;
+        }
+        
+        // Save the OpenVoice server URL to settings
+        saveSettings({ openvoiceServer: openvoiceServer });
+        
+        try {
+            showToast('Initializing voices...', 'info');
+            
+            const response = await initializeAgentVoices(window.currentWif, {
+                agent: agentName,
+                openvoice_server: openvoiceServer
+            });
+            
+            if (response.success) {
+                showToast('Voices initialized successfully!', 'success');
+            } else {
+                showToast('Failed to initialize voices: ' + (response.error || 'Unknown error'), 'error');
+            }
+            
+        } catch (e) {
+            console.error('Failed to initialize voices:', e);
+            showToast('Failed to initialize voices: ' + e.message, 'error');
+        }
     };
 </script>
 {% endblock %}
