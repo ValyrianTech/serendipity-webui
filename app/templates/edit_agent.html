@@ -196,13 +196,8 @@
                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
             </div>
             <div>
-                <label class="text-sm text-slate-400 block mb-2">Description</label>
-                <textarea id="role-description" rows="2" placeholder="Role description..."
-                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"></textarea>
-            </div>
-            <div>
-                <label class="text-sm text-slate-400 block mb-2">System Message</label>
-                <textarea id="role-system-message" rows="4" placeholder="System message for this role..."
+                <label class="text-sm text-slate-400 block mb-2">Role Prompt</label>
+                <textarea id="role-system-message" rows="6" placeholder="System prompt for this role..."
                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2"></textarea>
             </div>
         </div>
@@ -446,7 +441,6 @@
     
     window.showAddRoleModal = function() {
         document.getElementById('role-name').value = '';
-        document.getElementById('role-description').value = '';
         document.getElementById('role-system-message').value = '';
         document.getElementById('add-role-modal').classList.remove('hidden');
     };
