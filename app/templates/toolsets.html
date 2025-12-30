@@ -82,7 +82,7 @@
 </div>
 
 <script type="module">
-    import { getToolsets, getToolset, getMCPServers, saveToolset, deleteToolset } from '/static/js/api.js';
+    import { getToolsets, getToolset, getMCPServers, saveToolset as saveToolsetApi, deleteToolset } from '/static/js/api.js';
     
     let isNewToolset = false;
     let currentToolsetName = '';
@@ -237,7 +237,7 @@
         };
         
         try {
-            await saveToolset(window.currentWif, data);
+            await saveToolsetApi(window.currentWif, data);
             showToast('Toolset saved successfully', 'success');
             await loadToolsets();
             document.getElementById('toolset-select').value = name;
