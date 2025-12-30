@@ -32,15 +32,23 @@
     window.saveSettings = saveSettings;
     
     document.addEventListener('DOMContentLoaded', async () => {
-        await loadAgents();
+        const agents = await loadAgents();
         
         // Auto-select Serendipity if no agent is currently selected in localStorage
         const currentAgent = localStorage.getItem('serendipity_agent_name');
-        if (!currentAgent) {
-            // Find Serendipity agent and select it
-            const serendipityCard = document.querySelector('[data-agent-name="Serendipity"]');
-            if (serendipityCard) {
-                serendipityCard.click();
+        if (!currentAgent && agents && agents.length > 0) {
+            // Find Serendipity agent in the loaded data
+            const serendipityAgent = agents.find(a => a.name === 'Serendipity') || agents[0];
+            if (serendipityAgent) {
+                // Save agent info to localStorage without navigating
+                saveSettings({ agentName: serendipityAgent.name });
+                localStorage.setItem('serendipity_agent_profile_image', serendipityAgent.profile_image || '');
+                localStorage.setItem('serendipity_agent_description', serendipityAgent.description || '');
+                
+                // Update sidebar
+                if (typeof updateNavigation === 'function') {
+                    updateNavigation();
+                }
             }
         }
     });
@@ -67,15 +75,18 @@
                 
                 loading.classList.add('hidden');
                 grid.classList.remove('hidden');
+                return data.agents;
             } else {
                 loading.classList.add('hidden');
                 error.classList.remove('hidden');
                 error.querySelector('p').textContent = 'No agents found';
+                return [];
             }
         } catch (e) {
             console.error('Failed to load agents:', e);
             loading.classList.add('hidden');
             error.classList.remove('hidden');
+            return [];
         }
     };
     
