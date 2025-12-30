@@ -65,11 +65,12 @@
         <div id="voice-settings" class="bg-slate-800 rounded-xl p-6 mb-6 border border-slate-700 hidden">
             <h2 class="text-xl font-semibold mb-4">Voice Settings</h2>
             
-            <div class="flex flex-col md:flex-row gap-4 items-start md:items-end">
-                <div class="flex-1">
-                    <label class="text-sm text-slate-400 block mb-2">OpenVoice Server</label>
-                    <input type="text" id="openvoice-server-input" placeholder="http://localhost:8000" 
-                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+            <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">Configured Voices</label>
+                    <div id="voices-list" class="flex flex-wrap gap-2">
+                        <span class="text-slate-500">Loading...</span>
+                    </div>
                 </div>
                 <button onclick="initializeVoices()" class="btn-primary flex items-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -77,13 +78,6 @@
                     </svg>
                     Initialize Voices
                 </button>
-            </div>
-            
-            <div id="agent-voices" class="mt-4">
-                <label class="text-sm text-slate-400 block mb-2">Configured Voices</label>
-                <div id="voices-list" class="flex flex-wrap gap-2">
-                    <span class="text-slate-500">Loading...</span>
-                </div>
             </div>
         </div>
         
@@ -191,10 +185,6 @@
                 voicesList.innerHTML = agentData.voices.map(voice => 
                     `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${voice}</span>`
                 ).join('');
-                
-                // Load OpenVoice server from settings
-                const settings = getSettings();
-                document.getElementById('openvoice-server-input').value = settings.openvoiceServer || '';
             }
             
         } catch (e) {
@@ -241,15 +231,13 @@
             return;
         }
         
-        const openvoiceServer = document.getElementById('openvoice-server-input').value.trim();
+        const settings = getSettings();
+        const openvoiceServer = settings.openvoiceServer;
         
         if (!openvoiceServer) {
-            showToast('Please enter the OpenVoice server URL', 'error');
+            showToast('Please configure the OpenVoice server URL in Settings first', 'error');
             return;
         }
-        
-        // Save the OpenVoice server URL to settings
-        saveSettings({ openvoiceServer: openvoiceServer });
         
         try {
             showToast('Initializing voices...', 'info');
