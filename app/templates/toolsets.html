@@ -136,8 +136,9 @@
             document.getElementById('toolset-description').value = toolset.description || '';
             
             servers = (toolset.servers || []).map(s => ({
-                serverName: s.server_name || s.serverName || s,
-                toolFilter: s.tool_filter || s.toolFilter || []
+                serverName: s.name || s.server_name || s.serverName || s,
+                toolFilter: s.tool_filter || s.toolFilter || [],
+                permissionType: s.permission_type || s.permissionType || 'always_allow'
             }));
             
             renderServers();
