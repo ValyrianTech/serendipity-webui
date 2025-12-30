@@ -39,7 +39,7 @@
         <div class="mt-2">
             <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
                 <span>Context</span>
-                <span id="context-info">0 / 4096 tokens</span>
+                <span><span id="context-info">0 / 4096 tokens</span> · <span id="context-cost">$0.0000</span></span>
             </div>
             <div class="context-progress">
                 <div id="context-bar" class="context-progress-bar" style="width: 0%"></div>
@@ -722,7 +722,9 @@
             // Update context info
             const currentTokens = data.conversation?.current_tokens || 0;
             const contextSize = data.conversation?.model_context_size || 4096;
+            const totalCost = data.conversation?.total_cost || 0;
             document.getElementById('context-info').textContent = `${currentTokens} / ${contextSize} tokens`;
+            document.getElementById('context-cost').textContent = `$${totalCost.toFixed(4)}`;
             document.getElementById('context-bar').style.width = `${Math.min(100, (currentTokens / contextSize) * 100)}%`;
             
             // Update settings panel
