@@ -190,6 +190,23 @@
                 <span class="text-slate-500 text-sm">Loading...</span>
             </div>
         </div>
+        
+        <!-- TTS Settings -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+            <h3 class="text-sm font-medium text-slate-300 mb-3">Text-to-Speech</h3>
+            
+            <div class="mb-3">
+                <label class="text-sm text-slate-400 block mb-1">Voice</label>
+                <select id="voice-select" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    <option value="">No voice selected</option>
+                </select>
+            </div>
+            
+            <div class="flex items-center justify-between">
+                <label class="text-sm text-slate-400">Auto-play responses</label>
+                <input type="checkbox" id="auto-play-voice" class="w-4 h-4 rounded">
+            </div>
+        </div>
     </div>
 </div>
 
@@ -356,7 +373,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -370,6 +387,12 @@
     let selectedMessageId = null;
     let selectedMessageSender = null;
     let selectedMessageContent = null;
+    
+    // TTS state
+    let availableVoices = [];
+    let currentAudio = null;
+    let playingMessageId = null;
+    let playedAudioMessages = new Set();
     
     // Wait for WIF key to be available (set by base template)
     async function waitForWifKey(maxWaitMs = 5000) {
@@ -390,6 +413,7 @@
         // Load agent data first to get default model
         await loadAgentData();
         await loadModels();
+        await loadAvailableVoices();
         
         if (conversationId) {
             await loadConversation();
@@ -443,6 +467,158 @@
         } catch (e) {
             console.error('Failed to load agent data:', e);
         }
+    }
+    
+    async function loadAvailableVoices() {
+        try {
+            const data = await getAvailableVoices(agentName);
+            availableVoices = data.voices || [];
+            
+            const voiceSelect = document.getElementById('voice-select');
+            voiceSelect.innerHTML = '<option value="">No voice selected</option>';
+            
+            availableVoices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice;
+                option.textContent = voice.replace(/\.(mp3|wav)$/i, '');
+                voiceSelect.appendChild(option);
+            });
+            
+            // Restore saved voice selection
+            const settings = getSettings();
+            if (settings.activeVoice && availableVoices.includes(settings.activeVoice)) {
+                voiceSelect.value = settings.activeVoice;
+            }
+            
+            // Restore auto-play setting
+            document.getElementById('auto-play-voice').checked = settings.autoPlayVoice;
+            
+            // Save voice selection on change
+            voiceSelect.addEventListener('change', () => {
+                saveSettings({ activeVoice: voiceSelect.value });
+            });
+            
+            // Save auto-play setting on change
+            document.getElementById('auto-play-voice').addEventListener('change', (e) => {
+                saveSettings({ autoPlayVoice: e.target.checked });
+            });
+            
+        } catch (e) {
+            console.error('Failed to load available voices:', e);
+        }
+    }
+    
+    // TTS playback functions
+    function getTextOnlyContent(content) {
+        // Strip HTML tags and get plain text for TTS
+        const div = document.createElement('div');
+        div.innerHTML = content;
+        // Remove thinking blocks
+        div.querySelectorAll('.thinking-block').forEach(el => el.remove());
+        return div.textContent || div.innerText || '';
+    }
+    
+    window.playMessageAudio = function(messageId, sender, content) {
+        const settings = getSettings();
+        const voice = settings.activeVoice;
+        const openvoiceServer = settings.openvoiceServer;
+        
+        if (!openvoiceServer) {
+            showToast('Please configure OpenVoice server in Settings', 'error');
+            return;
+        }
+        
+        if (!voice) {
+            showToast('Please select a voice in conversation settings', 'error');
+            return;
+        }
+        
+        // Get plain text content
+        const textContent = getTextOnlyContent(content);
+        if (!textContent.trim()) {
+            showToast('No text content to play', 'error');
+            return;
+        }
+        
+        // Stop current audio if playing
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+            updatePlayButtonState(playingMessageId, false);
+        }
+        
+        // If clicking on same message that was playing, just stop
+        if (playingMessageId === messageId) {
+            playingMessageId = null;
+            return;
+        }
+        
+        // Generate TTS URL and play
+        const ttsUrl = getTTSUrl(openvoiceServer, textContent, voice);
+        if (!ttsUrl) {
+            showToast('Failed to generate TTS URL', 'error');
+            return;
+        }
+        
+        playingMessageId = messageId;
+        updatePlayButtonState(messageId, true);
+        
+        currentAudio = new Audio(ttsUrl);
+        currentAudio.play().catch(e => {
+            console.error('Failed to play audio:', e);
+            showToast('Failed to play audio: ' + e.message, 'error');
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+        });
+        
+        currentAudio.onended = () => {
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+            playedAudioMessages.add(messageId);
+        };
+        
+        currentAudio.onerror = () => {
+            showToast('Audio playback error', 'error');
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+        };
+    };
+    
+    window.stopMessageAudio = function() {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+            if (playingMessageId) {
+                updatePlayButtonState(playingMessageId, false);
+                playingMessageId = null;
+            }
+        }
+    };
+    
+    function updatePlayButtonState(messageId, isPlaying) {
+        const btn = document.querySelector(`[data-message-id="${messageId}"] .play-audio-btn`);
+        if (btn) {
+            const icon = btn.querySelector('svg');
+            if (isPlaying) {
+                btn.classList.add('text-indigo-400');
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>';
+            } else {
+                btn.classList.remove('text-indigo-400');
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>';
+            }
+        }
+    }
+    
+    function autoPlayLastMessage(messageId, sender, content) {
+        const settings = getSettings();
+        if (!settings.autoPlayVoice || !settings.activeVoice || !settings.openvoiceServer) return;
+        if (playedAudioMessages.has(messageId)) return;
+        
+        // Only auto-play assistant messages
+        const senderLower = sender.toLowerCase();
+        if (senderLower === 'info' || senderLower === (localStorage.getItem('serendipity_user_name') || 'user').toLowerCase()) return;
+        
+        playMessageAudio(messageId, sender, content);
     }
     
     async function initializeNewConversation() {
@@ -610,13 +786,50 @@
     
     window.refreshConversation = loadConversation;
     
-    function renderMessages(messages) {
+    // Load conversation and trigger auto-play for the last message
+    async function loadConversationWithAutoPlay() {
+        if (!conversationId) return;
+        
+        const loading = document.getElementById('messages-loading');
+        const list = document.getElementById('messages-list');
+        const noMessages = document.getElementById('no-messages');
+        const streamingEl = document.getElementById('streaming-message');
+        const typingIndicator = document.getElementById('typing-indicator');
+        
+        streamingEl.classList.add('hidden');
+        typingIndicator.classList.add('hidden');
+        
+        try {
+            const settings = getSettings();
+            const data = await getConversation(agentName, settings.folderName, conversationId);
+            conversationData = data;
+            
+            // Render messages with auto-play enabled
+            renderMessages(data.conversation?.messages || [], true);
+            
+            if (data.conversation?.messages?.length > 0) {
+                list.classList.remove('hidden');
+                scrollToBottom();
+            }
+            
+        } catch (e) {
+            console.error('Failed to load conversation:', e);
+        }
+    }
+    
+    function renderMessages(messages, triggerAutoPlay = false) {
         const list = document.getElementById('messages-list');
         list.innerHTML = '';
         
         messages.forEach((msg, index) => {
-            const messageEl = createMessageElement(msg, index === messages.length - 1);
+            const isLast = index === messages.length - 1;
+            const messageEl = createMessageElement(msg, isLast);
             list.appendChild(messageEl);
+            
+            // Auto-play last message if enabled
+            if (triggerAutoPlay && isLast && msg.message_id) {
+                autoPlayLastMessage(msg.message_id, msg.sender, msg.content);
+            }
         });
     }
     
@@ -686,7 +899,15 @@
             div.innerHTML = `
                 <div class="message-avatar">${initials}</div>
                 <div class="message-bubble">
-                    <div class="sender">${escapeHtml(sender)}</div>
+                    <div class="flex items-center justify-between">
+                        <div class="sender">${escapeHtml(sender)}</div>
+                        <button class="play-audio-btn p-1 text-slate-400 hover:text-indigo-400 transition-colors" onclick="event.stopPropagation(); playMessageAudio('${msg.message_id || ''}', '${escapeHtml(sender)}', \`${escapeHtml(content).replace(/`/g, '\\`')}\`)" title="Play audio">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="content">${contentHtml}</div>
                 </div>
             `;
@@ -1495,8 +1716,8 @@
 
             streamingEl.classList.add('hidden');
             streamingParts = [];
-            // Reload conversation to get the final message
-            loadConversation();
+            // Reload conversation to get the final message and trigger auto-play
+            loadConversationWithAutoPlay();
             return;
         }
         

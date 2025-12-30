@@ -8,7 +8,10 @@ export function getSettings() {
         serverPort: localStorage.getItem('serendipity_server_port') || '42069',
         websocketPort: localStorage.getItem('serendipity_websocket_port') || '8765',
         agentName: localStorage.getItem('serendipity_agent_name') || 'Serendipity',
-        folderName: localStorage.getItem('serendipity_folder_name') || 'default'
+        folderName: localStorage.getItem('serendipity_folder_name') || 'default',
+        openvoiceServer: localStorage.getItem('serendipity_openvoice_server') || '',
+        autoPlayVoice: localStorage.getItem('serendipity_auto_play') === 'true',
+        activeVoice: localStorage.getItem('serendipity_active_voice') || ''
     };
 }
 
@@ -18,6 +21,9 @@ export function saveSettings(settings) {
     if (settings.websocketPort) localStorage.setItem('serendipity_websocket_port', settings.websocketPort);
     if (settings.agentName) localStorage.setItem('serendipity_agent_name', settings.agentName);
     if (settings.folderName) localStorage.setItem('serendipity_folder_name', settings.folderName);
+    if (settings.openvoiceServer !== undefined) localStorage.setItem('serendipity_openvoice_server', settings.openvoiceServer);
+    if (settings.autoPlayVoice !== undefined) localStorage.setItem('serendipity_auto_play', settings.autoPlayVoice);
+    if (settings.activeVoice !== undefined) localStorage.setItem('serendipity_active_voice', settings.activeVoice);
 }
 
 export function getBaseUrl() {
@@ -348,6 +354,25 @@ export async function moveToFolder(wif, data) {
         body: JSON.stringify(signedData)
     });
     return response.json();
+}
+
+// Initialize agent voices on OpenVoice server
+export async function initializeAgentVoices(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/InitializeAgentVoices/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+// Generate TTS audio URL from OpenVoice server
+export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0) {
+    if (!openvoiceServer || !text || !voice) return null;
+    const encodedText = encodeURIComponent(text);
+    const encodedVoice = encodeURIComponent(voice);
+    return `${openvoiceServer}/synthesize/?text=${encodedText}&voice=${encodedVoice}&speed=${speed}`;
 }
 
 // WebSocket connection for streaming
