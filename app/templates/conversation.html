@@ -525,13 +525,17 @@
         } else {
             document.getElementById('messages-loading').classList.add('hidden');
             document.getElementById('no-messages').classList.remove('hidden');
-            // For new conversations, set agent's default model
+            // For new conversations, set agent's default settings
             if (agentData?.agent?.model_name) {
                 document.getElementById('model-select').value = agentData.agent.model_name;
             }
             if (agentData?.agent?.temperature !== undefined) {
                 document.getElementById('temperature').value = agentData.agent.temperature;
                 document.getElementById('temp-value').textContent = agentData.agent.temperature;
+            }
+            if (agentData?.agent?.memory !== undefined) {
+                document.getElementById('memory').value = agentData.agent.memory;
+                document.getElementById('memory-value').textContent = agentData.agent.memory;
             }
             
             // Initialize new conversation with info message (like Flutter app does)
