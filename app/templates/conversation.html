@@ -812,11 +812,18 @@
         }
     }
     
+    let modelContextSizes = {};
+    
     async function loadModels() {
         try {
             const data = await getModels();
             const select = document.getElementById('model-select');
             select.innerHTML = '';
+            
+            // Store model context sizes for later use
+            if (data.model_context_sizes) {
+                modelContextSizes = data.model_context_sizes;
+            }
             
             if (data.model_names) {
                 data.model_names.forEach(model => {
@@ -829,9 +836,27 @@
                     select.appendChild(option);
                 });
             }
+            
+            // Add change listener to update context size when model changes
+            select.addEventListener('change', updateContextSizeForModel);
+            
+            // Update context size for initially selected model
+            updateContextSizeForModel();
         } catch (e) {
             console.error('Failed to load models:', e);
         }
+    }
+    
+    function updateContextSizeForModel() {
+        const model = document.getElementById('model-select').value;
+        const contextSize = modelContextSizes[model] || 4096;
+        const contextInfo = document.getElementById('context-info');
+        const currentTokens = parseInt(contextInfo.textContent.split('/')[0].trim()) || 0;
+        contextInfo.textContent = `${currentTokens} / ${contextSize} tokens`;
+        
+        // Update progress bar
+        const percentage = Math.min((currentTokens / contextSize) * 100, 100);
+        document.getElementById('context-bar').style.width = `${percentage}%`;
     }
     
     window.loadConversation = async function() {
@@ -862,7 +887,9 @@
             
             // Update context info
             const currentTokens = data.conversation?.current_tokens || 0;
-            const contextSize = data.conversation?.model_context_size || 4096;
+            const modelName = data.conversation?.model_name;
+            // Use model_context_size from conversation, or look up from modelContextSizes, or fallback to 4096
+            const contextSize = data.conversation?.model_context_size || modelContextSizes[modelName] || 4096;
             const totalCost = data.conversation?.total_cost || 0;
             document.getElementById('context-info').textContent = `${currentTokens} / ${contextSize} tokens`;
             document.getElementById('context-cost').textContent = `$${totalCost.toFixed(4)}`;
