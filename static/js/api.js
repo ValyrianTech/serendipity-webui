@@ -415,13 +415,17 @@ export async function editWorkflowStep(wif, data) {
 }
 
 // Generate TTS audio URL from OpenVoice server
-export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0) {
+export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'default', language = 'English') {
     if (!openvoiceServer || !text || !voice) return null;
     // Remove trailing slash from server URL to avoid double slashes
     const serverUrl = openvoiceServer.replace(/\/+$/, '');
     const encodedText = encodeURIComponent(text);
     const encodedVoice = encodeURIComponent(voice);
-    return `${serverUrl}/synthesize/?text=${encodedText}&voice=${encodedVoice}&speed=${speed}`;
+    let url = `${serverUrl}/synthesize_speech/?voice=${encodedVoice}&text=${encodedText}`;
+    if (style) url += `&style=${encodeURIComponent(style)}`;
+    if (language) url += `&language=${encodeURIComponent(language)}`;
+    if (speed && speed !== 1.0) url += `&speed=${speed}`;
+    return url;
 }
 
 // WebSocket connection for streaming
