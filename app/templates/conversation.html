@@ -627,32 +627,11 @@
         return div.textContent || div.innerText || '';
     }
     
-    // Get the voice for a specific sender based on agent's order_of_speakers and voices arrays
+    // Get the voice for a specific sender - voice name = sender name
     function getVoiceForSender(sender) {
-        if (!agentData?.agent) return null;
-        
-        const speakers = agentData.agent.order_of_speakers || [];
-        const voices = agentData.agent.voices || [];
-        
-        // Find the index of the sender in order_of_speakers
-        const senderIndex = speakers.indexOf(sender);
-        
-        if (senderIndex !== -1 && senderIndex < voices.length) {
-            return voices[senderIndex];
-        }
-        
-        // Fallback: try to find a voice that contains the sender name
-        const matchingVoice = voices.find(v => 
-            v.toLowerCase().includes(sender.toLowerCase()) ||
-            sender.toLowerCase().includes(v.toLowerCase().replace(/\.(mp3|wav)$/i, ''))
-        );
-        if (matchingVoice) return matchingVoice;
-        
-        // Final fallback: use the manually selected voice or first available
-        const settings = getSettings();
-        if (settings.activeVoice) return settings.activeVoice;
-        
-        return voices.length > 0 ? voices[0] : null;
+        // The voice name is simply the sender name
+        // InitializeAgentVoices creates a voice file for each character with their name
+        return sender;
     }
     
     window.playMessageAudio = function(messageId, sender, content) {
