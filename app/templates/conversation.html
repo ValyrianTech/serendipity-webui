@@ -968,14 +968,15 @@
         const content = msg.content || '';
         
         // Determine message type for styling
+        // Only the current user's messages go on the right, all others on the left
         const senderLower = sender.toLowerCase();
         const isInfo = senderLower === 'info';
-        const isUser = !isInfo && senderLower !== agentName.toLowerCase() && 
-                       !['assistant', 'system'].includes(senderLower);
+        const userName = document.getElementById('sender-name')?.value || '';
+        const isCurrentUser = !isInfo && senderLower === userName.toLowerCase();
         
         if (isInfo) {
             div.className = 'message-card info-message';
-        } else if (isUser) {
+        } else if (isCurrentUser) {
             div.className = 'message-card user-message';
         } else {
             div.className = 'message-card assistant-message';
