@@ -1271,15 +1271,17 @@
         input.value = '';
         input.style.height = 'auto';
         
-        // Show user message immediately
+        // Show user message immediately (only if there's content)
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         noMessages.classList.add('hidden');
         list.classList.remove('hidden');
         
-        const userMsg = createMessageElement({ sender: sender, content: content }, false);
-        list.appendChild(userMsg);
-        scrollToBottom();
+        if (content) {
+            const userMsg = createMessageElement({ sender: sender, content: content }, false);
+            list.appendChild(userMsg);
+            scrollToBottom();
+        }
         
         // Show typing indicator if we're expecting a response
         if (run) {
