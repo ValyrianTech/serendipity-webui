@@ -5,6 +5,63 @@ import * as secp256k1 from '/static/js/vendor/secp256k1.js';
 import { sha256 } from '/static/js/vendor/sha256.js';
 import { ripemd160 } from '/static/js/vendor/ripemd160.js';
 
+// Configure secp256k1 to use pure JS HMAC-SHA256 for non-secure contexts (HTTP on non-localhost)
+function hmacSha256(key, ...messages) {
+    const blockSize = 64;
+    
+    // Ensure key is Uint8Array
+    if (!(key instanceof Uint8Array)) {
+        key = new Uint8Array(key);
+    }
+    
+    // If key is longer than block size, hash it
+    if (key.length > blockSize) {
+        key = sha256(key);
+    }
+    
+    // Pad key to block size
+    const paddedKey = new Uint8Array(blockSize);
+    paddedKey.set(key);
+    
+    // Create inner and outer padding
+    const ipad = new Uint8Array(blockSize);
+    const opad = new Uint8Array(blockSize);
+    for (let i = 0; i < blockSize; i++) {
+        ipad[i] = paddedKey[i] ^ 0x36;
+        opad[i] = paddedKey[i] ^ 0x5c;
+    }
+    
+    // Concatenate all messages
+    let totalLen = 0;
+    for (const msg of messages) {
+        totalLen += msg.length;
+    }
+    const allMessages = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const msg of messages) {
+        allMessages.set(msg, offset);
+        offset += msg.length;
+    }
+    
+    // Inner hash: H(ipad || messages)
+    const innerData = new Uint8Array(blockSize + allMessages.length);
+    innerData.set(ipad);
+    innerData.set(allMessages, blockSize);
+    const innerHash = sha256(innerData);
+    
+    // Outer hash: H(opad || innerHash)
+    const outerData = new Uint8Array(blockSize + innerHash.length);
+    outerData.set(opad);
+    outerData.set(innerHash, blockSize);
+    
+    return sha256(outerData);
+}
+
+// Set the HMAC function for secp256k1 (works in non-secure contexts)
+if (secp256k1.etc) {
+    secp256k1.etc.hmacSha256Sync = hmacSha256;
+}
+
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 export function base58Decode(str) {
@@ -127,7 +184,8 @@ export async function signMessage(message, wif) {
     
     const messageHash = sha256(sha256(fullMessage));
     
-    const signature = await secp256k1.signAsync(messageHash, privateKey, { lowS: true });
+    // Use sync version since we configured hmacSha256Sync for non-secure contexts
+    const signature = secp256k1.sign(messageHash, privateKey, { lowS: true });
     const recovery = signature.recovery;
     
     const header = 27 + recovery + 4;
@@ -158,10 +216,11 @@ function jsonSortedEncode(obj, indent = '  ') {
 export async function signData(messageData, wif) {
     const jsonWithIndent = jsonSortedEncode(messageData, '  ');
     
+    // Use the pure JS sha256 implementation instead of crypto.subtle
+    // This works in non-secure contexts (HTTP on non-localhost)
     const encoder = new TextEncoder();
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(jsonWithIndent));
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const sha256Hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const hashBytes = sha256(encoder.encode(jsonWithIndent));
+    const sha256Hash = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('');
     
     const message = `/sha256/${sha256Hash}`;
     const signature = await signMessage(message, wif);
