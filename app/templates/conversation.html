@@ -1474,6 +1474,7 @@
     
     // Message Actions
     window.openMessageActionsDialog = function(messageId, sender, content) {
+        console.log('Opening message actions for:', { messageId, sender, contentLength: content?.length });
         selectedMessageId = messageId;
         selectedMessageSender = sender;
         selectedMessageContent = content;
@@ -1502,6 +1503,9 @@
             const settings = getSettings();
             const model = document.getElementById('model-select').value;
             const temperature = parseFloat(document.getElementById('temperature').value);
+            const messageIdToContinue = selectedMessageId;
+            
+            console.log('Continuing message:', { messageIdToContinue, conversationId, agentName });
             
             closeMessageActionsDialog();
             showToast('Continuing message...', 'info');
@@ -1509,8 +1513,8 @@
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
                 agent: agentName,
-                folder_name: settings.folderName,
-                message_id: selectedMessageId,
+                folder_name: settings.folderName || '',
+                message_id: messageIdToContinue,
                 action: 'continue_message',
                 model_name: model,
                 temperature: temperature
@@ -1534,6 +1538,9 @@
             const settings = getSettings();
             const model = document.getElementById('model-select').value;
             const temperature = parseFloat(document.getElementById('temperature').value);
+            const messageIdToRegenerate = selectedMessageId;
+            
+            console.log('Regenerating message:', { messageIdToRegenerate, conversationId, agentName });
             
             closeMessageActionsDialog();
             showToast('Regenerating message...', 'info');
@@ -1541,8 +1548,8 @@
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
                 agent: agentName,
-                folder_name: settings.folderName,
-                message_id: selectedMessageId,
+                folder_name: settings.folderName || '',
+                message_id: messageIdToRegenerate,
                 action: 'regenerate_message',
                 model_name: model,
                 temperature: temperature
@@ -1566,14 +1573,17 @@
         
         try {
             const settings = getSettings();
+            const messageIdToDelete = selectedMessageId;
+            
+            console.log('Deleting message:', { messageIdToDelete, conversationId, agentName });
             
             closeMessageActionsDialog();
             
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
                 agent: agentName,
-                folder_name: settings.folderName,
-                message_id: selectedMessageId,
+                folder_name: settings.folderName || '',
+                message_id: messageIdToDelete,
                 action: 'delete_message'
             });
             
