@@ -627,18 +627,48 @@
         return div.textContent || div.innerText || '';
     }
     
+    // Get the voice for a specific sender based on agent's order_of_speakers and voices arrays
+    function getVoiceForSender(sender) {
+        if (!agentData?.agent) return null;
+        
+        const speakers = agentData.agent.order_of_speakers || [];
+        const voices = agentData.agent.voices || [];
+        
+        // Find the index of the sender in order_of_speakers
+        const senderIndex = speakers.indexOf(sender);
+        
+        if (senderIndex !== -1 && senderIndex < voices.length) {
+            return voices[senderIndex];
+        }
+        
+        // Fallback: try to find a voice that contains the sender name
+        const matchingVoice = voices.find(v => 
+            v.toLowerCase().includes(sender.toLowerCase()) ||
+            sender.toLowerCase().includes(v.toLowerCase().replace(/\.(mp3|wav)$/i, ''))
+        );
+        if (matchingVoice) return matchingVoice;
+        
+        // Final fallback: use the manually selected voice or first available
+        const settings = getSettings();
+        if (settings.activeVoice) return settings.activeVoice;
+        
+        return voices.length > 0 ? voices[0] : null;
+    }
+    
     window.playMessageAudio = function(messageId, sender, content) {
         const settings = getSettings();
-        const voice = settings.activeVoice;
         const openvoiceServer = settings.openvoiceServer;
         
         if (!openvoiceServer) {
-            showToast('Please configure OpenVoice server in Settings', 'error');
+            showToast('Please configure Voice Server in Settings', 'error');
             return;
         }
         
+        // Auto-select voice based on sender
+        const voice = getVoiceForSender(sender);
+        
         if (!voice) {
-            showToast('Please select a voice in conversation settings', 'error');
+            showToast('No voice configured for ' + sender, 'error');
             return;
         }
         
@@ -664,6 +694,9 @@
         
         // Generate TTS URL and play
         const ttsUrl = getTTSUrl(openvoiceServer, textContent, voice);
+        console.log('TTS URL:', ttsUrl);
+        console.log('Voice:', voice, 'Sender:', sender);
+        
         if (!ttsUrl) {
             showToast('Failed to generate TTS URL', 'error');
             return;
@@ -673,8 +706,15 @@
         updatePlayButtonState(messageId, true);
         
         currentAudio = new Audio(ttsUrl);
+        
+        // Add canplaythrough event to ensure audio is ready
+        currentAudio.addEventListener('canplaythrough', () => {
+            console.log('Audio ready to play');
+        });
+        
         currentAudio.play().catch(e => {
             console.error('Failed to play audio:', e);
+            console.error('TTS URL was:', ttsUrl);
             showToast('Failed to play audio: ' + e.message, 'error');
             playingMessageId = null;
             updatePlayButtonState(messageId, false);
