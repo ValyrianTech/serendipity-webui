@@ -77,12 +77,14 @@
                         <div>
                             <label class="text-sm text-slate-400 block mb-2">Server Type</label>
                             <select id="server-type" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
-                                <option value="openai">OpenAI</option>
-                                <option value="ollama">Ollama</option>
-                                <option value="anthropic">Anthropic</option>
-                                <option value="vllm">vLLM</option>
-                                <option value="lmstudio">LM Studio</option>
-                                <option value="custom">Custom</option>
+                                <option value="Oobabooga">Oobabooga</option>
+                                <option value="OpenAI">OpenAI</option>
+                                <option value="Anthropic">Anthropic</option>
+                                <option value="Groq">Groq</option>
+                                <option value="vLLM">vLLM</option>
+                                <option value="vLLMchat">vLLM Chat</option>
+                                <option value="Ollama">Ollama</option>
+                                <option value="LMStudio">LM Studio</option>
                             </select>
                         </div>
                     </div>
@@ -245,7 +247,7 @@
             document.getElementById('llm-description').value = config.description || '';
             document.getElementById('llm-host').value = config.host || '';
             document.getElementById('llm-port').value = config.port || '';
-            document.getElementById('server-type').value = config.server_type || 'openai';
+            document.getElementById('server-type').value = config.server_type || 'Oobabooga';
             document.getElementById('model-name').value = config.model_name || '';
             document.getElementById('context-length').value = config.context_length || 4096;
             document.getElementById('prompt-cost').value = config.prompt_tokens_cost || 0;
@@ -279,7 +281,7 @@
         document.getElementById('llm-description').value = '';
         document.getElementById('llm-host').value = '';
         document.getElementById('llm-port').value = '';
-        document.getElementById('server-type').value = 'openai';
+        document.getElementById('server-type').value = 'Oobabooga';
         document.getElementById('model-name').value = '';
         document.getElementById('context-length').value = 4096;
         document.getElementById('prompt-cost').value = 0;
@@ -309,24 +311,24 @@
         }
         
         const data = {
-            name: name,
-            description: document.getElementById('llm-description').value,
-            host: document.getElementById('llm-host').value,
-            port: parseInt(document.getElementById('llm-port').value) || 0,
-            serverType: document.getElementById('server-type').value,
-            modelName: document.getElementById('model-name').value,
-            contextLength: parseInt(document.getElementById('context-length').value) || 4096,
-            promptTokensCost: parseFloat(document.getElementById('prompt-cost').value) || 0,
-            promptTokensMultiplier: parseInt(document.getElementById('prompt-multiplier').value) || 1,
-            completionTokensCost: parseFloat(document.getElementById('completion-cost').value) || 0,
-            completionTokensMultiplier: parseInt(document.getElementById('completion-multiplier').value) || 1,
-            apiKey: document.getElementById('api-key').value,
-            promptTemplate: document.getElementById('prompt-template').value,
+            llm_name: name,
+            llm_description: document.getElementById('llm-description').value,
+            llm_host: document.getElementById('llm-host').value,
+            llm_port: document.getElementById('llm-port').value || '0',
+            llm_server_type: document.getElementById('server-type').value,
+            llm_model_name: document.getElementById('model-name').value,
+            context_length: parseInt(document.getElementById('context-length').value) || 4096,
+            prompt_tokens_cost: parseFloat(document.getElementById('prompt-cost').value) || 0,
+            prompt_tokens_multiplier: parseInt(document.getElementById('prompt-multiplier').value) || 1,
+            completion_tokens_cost: parseFloat(document.getElementById('completion-cost').value) || 0,
+            completion_tokens_multiplier: parseInt(document.getElementById('completion-multiplier').value) || 1,
+            api_key: document.getElementById('api-key').value,
+            prompt_template: document.getElementById('prompt-template').value,
             chat: document.getElementById('cap-chat').checked,
             vision: document.getElementById('cap-vision').checked,
             audio: document.getElementById('cap-audio').checked,
             video: document.getElementById('cap-video').checked,
-            allowAutoRouting: document.getElementById('allow-auto-routing').checked
+            allow_auto_routing: document.getElementById('allow-auto-routing').checked
         };
         
         try {
