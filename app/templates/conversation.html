@@ -1218,7 +1218,7 @@
         const input = document.getElementById('message-input');
         const content = input.value.trim();
         
-        if (!content && stagedFiles.length === 0) return;
+        // Allow empty messages - the agent can respond without user input
         
         if (!window.currentWif) {
             showToast('Please unlock your WIF key first', 'error');
