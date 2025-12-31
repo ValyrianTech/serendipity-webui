@@ -724,7 +724,24 @@
     };
     
     function updatePlayButtonState(messageId, isPlaying) {
-        const btn = document.querySelector(`[data-message-id="${messageId}"] .play-audio-btn`);
+        const messageCard = document.querySelector(`[data-message-id="${messageId}"]`);
+        const btn = messageCard?.querySelector('.play-audio-btn');
+        
+        if (messageCard) {
+            if (isPlaying) {
+                messageCard.classList.add('audio-playing');
+                // Add click handler to stop audio
+                messageCard.onclick = (e) => {
+                    if (!e.target.closest('.play-audio-btn')) {
+                        stopMessageAudio();
+                    }
+                };
+            } else {
+                messageCard.classList.remove('audio-playing');
+                messageCard.onclick = null;
+            }
+        }
+        
         if (btn) {
             const icon = btn.querySelector('svg');
             if (isPlaying) {

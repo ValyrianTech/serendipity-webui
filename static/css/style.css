@@ -403,6 +403,31 @@ input:focus, textarea:focus, select:focus {
     }
 }
 
+/* Audio playing glow effect */
+.message-card.audio-playing .message-bubble {
+    box-shadow: 0 0 15px 5px rgba(99, 102, 241, 0.5);
+    animation: audio-glow 1.5s ease-in-out infinite;
+    cursor: pointer;
+}
+
+@keyframes audio-glow {
+    0%, 100% {
+        box-shadow: 0 0 15px 5px rgba(99, 102, 241, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 25px 10px rgba(99, 102, 241, 0.7);
+    }
+}
+
+.message-card.audio-playing .message-bubble::after {
+    content: '🔊 Click to stop';
+    display: block;
+    font-size: 0.75rem;
+    color: #a5b4fc;
+    margin-top: 0.5rem;
+    text-align: right;
+}
+
 /* Light mode styles */
 .light-mode {
     --bg-primary: #ffffff;
