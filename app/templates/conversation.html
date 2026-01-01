@@ -493,6 +493,27 @@
     let currentAudio = null;
     let playingMessageId = null;
     let playedAudioMessages = new Set();
+    let audioUnlocked = false;
+    
+    // Unlock audio playback on first user interaction (needed for Firefox)
+    function unlockAudio() {
+        if (audioUnlocked) return;
+        
+        // Create and play a silent audio to unlock autoplay
+        const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+        silentAudio.volume = 0;
+        silentAudio.play().then(() => {
+            audioUnlocked = true;
+            console.log('Audio playback unlocked');
+        }).catch(() => {
+            // Ignore errors - will try again on next interaction
+        });
+    }
+    
+    // Add unlock listeners for various user interactions
+    ['click', 'touchstart', 'keydown'].forEach(event => {
+        document.addEventListener(event, unlockAudio, { once: false, passive: true });
+    });
     
     // Voice recording state
     let mediaRecorder = null;
