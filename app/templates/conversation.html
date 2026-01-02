@@ -145,15 +145,15 @@
             </label>
             
             <!-- Send button -->
-            <button onclick="sendMessage()" id="send-btn" class="btn-primary px-6 py-3">
+            <button onclick="sendMessage()" id="send-btn" class="btn-primary px-4 py-3 w-12 h-12 flex items-center justify-center">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                 </svg>
             </button>
             
             <!-- Stop generating button (hidden by default) -->
-            <button onclick="stopGenerating()" id="stop-btn" class="hidden px-6 py-3 rounded-lg transition-colors" style="background-color: #dc2626;" title="Stop generating">
-                <svg class="w-6 h-6" fill="white" viewBox="0 0 24 24">
+            <button onclick="stopGenerating()" id="stop-btn" class="hidden px-4 py-3 w-12 h-12 flex items-center justify-center rounded-lg transition-colors" style="background-color: #dc2626;" title="Stop generating">
+                <svg class="w-5 h-5" fill="white" viewBox="0 0 24 24">
                     <rect x="5" y="5" width="14" height="14" rx="2"/>
                 </svg>
             </button>
@@ -1018,6 +1018,16 @@
             const settings = getSettings();
             const data = await getConversation(agentName, settings.folderName, conversationId);
             conversationData = data;
+            
+            // Update context info
+            const currentTokens = data.conversation?.current_tokens || 0;
+            const totalCost = data.conversation?.total_cost || 0;
+            document.getElementById('context-cost').textContent = `$${totalCost.toFixed(4)}`;
+            updateContextDisplay(currentTokens);
+            
+            // Update next speaker based on message count
+            const messageCount = data.conversation?.messages?.length || 0;
+            updateNextSpeaker(messageCount);
             
             // Render messages with auto-play enabled
             renderMessages(data.conversation?.messages || [], true);
