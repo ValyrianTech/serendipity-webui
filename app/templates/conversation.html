@@ -1921,13 +1921,10 @@
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         
-        // Hide typing indicator when streaming starts
-        typingIndicator.classList.add('hidden');
-        
         // Check for end of message
         if (data.message === '<|end of message|>') {
             console.log('WebSocket: End of message received');
-
+            typingIndicator.classList.add('hidden');
             streamingEl.classList.add('hidden');
             streamingParts = [];
             // Reload conversation to get the final message and trigger auto-play
@@ -1984,8 +1981,9 @@
             }
         }
         
-        // Only show streaming message if there's actual content
+        // Only show streaming message and hide typing indicator if there's actual content
         if (hasContent) {
+            typingIndicator.classList.add('hidden');
             noMessages.classList.add('hidden');
             list.classList.remove('hidden');
             streamingEl.classList.remove('hidden');
