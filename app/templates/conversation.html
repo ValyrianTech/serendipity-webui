@@ -2030,6 +2030,7 @@
             console.log('WebSocket: End of message received');
             typingIndicator.classList.add('hidden');
             streamingEl.classList.add('hidden');
+            streamingEl.className = 'message-card assistant-message hidden'; // Reset class
             streamingParts = [];
             setGeneratingState(false);
             // Reload conversation to get the final message and trigger auto-play
@@ -2041,6 +2042,17 @@
         const sender = data.sender || 'Assistant';
         senderEl.textContent = sender;
         avatarEl.textContent = sender.substring(0, 2).toUpperCase();
+        
+        // Update streaming message style based on sender
+        const senderLower = sender.toLowerCase();
+        const userName = document.getElementById('sender-name')?.value || '';
+        const isCurrentUser = senderLower === userName.toLowerCase();
+        
+        if (isCurrentUser) {
+            streamingEl.className = 'message-card user-message';
+        } else {
+            streamingEl.className = 'message-card assistant-message';
+        }
         
         // Update content - render parts if available, otherwise use message
         let hasContent = false;
