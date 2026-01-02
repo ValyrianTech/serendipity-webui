@@ -838,6 +838,7 @@
     }
     
     let modelContextSizes = {};
+    let currentTokenCount = 0;
     
     async function loadModels() {
         try {
@@ -863,24 +864,23 @@
             }
             
             // Add change listener to update context size when model changes
-            select.addEventListener('change', updateContextSizeForModel);
-            
-            // Update context size for initially selected model
-            updateContextSizeForModel();
+            select.addEventListener('change', updateContextDisplay);
         } catch (e) {
             console.error('Failed to load models:', e);
         }
     }
     
-    function updateContextSizeForModel() {
+    function updateContextDisplay(newTokenCount = null) {
+        if (newTokenCount !== null) {
+            currentTokenCount = newTokenCount;
+        }
         const model = document.getElementById('model-select').value;
         const contextSize = modelContextSizes[model] || 4096;
-        const contextInfo = document.getElementById('context-info');
-        const currentTokens = parseInt(contextInfo.textContent.split('/')[0].trim()) || 0;
-        contextInfo.textContent = `${currentTokens} / ${contextSize} tokens`;
+        
+        document.getElementById('context-info').textContent = `${currentTokenCount} / ${contextSize} tokens`;
         
         // Update progress bar
-        const percentage = Math.min((currentTokens / contextSize) * 100, 100);
+        const percentage = Math.min((currentTokenCount / contextSize) * 100, 100);
         document.getElementById('context-bar').style.width = `${percentage}%`;
     }
     
@@ -910,20 +910,18 @@
             document.getElementById('conversation-title').textContent = 
                 data.conversation?.title || 'Conversation';
             
-            // Update context info
-            const currentTokens = data.conversation?.current_tokens || 0;
-            const modelName = data.conversation?.model_name;
-            // Use model_context_size from conversation, or look up from modelContextSizes, or fallback to 4096
-            const contextSize = data.conversation?.model_context_size || modelContextSizes[modelName] || 4096;
-            const totalCost = data.conversation?.total_cost || 0;
-            document.getElementById('context-info').textContent = `${currentTokens} / ${contextSize} tokens`;
-            document.getElementById('context-cost').textContent = `$${totalCost.toFixed(4)}`;
-            document.getElementById('context-bar').style.width = `${Math.min(100, (currentTokens / contextSize) * 100)}%`;
-            
-            // Update settings panel
+            // Update settings panel - set model first so context display uses correct context size
             if (data.conversation?.model_name) {
                 document.getElementById('model-select').value = data.conversation.model_name;
             }
+            
+            // Update context info
+            const currentTokens = data.conversation?.current_tokens || 0;
+            const totalCost = data.conversation?.total_cost || 0;
+            document.getElementById('context-cost').textContent = `$${totalCost.toFixed(4)}`;
+            
+            // Update context display with token count (will use model's context size)
+            updateContextDisplay(currentTokens);
             if (data.conversation?.temperature !== undefined) {
                 document.getElementById('temperature').value = data.conversation.temperature;
                 document.getElementById('temp-value').textContent = data.conversation.temperature;
