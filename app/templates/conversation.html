@@ -597,12 +597,27 @@
                     const option = document.createElement('option');
                     option.value = p;
                     option.textContent = p;
-                    if (p === agentName) option.selected = true;
                     respondAs.appendChild(option);
                 });
             }
+            
+            // For new conversations, select first speaker from order_of_speakers
+            updateNextSpeaker(0);
         } catch (e) {
             console.error('Failed to load agent data:', e);
+        }
+    }
+    
+    function updateNextSpeaker(messageCount) {
+        const orderOfSpeakers = agentData?.agent?.order_of_speakers || [];
+        if (orderOfSpeakers.length === 0) return;
+        
+        const nextSpeakerIndex = messageCount % orderOfSpeakers.length;
+        const nextSpeaker = orderOfSpeakers[nextSpeakerIndex];
+        
+        const respondAs = document.getElementById('respond-as');
+        if (respondAs && nextSpeaker) {
+            respondAs.value = nextSpeaker;
         }
     }
     
@@ -942,10 +957,13 @@
                     const option = document.createElement('option');
                     option.value = p;
                     option.textContent = p;
-                    if (p === agentName) option.selected = true;
                     respondAs.appendChild(option);
                 });
             }
+            
+            // Auto-select next speaker based on order_of_speakers and message count
+            const messageCount = data.conversation?.messages?.length || 0;
+            updateNextSpeaker(messageCount);
             
             // Update tools list
             updateToolsList(data.conversation?.enabled_tools || []);
@@ -1334,11 +1352,18 @@
         noMessages.classList.add('hidden');
         list.classList.remove('hidden');
         
+        // Get current message count before adding
+        const currentMessageCount = list.querySelectorAll('.message-card').length;
+        
         if (content) {
             const userMsg = createMessageElement({ sender: sender, content: content }, false);
             list.appendChild(userMsg);
             scrollToBottom();
         }
+        
+        // Update next speaker: +1 for user message, +1 more if AI will respond
+        const newMessageCount = currentMessageCount + 1 + (run ? 1 : 0);
+        updateNextSpeaker(newMessageCount);
         
         // Show typing indicator if we're expecting a response
         if (run) {
