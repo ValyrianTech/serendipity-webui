@@ -150,6 +150,14 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                 </svg>
             </button>
+            
+            <!-- Stop generating button (hidden by default) -->
+            <button onclick="stopGenerating()" id="stop-btn" class="hidden px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+                </svg>
+            </button>
         </div>
     </div>
     </div>
@@ -473,7 +481,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -1341,6 +1349,7 @@
             typingSender.textContent = respondAs;
             typingAvatar.textContent = respondAs.substring(0, 2).toUpperCase();
             typingIndicator.classList.remove('hidden');
+            setGeneratingState(true);
             scrollToBottom();
         }
         
@@ -1380,6 +1389,7 @@
             showToast('Failed to send message: ' + e.message, 'error');
             document.getElementById('streaming-message').classList.add('hidden');
             document.getElementById('typing-indicator').classList.add('hidden');
+            setGeneratingState(false);
         }
     };
     
@@ -1396,6 +1406,50 @@
         const mobilePanel = document.getElementById('settings-panel-mobile');
         if (mobilePanel) {
             mobilePanel.classList.toggle('translate-x-full');
+        }
+    };
+    
+    let isGenerating = false;
+    
+    function setGeneratingState(generating) {
+        isGenerating = generating;
+        const sendBtn = document.getElementById('send-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        
+        if (generating) {
+            sendBtn.classList.add('hidden');
+            stopBtn.classList.remove('hidden');
+        } else {
+            sendBtn.classList.remove('hidden');
+            stopBtn.classList.add('hidden');
+        }
+    }
+    
+    window.stopGenerating = async function() {
+        if (!conversationId) return;
+        
+        try {
+            const settings = getSettings();
+            showToast('Stopping generation...', 'info');
+            
+            await stopGeneration(window.currentWif, {
+                agent: agentName,
+                conversationId: conversationId
+            });
+            
+            // Hide typing indicator and streaming message
+            document.getElementById('typing-indicator').classList.add('hidden');
+            document.getElementById('streaming-message').classList.add('hidden');
+            
+            setGeneratingState(false);
+            
+            // Reload conversation to get current state
+            await loadConversation();
+            
+            showToast('Generation stopped', 'success');
+        } catch (e) {
+            console.error('Failed to stop generation:', e);
+            showToast('Failed to stop generation: ' + e.message, 'error');
         }
     };
     
@@ -1927,6 +1981,7 @@
             typingIndicator.classList.add('hidden');
             streamingEl.classList.add('hidden');
             streamingParts = [];
+            setGeneratingState(false);
             // Reload conversation to get the final message and trigger auto-play
             loadConversationWithAutoPlay();
             return;
