@@ -1632,6 +1632,12 @@
             closeMessageActionsDialog();
             showToast('Continuing message...', 'info');
             
+            // Show typing indicator and stop button
+            const typingIndicator = document.getElementById('typing-indicator');
+            typingIndicator.classList.remove('hidden');
+            setGeneratingState(true);
+            scrollToBottom();
+            
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
                 agent: agentName,
@@ -1647,6 +1653,8 @@
             
         } catch (e) {
             showToast('Failed to continue: ' + e.message, 'error');
+            setGeneratingState(false);
+            document.getElementById('typing-indicator').classList.add('hidden');
         }
     };
     
@@ -1667,6 +1675,12 @@
             closeMessageActionsDialog();
             showToast('Regenerating message...', 'info');
             
+            // Show typing indicator and stop button
+            const typingIndicator = document.getElementById('typing-indicator');
+            typingIndicator.classList.remove('hidden');
+            setGeneratingState(true);
+            scrollToBottom();
+            
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
                 agent: agentName,
@@ -1682,6 +1696,8 @@
             
         } catch (e) {
             showToast('Failed to regenerate: ' + e.message, 'error');
+            setGeneratingState(false);
+            document.getElementById('typing-indicator').classList.add('hidden');
         }
     };
     
