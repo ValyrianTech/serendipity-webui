@@ -108,8 +108,7 @@
                 </div>
                 <div class="flex gap-2">
                     <textarea id="message-input" rows="1" placeholder="Type your message..."
-                              class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none"
-                              onkeydown="handleKeyDown(event)"></textarea>
+                              class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none"></textarea>
                     <button id="mic-btn" onclick="toggleRecording()" class="p-3 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 transition-colors" title="Record voice">
                         <svg id="mic-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
@@ -1430,13 +1429,6 @@
         }
     };
     
-    function handleKeyDown(event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            sendMessage();
-        }
-    }
-    window.handleKeyDown = handleKeyDown;
     
     window.toggleSettings = function() {
         // For mobile: toggle the mobile settings panel
