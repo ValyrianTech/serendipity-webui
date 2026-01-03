@@ -1296,20 +1296,13 @@
     }
     
     function scrollToBottom() {
-        // Use double requestAnimationFrame to ensure DOM has fully updated
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                const container = document.getElementById('messages-container');
-                const streamingEl = document.getElementById('streaming-message');
-                
-                // Scroll the streaming element into view if visible
-                if (streamingEl && !streamingEl.classList.contains('hidden')) {
-                    streamingEl.scrollIntoView({ behavior: 'auto', block: 'end' });
-                } else if (container) {
-                    container.scrollTop = container.scrollHeight;
-                }
-            });
-        });
+        // Use setTimeout to ensure DOM has fully updated after content changes
+        setTimeout(() => {
+            const container = document.getElementById('messages-container');
+            if (container) {
+                container.scrollTop = container.scrollHeight + 1000;
+            }
+        }, 10);
     }
     
     window.sendMessage = async function() {
