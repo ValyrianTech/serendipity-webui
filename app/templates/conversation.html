@@ -2121,9 +2121,10 @@
             noMessages.classList.add('hidden');
             list.classList.remove('hidden');
             streamingEl.classList.remove('hidden');
-            // Scroll to bottom
-            scrollToBottom();
         }
+        
+        // Always scroll to bottom when streaming content updates
+        scrollToBottom();
     }
     
     function updateSidebarAgentInfo() {
