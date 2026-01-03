@@ -326,6 +326,28 @@ export async function transcribeAudio(audioBlob) {
     return response.json();
 }
 
+// Upload profile picture (two-step: upload file, then register with agent)
+export async function uploadProfilePicture(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/UploadProfilePicture/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+// Upload voice file (two-step: upload file, then register with agent)
+export async function uploadVoice(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/UploadVoice/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
 // Archive conversation
 export async function archiveConversation(wif, data) {
     const signedData = await signData(data, wif);

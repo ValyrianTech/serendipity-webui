@@ -224,7 +224,7 @@
 </div>
 
 <script type="module">
-    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, getSettings } from '/static/js/api.js';
+    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
@@ -599,9 +599,15 @@
         }
     };
     
-    // Upload profile picture
+    // Upload profile picture (two-step: upload file, then register with agent)
     window.uploadProfilePicture = async function(input) {
         if (!input.files || !input.files[0]) return;
+        
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            input.value = '';
+            return;
+        }
         
         const file = input.files[0];
         const settings = getSettings();
@@ -609,21 +615,38 @@
         try {
             showToast('Uploading image...', 'info');
             
-            const response = await uploadFile(agentName, file);
+            // Step 1: Upload file to spellbook
+            const uploadResponse = await uploadFile(file);
             
-            if (response.url) {
+            if (!uploadResponse.file_id) {
+                showToast('Upload failed: No file_id returned', 'error');
+                input.value = '';
+                return;
+            }
+            
+            // Step 2: Register the uploaded file as the agent's profile picture
+            const registerResponse = await uploadProfilePicture(window.currentWif, {
+                agent: agentName,
+                file_name: file.name,
+                file_id: uploadResponse.file_id
+            });
+            
+            if (registerResponse.url || registerResponse.profile_picture) {
+                const url = registerResponse.url || registerResponse.profile_picture;
                 // The URL comes with placeholders, use it directly
-                document.getElementById('profile-picture').value = response.url;
+                document.getElementById('profile-picture').value = url;
                 
                 // For preview, replace placeholders
-                const previewUrl = response.url
+                const previewUrl = url
                     .replace('<serverhost>', settings.serverAddress)
                     .replace('<serverport>', settings.serverPort);
                 document.getElementById('profile-preview').src = previewUrl;
                 
-                showToast('Image uploaded successfully', 'success');
+                showToast('Profile picture uploaded successfully', 'success');
             } else {
-                showToast('Upload failed: No URL returned', 'error');
+                showToast('Profile picture registered successfully', 'success');
+                // Reload agent to get the updated profile picture URL
+                loadAgent();
             }
         } catch (e) {
             console.error('Upload failed:', e);
@@ -633,9 +656,15 @@
         input.value = ''; // Reset file input
     };
     
-    // Upload voice file
+    // Upload voice file (two-step: upload file, then register with agent)
     window.uploadVoiceFile = async function(input) {
         if (!input.files || !input.files[0]) return;
+        
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            input.value = '';
+            return;
+        }
         
         const file = input.files[0];
         const voiceName = prompt('Enter a name for this voice (e.g., "narrator"):');
@@ -648,17 +677,27 @@
         try {
             showToast('Uploading voice file...', 'info');
             
-            const response = await uploadFile(agentName, file);
+            // Step 1: Upload file to spellbook
+            const uploadResponse = await uploadFile(file);
             
-            if (response.filename) {
-                // Add voice in format voice_name:filename
-                const voiceEntry = `${voiceName}:${response.filename}`;
-                voices.push(voiceEntry);
-                renderVoices();
-                showToast('Voice file uploaded successfully', 'success');
-            } else {
-                showToast('Upload failed: No filename returned', 'error');
+            if (!uploadResponse.file_id) {
+                showToast('Upload failed: No file_id returned', 'error');
+                input.value = '';
+                return;
             }
+            
+            // Step 2: Register the uploaded file as a voice for the agent
+            const registerResponse = await uploadVoice(window.currentWif, {
+                agent: agentName,
+                voice_name: voiceName,
+                file_id: uploadResponse.file_id
+            });
+            
+            // Add voice to local list in format voice_name:filename
+            const voiceEntry = `${voiceName}:${file.name}`;
+            voices.push(voiceEntry);
+            renderVoices();
+            showToast('Voice file uploaded successfully', 'success');
         } catch (e) {
             console.error('Upload failed:', e);
             showToast('Failed to upload voice file: ' + e.message, 'error');
