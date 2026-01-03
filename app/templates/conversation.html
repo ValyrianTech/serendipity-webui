@@ -1296,8 +1296,17 @@
     }
     
     function scrollToBottom() {
-        const container = document.getElementById('messages-container');
-        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+            const container = document.getElementById('messages-container');
+            const streamingEl = document.getElementById('streaming-message');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+            // Also scroll streaming element into view if visible
+            if (streamingEl && !streamingEl.classList.contains('hidden')) {
+                streamingEl.scrollIntoView({ behavior: 'auto', block: 'end' });
+            }
+        });
     }
     
     window.sendMessage = async function() {
