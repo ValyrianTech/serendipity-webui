@@ -2085,7 +2085,7 @@
                     el.innerHTML = `<pre class="text-red-400">Mermaid error: ${e.message}</pre>`;
                 }
             });
-        } else if (data.message) {
+        } else if (data.message && data.message.trim().length > 0) {
             hasContent = true;
             // Process thinking tags in streaming message - show expanded during streaming
             const processedContent = processThinkingTags(data.message, true);
