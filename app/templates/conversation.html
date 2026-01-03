@@ -66,27 +66,19 @@
             <p class="text-slate-400">Start the conversation by sending a message</p>
         </div>
         
-        <!-- Typing indicator (shown while waiting for model to load) -->
-        <div id="typing-indicator" class="message-card assistant-message hidden">
-            <div class="message-avatar" id="typing-avatar">AI</div>
+        <!-- Streaming message with typing indicator (unified element) -->
+        <div id="streaming-message" class="message-card assistant-message hidden">
+            <div class="message-avatar" id="streaming-avatar">AI</div>
             <div class="message-bubble">
-                <div class="sender" id="typing-sender"></div>
-                <div class="content">
-                    <div class="typing-dots">
+                <div class="sender" id="streaming-sender"></div>
+                <div class="content" id="streaming-content">
+                    <!-- Typing dots shown initially, replaced by content when streaming -->
+                    <div id="typing-dots" class="typing-dots">
                         <span></span>
                         <span></span>
                         <span></span>
                     </div>
                 </div>
-            </div>
-        </div>
-        
-        <!-- Streaming message (real-time from WebSocket) -->
-        <div id="streaming-message" class="message-card assistant-message hidden">
-            <div class="message-avatar" id="streaming-avatar">AI</div>
-            <div class="message-bubble">
-                <div class="sender" id="streaming-sender"></div>
-                <div class="content" id="streaming-content"></div>
             </div>
         </div>
     </div>
@@ -913,11 +905,9 @@
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         const streamingEl = document.getElementById('streaming-message');
-        const typingIndicator = document.getElementById('typing-indicator');
         
-        // Hide streaming message and typing indicator when loading conversation
+        // Hide streaming message when loading conversation
         streamingEl.classList.add('hidden');
-        typingIndicator.classList.add('hidden');
         
         loading.classList.remove('hidden');
         list.classList.add('hidden');
@@ -1009,10 +999,8 @@
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         const streamingEl = document.getElementById('streaming-message');
-        const typingIndicator = document.getElementById('typing-indicator');
         
         streamingEl.classList.add('hidden');
-        typingIndicator.classList.add('hidden');
         
         try {
             const settings = getSettings();
@@ -1375,14 +1363,28 @@
         const newMessageCount = currentMessageCount + 1 + (run ? 1 : 0);
         updateNextSpeaker(newMessageCount);
         
-        // Show typing indicator if we're expecting a response
+        // Show streaming element with typing dots if we're expecting a response
         if (run) {
-            const typingIndicator = document.getElementById('typing-indicator');
-            const typingSender = document.getElementById('typing-sender');
-            const typingAvatar = document.getElementById('typing-avatar');
-            typingSender.textContent = respondAs;
-            typingAvatar.textContent = respondAs.substring(0, 2).toUpperCase();
-            typingIndicator.classList.remove('hidden');
+            const streamingEl = document.getElementById('streaming-message');
+            const streamingSender = document.getElementById('streaming-sender');
+            const streamingAvatar = document.getElementById('streaming-avatar');
+            const streamingContent = document.getElementById('streaming-content');
+            const typingDots = document.getElementById('typing-dots');
+            
+            // Reset to typing dots state
+            streamingSender.textContent = respondAs;
+            streamingAvatar.textContent = respondAs.substring(0, 2).toUpperCase();
+            streamingContent.innerHTML = '';
+            streamingContent.appendChild(typingDots);
+            typingDots.classList.remove('hidden');
+            
+            // Update style based on sender
+            const senderLower = respondAs.toLowerCase();
+            const userName = document.getElementById('sender-name')?.value || '';
+            const isCurrentUser = senderLower === userName.toLowerCase();
+            streamingEl.className = isCurrentUser ? 'message-card user-message' : 'message-card assistant-message';
+            
+            streamingEl.classList.remove('hidden');
             setGeneratingState(true);
             scrollToBottom();
         }
@@ -1422,7 +1424,6 @@
             console.error('Failed to send message:', e);
             showToast('Failed to send message: ' + e.message, 'error');
             document.getElementById('streaming-message').classList.add('hidden');
-            document.getElementById('typing-indicator').classList.add('hidden');
             setGeneratingState(false);
         }
     };
@@ -1471,8 +1472,7 @@
                 conversationId: conversationId
             });
             
-            // Hide typing indicator and streaming message
-            document.getElementById('typing-indicator').classList.add('hidden');
+            // Hide streaming message
             document.getElementById('streaming-message').classList.add('hidden');
             
             setGeneratingState(false);
@@ -1666,9 +1666,15 @@
             closeMessageActionsDialog();
             showToast('Continuing message...', 'info');
             
-            // Show typing indicator and stop button
-            const typingIndicator = document.getElementById('typing-indicator');
-            typingIndicator.classList.remove('hidden');
+            // Show streaming element with typing dots
+            const streamingEl = document.getElementById('streaming-message');
+            const streamingContent = document.getElementById('streaming-content');
+            const typingDots = document.getElementById('typing-dots');
+            streamingContent.innerHTML = '';
+            streamingContent.appendChild(typingDots);
+            typingDots.classList.remove('hidden');
+            streamingEl.className = 'message-card assistant-message';
+            streamingEl.classList.remove('hidden');
             setGeneratingState(true);
             scrollToBottom();
             
@@ -1688,7 +1694,7 @@
         } catch (e) {
             showToast('Failed to continue: ' + e.message, 'error');
             setGeneratingState(false);
-            document.getElementById('typing-indicator').classList.add('hidden');
+            document.getElementById('streaming-message').classList.add('hidden');
         }
     };
     
@@ -1709,9 +1715,15 @@
             closeMessageActionsDialog();
             showToast('Regenerating message...', 'info');
             
-            // Show typing indicator and stop button
-            const typingIndicator = document.getElementById('typing-indicator');
-            typingIndicator.classList.remove('hidden');
+            // Show streaming element with typing dots
+            const streamingEl = document.getElementById('streaming-message');
+            const streamingContent = document.getElementById('streaming-content');
+            const typingDots = document.getElementById('typing-dots');
+            streamingContent.innerHTML = '';
+            streamingContent.appendChild(typingDots);
+            typingDots.classList.remove('hidden');
+            streamingEl.className = 'message-card assistant-message';
+            streamingEl.classList.remove('hidden');
             setGeneratingState(true);
             scrollToBottom();
             
@@ -1731,7 +1743,7 @@
         } catch (e) {
             showToast('Failed to regenerate: ' + e.message, 'error');
             setGeneratingState(false);
-            document.getElementById('typing-indicator').classList.add('hidden');
+            document.getElementById('streaming-message').classList.add('hidden');
         }
     };
     
@@ -2021,16 +2033,18 @@
         const senderEl = document.getElementById('streaming-sender');
         const contentEl = document.getElementById('streaming-content');
         const avatarEl = document.getElementById('streaming-avatar');
-        const typingIndicator = document.getElementById('typing-indicator');
+        const typingDots = document.getElementById('typing-dots');
         const list = document.getElementById('messages-list');
         const noMessages = document.getElementById('no-messages');
         
         // Check for end of message
         if (data.message === '<|end of message|>') {
             console.log('WebSocket: End of message received');
-            typingIndicator.classList.add('hidden');
             streamingEl.classList.add('hidden');
             streamingEl.className = 'message-card assistant-message hidden'; // Reset class
+            // Reset content to typing dots for next time
+            contentEl.innerHTML = '';
+            contentEl.appendChild(typingDots);
             streamingParts = [];
             setGeneratingState(false);
             // Reload conversation to get the final message and trigger auto-play
@@ -2102,9 +2116,9 @@
             }
         }
         
-        // Only show streaming message and hide typing indicator if there's actual content
+        // Only show streaming content (hide typing dots) if there's actual content
         if (hasContent) {
-            typingIndicator.classList.add('hidden');
+            typingDots.classList.add('hidden');
             noMessages.classList.add('hidden');
             list.classList.remove('hidden');
             streamingEl.classList.remove('hidden');
