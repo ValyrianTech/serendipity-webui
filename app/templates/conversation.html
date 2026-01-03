@@ -1295,12 +1295,29 @@
         return div.innerHTML;
     }
     
-    function scrollToBottom() {
+    // Track if user has manually scrolled up
+    let userHasScrolledUp = false;
+    
+    // Listen for scroll events to detect manual scrolling
+    document.getElementById('messages-container')?.addEventListener('scroll', () => {
+        const container = document.getElementById('messages-container');
+        if (container) {
+            // Consider "near bottom" if within 150px of the bottom
+            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+            userHasScrolledUp = !isNearBottom;
+        }
+    });
+    
+    function scrollToBottom(force = false) {
         // Use setTimeout to ensure DOM has fully updated after content changes
         setTimeout(() => {
             const container = document.getElementById('messages-container');
             if (container) {
-                container.scrollTop = container.scrollHeight + 1000;
+                // Only auto-scroll if user hasn't manually scrolled up, or if forced
+                if (force || !userHasScrolledUp) {
+                    container.scrollTop = container.scrollHeight + 1000;
+                    userHasScrolledUp = false;
+                }
             }
         }, 10);
     }
@@ -1360,7 +1377,7 @@
         if (content) {
             const userMsg = createMessageElement({ sender: sender, content: content }, false);
             list.appendChild(userMsg);
-            scrollToBottom();
+            scrollToBottom(true);  // Force scroll when user sends a message
         }
         
         // Update next speaker: +1 for user message, +1 more if AI will respond
@@ -1392,7 +1409,7 @@
             
             streamingEl.classList.remove('hidden');
             setGeneratingState(true);
-            scrollToBottom();
+            scrollToBottom(true);  // Force scroll when starting AI response
         }
         
         // Connect to WebSocket if not already connected (for streaming)
@@ -1676,7 +1693,7 @@
             streamingEl.className = 'message-card assistant-message';
             streamingEl.classList.remove('hidden');
             setGeneratingState(true);
-            scrollToBottom();
+            scrollToBottom(true);  // Force scroll when continuing
             
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
@@ -1726,7 +1743,7 @@
             streamingEl.className = 'message-card assistant-message';
             streamingEl.classList.remove('hidden');
             setGeneratingState(true);
-            scrollToBottom();
+            scrollToBottom(true);  // Force scroll when regenerating
             
             await editConversation(window.currentWif, {
                 conversation_id: conversationId,
@@ -2122,7 +2139,10 @@
         
         // Only show streaming content (hide typing dots) if there's actual content
         if (hasContent) {
-            typingDots.classList.add('hidden');
+            // typingDots may be null if content was already replaced
+            if (typingDots) {
+                typingDots.classList.add('hidden');
+            }
             noMessages.classList.add('hidden');
             list.classList.remove('hidden');
             streamingEl.classList.remove('hidden');
