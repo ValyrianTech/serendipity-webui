@@ -1369,14 +1369,16 @@
             const streamingSender = document.getElementById('streaming-sender');
             const streamingAvatar = document.getElementById('streaming-avatar');
             const streamingContent = document.getElementById('streaming-content');
-            const typingDots = document.getElementById('typing-dots');
             
             // Reset to typing dots state
             streamingSender.textContent = respondAs;
             streamingAvatar.textContent = respondAs.substring(0, 2).toUpperCase();
-            streamingContent.innerHTML = '';
-            streamingContent.appendChild(typingDots);
-            typingDots.classList.remove('hidden');
+            // Reset content to typing dots
+            streamingContent.innerHTML = `<div id="typing-dots" class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>`;
             
             // Update style based on sender
             const senderLower = respondAs.toLowerCase();
@@ -1669,10 +1671,11 @@
             // Show streaming element with typing dots
             const streamingEl = document.getElementById('streaming-message');
             const streamingContent = document.getElementById('streaming-content');
-            const typingDots = document.getElementById('typing-dots');
-            streamingContent.innerHTML = '';
-            streamingContent.appendChild(typingDots);
-            typingDots.classList.remove('hidden');
+            streamingContent.innerHTML = `<div id="typing-dots" class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>`;
             streamingEl.className = 'message-card assistant-message';
             streamingEl.classList.remove('hidden');
             setGeneratingState(true);
@@ -1718,10 +1721,11 @@
             // Show streaming element with typing dots
             const streamingEl = document.getElementById('streaming-message');
             const streamingContent = document.getElementById('streaming-content');
-            const typingDots = document.getElementById('typing-dots');
-            streamingContent.innerHTML = '';
-            streamingContent.appendChild(typingDots);
-            typingDots.classList.remove('hidden');
+            streamingContent.innerHTML = `<div id="typing-dots" class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>`;
             streamingEl.className = 'message-card assistant-message';
             streamingEl.classList.remove('hidden');
             setGeneratingState(true);
@@ -2043,8 +2047,11 @@
             streamingEl.classList.add('hidden');
             streamingEl.className = 'message-card assistant-message hidden'; // Reset class
             // Reset content to typing dots for next time
-            contentEl.innerHTML = '';
-            contentEl.appendChild(typingDots);
+            contentEl.innerHTML = `<div id="typing-dots" class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>`;
             streamingParts = [];
             setGeneratingState(false);
             // Reload conversation to get the final message and trigger auto-play
