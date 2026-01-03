@@ -2057,11 +2057,15 @@
         // Update content - render parts if available, otherwise use message
         let hasContent = false;
         if (data.parts && data.parts.length > 0) {
-            hasContent = true;
             streamingParts = data.parts;
             let html = '';
             data.parts.forEach(part => {
                 html += renderMessagePart(part, true); // isStreaming = true
+                // Check if part has actual visible content (not just empty or thinking header)
+                const content = part.content || '';
+                if (content.trim().length > 0) {
+                    hasContent = true;
+                }
             });
             contentEl.innerHTML = html;
             
