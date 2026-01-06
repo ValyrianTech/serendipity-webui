@@ -23,6 +23,29 @@
     width: 16rem;
 }
 
+/* Right settings panel responsive behavior */
+.settings-panel-desktop {
+    display: none;
+    flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+    .settings-panel-desktop {
+        display: flex;
+    }
+}
+
+/* Mobile settings panel open state */
+.settings-panel-desktop.settings-open {
+    display: flex;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    width: 20rem;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;
