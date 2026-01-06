@@ -90,9 +90,9 @@
             <div class="flex flex-wrap gap-2" id="staged-files-list"></div>
         </div>
         
-        <div class="flex items-end gap-3">
+        <div class="flex flex-wrap items-end gap-3">
             <!-- File upload button -->
-            <button onclick="document.getElementById('file-input').click()" class="p-3 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700">
+            <button onclick="document.getElementById('file-input').click()" class="p-3 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 flex-shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
                 </svg>
@@ -100,7 +100,7 @@
             <input type="file" id="file-input" class="hidden" multiple onchange="handleFileSelect(event)">
             
             <!-- Message input -->
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-2">
                     <span class="text-sm text-slate-400">Sending as:</span>
                     <input type="text" id="sender-name" value="User" 
@@ -108,8 +108,8 @@
                 </div>
                 <div class="flex gap-2">
                     <textarea id="message-input" rows="1" placeholder="Type your message..."
-                              class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none"></textarea>
-                    <button id="mic-btn" onclick="toggleRecording()" class="p-3 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 transition-colors" title="Record voice">
+                              class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 resize-none min-w-0"></textarea>
+                    <button id="mic-btn" onclick="toggleRecording()" class="p-3 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 transition-colors flex-shrink-0" title="Record voice">
                         <svg id="mic-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
                         </svg>
@@ -122,7 +122,7 @@
             </div>
             
             <!-- Respond as selector -->
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1 flex-shrink-0">
                 <label class="text-xs text-slate-400">Respond as</label>
                 <select id="respond-as" class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm">
                     <option value="{{ agent_name }}">{{ agent_name }}</option>
@@ -130,20 +130,20 @@
             </div>
             
             <!-- Run toggle -->
-            <label class="flex items-center gap-2 cursor-pointer">
+            <label class="flex items-center gap-2 cursor-pointer flex-shrink-0">
                 <input type="checkbox" id="run-toggle" checked class="w-4 h-4 rounded">
                 <span class="text-sm text-slate-400">Run</span>
             </label>
             
             <!-- Send button -->
-            <button onclick="sendMessage()" id="send-btn" class="btn-primary px-4 py-3 w-12 h-12 flex items-center justify-center">
+            <button onclick="sendMessage()" id="send-btn" class="btn-primary px-4 py-3 w-12 h-12 flex items-center justify-center flex-shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                 </svg>
             </button>
             
             <!-- Stop generating button (hidden by default) -->
-            <button onclick="stopGenerating()" id="stop-btn" class="hidden px-4 py-3 w-12 h-12 flex items-center justify-center rounded-lg transition-colors" style="background-color: #dc2626;" title="Stop generating">
+            <button onclick="stopGenerating()" id="stop-btn" class="hidden px-4 py-3 w-12 h-12 flex items-center justify-center rounded-lg transition-colors flex-shrink-0" style="background-color: #dc2626;" title="Stop generating">
                 <svg class="w-5 h-5" fill="white" viewBox="0 0 24 24">
                     <rect x="5" y="5" width="14" height="14" rx="2"/>
                 </svg>
