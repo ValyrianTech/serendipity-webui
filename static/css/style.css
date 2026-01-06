@@ -12,6 +12,17 @@
     }
 }
 
+/* Mobile sidebar open state */
+.sidebar-desktop.sidebar-open {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    width: 16rem;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;
