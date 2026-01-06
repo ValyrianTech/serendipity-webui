@@ -358,20 +358,52 @@
             
             const response = await startWorkflow(window.currentWif, {
                 agent: agentName,
-                folder_name: settings.folderName,
+                folder_name: 'workflows',
                 workflow_id: workflowId,
                 workflow_input: workflowInput,
-                conversation_id: '',
-                task_id: ''
+                conversation_id: ''
             });
             
             closeStartWorkflowDialog();
             
             if (response.conversation_id) {
+                // Update app state like Flutter Flow does
+                const conversation = response.conversation || {};
+                
+                localStorage.setItem('serendipity_folder_name', 'workflows');
+                saveSettings({ folderName: 'workflows' });
+                
+                // Store conversation state
+                if (conversation.enabled_tools) {
+                    let enabledTools = conversation.enabled_tools;
+                    if (!enabledTools.includes('workflow')) {
+                        enabledTools.push('workflow');
+                    }
+                    localStorage.setItem('serendipity_enabled_tools', JSON.stringify(enabledTools));
+                }
+                if (conversation.enabled_roles) {
+                    localStorage.setItem('serendipity_enabled_roles', JSON.stringify(conversation.enabled_roles));
+                }
+                if (conversation.model_name) {
+                    localStorage.setItem('serendipity_model_name', conversation.model_name);
+                }
+                if (conversation.temperature !== undefined) {
+                    localStorage.setItem('serendipity_temperature', conversation.temperature);
+                }
+                if (conversation.user_name) {
+                    localStorage.setItem('serendipity_user_name', conversation.user_name);
+                }
+                if (conversation.open_files) {
+                    localStorage.setItem('serendipity_open_files', JSON.stringify(conversation.open_files));
+                }
+                if (conversation.participants) {
+                    localStorage.setItem('serendipity_participants', JSON.stringify(conversation.participants));
+                }
+                
                 showToast('Workflow started!', 'success');
                 window.location.href = `/agent/${encodeURIComponent(agentName)}/conversation?conversation_id=${encodeURIComponent(response.conversation_id)}`;
             } else {
-                showToast('Workflow started', 'success');
+                showToast('Failed to start workflow', 'error');
             }
             
         } catch (e) {
