@@ -4,7 +4,7 @@ import { signData, wifToAddress } from './bitcoin.js';
 // Get settings from localStorage
 export function getSettings() {
     return {
-        serverAddress: localStorage.getItem('serendipity_server_address') || '192.168.0.124',
+        serverAddress: localStorage.getItem('serendipity_server_address') || 'localhost',
         serverPort: localStorage.getItem('serendipity_server_port') || '42069',
         websocketPort: localStorage.getItem('serendipity_websocket_port') || '8765',
         agentName: localStorage.getItem('serendipity_agent_name') || 'Serendipity',

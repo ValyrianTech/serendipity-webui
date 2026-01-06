@@ -157,13 +157,36 @@
     
     <!-- Setup WIF Modal -->
     <div id="setup-wif-modal" class="modal-backdrop hidden">
-        <div class="modal-content">
-            <h2 class="text-xl font-bold mb-4">Setup WIF Key</h2>
-            <p class="text-slate-400 mb-4">Enter your WIF key or generate a new one. Optionally protect it with a password.</p>
+        <div class="modal-content max-w-lg">
+            <h2 class="text-xl font-bold mb-4">Initial Setup</h2>
+            <p class="text-slate-400 mb-4">Configure your server connection and WIF key to get started.</p>
             
+            <!-- Server Settings -->
+            <div class="mb-6 p-4 bg-slate-800/50 rounded-lg">
+                <h3 class="text-sm font-semibold text-slate-300 mb-3">Server Connection</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="sm:col-span-1">
+                        <label class="text-xs text-slate-400 block mb-1">Server Address</label>
+                        <input type="text" id="setup-server-address" value="localhost" placeholder="localhost"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Server Port</label>
+                        <input type="text" id="setup-server-port" value="42069" placeholder="42069"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">WebSocket Port</label>
+                        <input type="text" id="setup-websocket-port" value="8765" placeholder="8765"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- WIF Key Settings -->
             <div class="mb-4">
                 <label class="text-sm text-slate-400 block mb-2">WIF Key</label>
-                <textarea id="setup-wif-key" rows="2" placeholder="Enter your WIF key..."
+                <textarea id="setup-wif-key" rows="2" placeholder="Enter your WIF key or click Generate New..."
                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono text-sm"></textarea>
             </div>
             
@@ -180,7 +203,7 @@
             </div>
             
             <div class="flex gap-3">
-                <button onclick="saveSetupWif()" class="btn-primary flex-1">Save Key</button>
+                <button onclick="saveSetupWif()" class="btn-primary flex-1">Save & Continue</button>
                 <button onclick="generateNewWif()" class="btn-secondary">Generate New</button>
             </div>
         </div>
@@ -389,12 +412,24 @@
             const wif = document.getElementById('setup-wif-key').value.trim();
             const password = document.getElementById('setup-password').value;
             
+            // Get server settings
+            const serverAddress = document.getElementById('setup-server-address').value.trim() || 'localhost';
+            const serverPort = document.getElementById('setup-server-port').value.trim() || '42069';
+            const websocketPort = document.getElementById('setup-websocket-port').value.trim() || '8765';
+            
             if (!wif || wif.length < 40) {
                 showToast('Please enter a valid WIF key', 'error');
                 return;
             }
             
             try {
+                // Save server settings
+                saveSettings({
+                    serverAddress: serverAddress,
+                    serverPort: serverPort,
+                    websocketPort: websocketPort
+                });
+                
                 if (password) {
                     const encrypted = await encryptWif(wif, password);
                     saveWif(null, true, encrypted);
@@ -409,10 +444,10 @@
                     modal.classList.add('hidden');
                 }
                 updateWifStatus(true);
-                showToast('Key saved successfully', 'success');
+                showToast('Setup complete!', 'success');
             } catch (e) {
-                console.error('Failed to save WIF:', e);
-                showToast('Failed to save key: ' + e.message, 'error');
+                console.error('Failed to save setup:', e);
+                showToast('Failed to save: ' + e.message, 'error');
             }
         };
         
