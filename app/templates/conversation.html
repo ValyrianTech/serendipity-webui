@@ -483,24 +483,28 @@
     let playedAudioMessages = new Set();
     let audioUnlocked = false;
     
-    // Unlock audio playback on first user interaction (needed for Firefox)
+    // Unlock audio playback on first user interaction (needed for some browsers)
     function unlockAudio() {
         if (audioUnlocked) return;
         
-        // Create and play a silent audio to unlock autoplay
-        const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
-        silentAudio.volume = 0;
-        silentAudio.play().then(() => {
+        // Use AudioContext to unlock audio - more reliable than silent audio
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const buffer = audioContext.createBuffer(1, 1, 22050);
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
             audioUnlocked = true;
-            console.log('Audio playback unlocked');
-        }).catch(() => {
-            // Ignore errors - will try again on next interaction
-        });
+        } catch (e) {
+            // Fallback - just mark as unlocked after user interaction
+            audioUnlocked = true;
+        }
     }
     
     // Add unlock listeners for various user interactions
     ['click', 'touchstart', 'keydown'].forEach(event => {
-        document.addEventListener(event, unlockAudio, { once: false, passive: true });
+        document.addEventListener(event, unlockAudio, { once: true, passive: true });
     });
     
     // Voice recording state
@@ -751,7 +755,8 @@
     
     function autoPlayLastMessage(messageId, sender, content) {
         const settings = getSettings();
-        if (!settings.autoPlayVoice || !settings.activeVoice || !settings.openvoiceServer) return;
+        // Only require autoPlayVoice and openvoiceServer - voice is derived from sender name
+        if (!settings.autoPlayVoice || !settings.openvoiceServer) return;
         if (playedAudioMessages.has(messageId)) return;
         
         // Auto-play any message type
