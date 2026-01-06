@@ -396,11 +396,21 @@ input:hover:not(:focus), textarea:hover:not(:focus), select:hover:not(:focus) {
 /* Custom select styling */
 select {
     appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: var(--dark-bg-base) !important;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
     background-repeat: no-repeat !important;
     background-position: right 0.75rem center !important;
     background-size: 1.25rem !important;
     padding-right: 2.5rem !important;
+    color: inherit;
+    color-scheme: dark;
+}
+
+select option {
+    background-color: var(--dark-bg-elevated);
+    color: var(--dark-text-primary);
 }
 
 /* Custom checkbox styling */
@@ -1085,8 +1095,18 @@ span.px-2.py-1.bg-slate-700.rounded:hover {
 .light-mode textarea,
 .light-mode select {
     background: #ffffff !important;
+    background-color: #ffffff !important;
     border-color: #e2e8f0 !important;
     color: #0f172a !important;
+}
+
+.light-mode select {
+    color-scheme: light;
+}
+
+.light-mode select option {
+    background-color: #ffffff;
+    color: #0f172a;
 }
 
 .light-mode input:focus,
