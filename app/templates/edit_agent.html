@@ -255,8 +255,15 @@
             document.getElementById('agent-name').value = agentData.name || agentName;
             document.getElementById('description').value = agentData.description || '';
             document.getElementById('user-name').value = agentData.user_name || '';
-            document.getElementById('profile-picture').value = agentData.profile_picture || '';
-            document.getElementById('profile-preview').src = agentData.profile_picture || '';
+            // Profile picture URL - keep placeholders in input for portability, resolve only for preview
+            const profilePicUrl = agentData.profile_picture || '';
+            document.getElementById('profile-picture').value = profilePicUrl;
+            // For preview, replace placeholders with actual server settings
+            const settings = getSettings();
+            const previewUrl = profilePicUrl
+                .replace('<serverhost>', settings.serverAddress)
+                .replace('<serverport>', settings.serverPort);
+            document.getElementById('profile-preview').src = previewUrl;
             document.getElementById('temperature').value = agentData.temperature || 0;
             document.getElementById('temp-value').textContent = agentData.temperature || 0;
             document.getElementById('memory').value = agentData.memory || 0;
