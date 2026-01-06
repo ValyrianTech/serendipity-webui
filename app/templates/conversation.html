@@ -606,38 +606,9 @@
         try {
             const data = await getAvailableVoices(agentName);
             availableVoices = data.voices || [];
-            
-            const voiceSelect = document.getElementById('voice-select');
-            voiceSelect.innerHTML = '<option value="">No voice selected</option>';
-            
-            availableVoices.forEach(voice => {
-                const option = document.createElement('option');
-                option.value = voice;
-                option.textContent = voice.replace(/\.(mp3|wav)$/i, '');
-                voiceSelect.appendChild(option);
-            });
-            
-            // Restore saved voice selection
-            const settings = getSettings();
-            if (settings.activeVoice && availableVoices.includes(settings.activeVoice)) {
-                voiceSelect.value = settings.activeVoice;
-            }
-            
-            // Restore auto-play setting
-            document.getElementById('auto-play-voice').checked = settings.autoPlayVoice;
-            
-            // Save voice selection on change
-            voiceSelect.addEventListener('change', () => {
-                saveSettings({ activeVoice: voiceSelect.value });
-            });
-            
-            // Save auto-play setting on change
-            document.getElementById('auto-play-voice').addEventListener('change', (e) => {
-                saveSettings({ autoPlayVoice: e.target.checked });
-            });
-            
         } catch (e) {
-            console.error('Failed to load available voices:', e);
+            // Voice loading is optional - TTS uses sender name as voice
+            console.debug('Voice loading skipped:', e.message);
         }
     }
     
