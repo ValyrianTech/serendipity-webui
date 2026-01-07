@@ -271,8 +271,8 @@ body {
     background: var(--dark-bg-elevated);
     color: var(--dark-text-muted);
     font-size: 0.875rem;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius-full);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--dark-border-subtle);
 }
 
