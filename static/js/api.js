@@ -348,13 +348,12 @@ export async function uploadVoice(wif, data) {
     return response.json();
 }
 
-// Archive conversation
-export async function archiveConversation(wif, data) {
-    const signedData = await signData(data, wif);
-    const response = await fetch(`${getBaseUrl()}/api/ArchiveConversation/message`, {
+// Archive conversation (regular HTTP POST, no signing required)
+export async function archiveConversation(data) {
+    const response = await fetch(`${getBaseUrl()}/api/ArchiveConversation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(signedData)
+        body: JSON.stringify(data)
     });
     return response.json();
 }
@@ -392,13 +391,12 @@ export async function updateKnowledgeBase(wif, data) {
     return response.json();
 }
 
-// Move to folder
-export async function moveToFolder(wif, data) {
-    const signedData = await signData(data, wif);
-    const response = await fetch(`${getBaseUrl()}/api/MoveToFolder/message`, {
+// Move to folder (regular HTTP POST, no signing required)
+export async function moveToFolder(data) {
+    const response = await fetch(`${getBaseUrl()}/api/MoveToFolder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(signedData)
+        body: JSON.stringify(data)
     });
     return response.json();
 }
