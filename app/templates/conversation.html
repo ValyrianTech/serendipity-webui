@@ -682,34 +682,77 @@
         }
         
         playingMessageId = messageId;
-        updatePlayButtonState(messageId, true);
+        updatePlayButtonState(messageId, true, 'loading');
+        showToast('Generating audio...', 'info');
         
-        currentAudio = new Audio(ttsUrl);
+        // Show periodic updates for long generation
+        const progressInterval = setInterval(() => {
+            if (playingMessageId === messageId) {
+                showToast('Still generating audio...', 'info');
+            } else {
+                clearInterval(progressInterval);
+            }
+        }, 15000);
         
-        // Add canplaythrough event to ensure audio is ready
-        currentAudio.addEventListener('canplaythrough', () => {
-            console.log('Audio ready to play');
-        });
-        
-        currentAudio.play().catch(e => {
-            console.error('Failed to play audio:', e);
-            console.error('TTS URL was:', ttsUrl);
-            showToast('Failed to play audio: ' + e.message, 'error');
-            playingMessageId = null;
-            updatePlayButtonState(messageId, false);
-        });
-        
-        currentAudio.onended = () => {
-            playingMessageId = null;
-            updatePlayButtonState(messageId, false);
-            playedAudioMessages.add(messageId);
-        };
-        
-        currentAudio.onerror = () => {
-            showToast('Audio playback error', 'error');
-            playingMessageId = null;
-            updatePlayButtonState(messageId, false);
-        };
+        // Fetch through local proxy (handles long timeouts, no CORS issues)
+        fetch(ttsUrl)
+            .then(async response => {
+                clearInterval(progressInterval);
+                if (!response.ok) {
+                    // Try to get error message from JSON response
+                    try {
+                        const err = await response.json();
+                        throw new Error(err.error || `Server returned ${response.status}`);
+                    } catch {
+                        throw new Error(`Server returned ${response.status}`);
+                    }
+                }
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('json')) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'TTS server returned error');
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Check if playback was cancelled while fetching
+                if (playingMessageId !== messageId) {
+                    return;
+                }
+                
+                const audioUrl = URL.createObjectURL(blob);
+                currentAudio = new Audio(audioUrl);
+                
+                currentAudio.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    playingMessageId = null;
+                    updatePlayButtonState(messageId, false);
+                    playedAudioMessages.add(messageId);
+                };
+                
+                currentAudio.onerror = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    showToast('Audio playback error', 'error');
+                    playingMessageId = null;
+                    updatePlayButtonState(messageId, false);
+                };
+                
+                updatePlayButtonState(messageId, true, 'playing');
+                currentAudio.play().catch(e => {
+                    console.error('Failed to play audio:', e);
+                    URL.revokeObjectURL(audioUrl);
+                    showToast('Failed to play audio: ' + e.message, 'error');
+                    playingMessageId = null;
+                    updatePlayButtonState(messageId, false);
+                });
+            })
+            .catch(e => {
+                clearInterval(progressInterval);
+                console.error('Failed to fetch audio:', e);
+                showToast('Failed to generate audio: ' + e.message, 'error');
+                playingMessageId = null;
+                updatePlayButtonState(messageId, false);
+            });
     };
     
     window.stopMessageAudio = function() {
@@ -723,7 +766,7 @@
         }
     };
     
-    function updatePlayButtonState(messageId, isPlaying) {
+    function updatePlayButtonState(messageId, isPlaying, state = 'playing') {
         const messageCard = document.querySelector(`[data-message-id="${messageId}"]`);
         const btn = messageCard?.querySelector('.play-audio-btn');
         
@@ -744,11 +787,19 @@
         
         if (btn) {
             const icon = btn.querySelector('svg');
-            if (isPlaying) {
+            if (isPlaying && state === 'loading') {
+                // Loading spinner icon
                 btn.classList.add('text-indigo-400');
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" class="animate-spin origin-center"/>';
+                btn.classList.add('animate-pulse');
+            } else if (isPlaying) {
+                // Stop icon
+                btn.classList.add('text-indigo-400');
+                btn.classList.remove('animate-pulse');
                 icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>';
             } else {
-                btn.classList.remove('text-indigo-400');
+                // Play icon
+                btn.classList.remove('text-indigo-400', 'animate-pulse');
                 icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>';
             }
         }

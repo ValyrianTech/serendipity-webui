@@ -434,18 +434,19 @@ export async function editWorkflowStep(wif, data) {
     return response.json();
 }
 
-// Generate TTS audio URL from OpenVoice server
+// Generate TTS audio URL using local proxy to avoid browser timeouts
 export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'default', language = 'English') {
     if (!openvoiceServer || !text || !voice) return null;
-    // Remove trailing slash from server URL to avoid double slashes
-    const serverUrl = openvoiceServer.replace(/\/+$/, '');
-    const encodedText = encodeURIComponent(text);
-    const encodedVoice = encodeURIComponent(voice);
-    let url = `${serverUrl}/synthesize_speech/?voice=${encodedVoice}&text=${encodedText}`;
-    if (style) url += `&style=${encodeURIComponent(style)}`;
-    if (language) url += `&language=${encodeURIComponent(language)}`;
-    if (speed && speed !== 1.0) url += `&speed=${speed}`;
-    return url;
+    // Use local proxy endpoint to handle slow TTS generation
+    const params = new URLSearchParams({
+        server: openvoiceServer,
+        voice: voice,
+        text: text,
+        style: style || 'default',
+        language: language || 'English'
+    });
+    if (speed && speed !== 1.0) params.append('speed', speed);
+    return `/api/tts-proxy?${params.toString()}`;
 }
 
 // WebSocket connection for streaming
