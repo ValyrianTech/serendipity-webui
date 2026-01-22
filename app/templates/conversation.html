@@ -634,6 +634,173 @@
         return sender;
     }
     
+    // Split text into chunks for TTS to avoid timeouts
+    // Splits on paragraph breaks, then sentences if still too long
+    const MAX_CHUNK_CHARS = 500;
+    
+    function splitTextIntoChunks(text) {
+        const chunks = [];
+        
+        // First split by paragraphs (double newline)
+        const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+        
+        for (const para of paragraphs) {
+            if (para.length <= MAX_CHUNK_CHARS) {
+                chunks.push(para.trim());
+            } else {
+                // Split long paragraphs by sentences
+                const sentences = para.match(/[^.!?]+[.!?]+/g) || [para];
+                let currentChunk = '';
+                
+                for (const sentence of sentences) {
+                    if ((currentChunk + sentence).length <= MAX_CHUNK_CHARS) {
+                        currentChunk += sentence;
+                    } else {
+                        if (currentChunk.trim()) {
+                            chunks.push(currentChunk.trim());
+                        }
+                        // If single sentence is too long, just add it anyway
+                        currentChunk = sentence;
+                    }
+                }
+                if (currentChunk.trim()) {
+                    chunks.push(currentChunk.trim());
+                }
+            }
+        }
+        
+        return chunks.filter(c => c.length > 0);
+    }
+    
+    // Chunked audio playback state with prefetching
+    let prefetchedBlobs = [];  // Queue of prefetched audio blobs
+    let currentPlayIndex = 0;  // Index of chunk currently playing
+    let nextFetchIndex = 0;    // Index of next chunk to fetch
+    let isFetching = false;    // Is a fetch in progress
+    
+    async function fetchAudioChunk(ttsUrl) {
+        const response = await fetch(ttsUrl);
+        if (!response.ok) {
+            try {
+                const err = await response.json();
+                throw new Error(err.error || `Server returned ${response.status}`);
+            } catch {
+                throw new Error(`Server returned ${response.status}`);
+            }
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('json')) {
+            const err = await response.json();
+            throw new Error(err.error || 'TTS server returned error');
+        }
+        return response.blob();
+    }
+    
+    // Prefetch next chunks while audio is playing
+    async function prefetchChunks(messageId, openvoiceServer, voice, chunks) {
+        if (isFetching || playingMessageId !== messageId) return;
+        if (nextFetchIndex >= chunks.length) return;
+        
+        isFetching = true;
+        const fetchIndex = nextFetchIndex;
+        nextFetchIndex++;
+        
+        const chunkText = chunks[fetchIndex];
+        const ttsUrl = getTTSUrl(openvoiceServer, chunkText, voice);
+        
+        console.log(`Prefetching chunk ${fetchIndex + 1}/${chunks.length}`);
+        
+        try {
+            const blob = await fetchAudioChunk(ttsUrl);
+            
+            // Check if cancelled while fetching
+            if (playingMessageId !== messageId) {
+                isFetching = false;
+                return;
+            }
+            
+            prefetchedBlobs[fetchIndex] = blob;
+            isFetching = false;
+            
+            // Try to play if this was the chunk we were waiting for
+            if (fetchIndex === currentPlayIndex && !currentAudio) {
+                playFromQueue(messageId, openvoiceServer, voice, chunks);
+            }
+            
+            // Continue prefetching next chunk
+            prefetchChunks(messageId, openvoiceServer, voice, chunks);
+            
+        } catch (e) {
+            isFetching = false;
+            console.error(`Failed to prefetch chunk ${fetchIndex + 1}:`, e);
+            // Store error so playFromQueue can handle it
+            prefetchedBlobs[fetchIndex] = { error: e };
+            // Continue trying to prefetch remaining chunks
+            prefetchChunks(messageId, openvoiceServer, voice, chunks);
+        }
+    }
+    
+    // Play from the prefetched queue
+    async function playFromQueue(messageId, openvoiceServer, voice, chunks) {
+        if (playingMessageId !== messageId) return;
+        
+        if (currentPlayIndex >= chunks.length) {
+            // All done
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+            playedAudioMessages.add(messageId);
+            return;
+        }
+        
+        const blob = prefetchedBlobs[currentPlayIndex];
+        
+        if (!blob) {
+            // Not yet fetched, show loading and wait
+            updatePlayButtonState(messageId, true, 'loading');
+            return;
+        }
+        
+        if (blob.error) {
+            // Fetch failed for this chunk
+            showToast('Failed to generate audio: ' + blob.error.message, 'error');
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+            return;
+        }
+        
+        console.log(`Playing chunk ${currentPlayIndex + 1}/${chunks.length}`);
+        
+        const audioUrl = URL.createObjectURL(blob);
+        currentAudio = new Audio(audioUrl);
+        
+        currentAudio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            currentAudio = null;
+            prefetchedBlobs[currentPlayIndex] = null;  // Free memory
+            currentPlayIndex++;
+            playFromQueue(messageId, openvoiceServer, voice, chunks);
+        };
+        
+        currentAudio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            showToast('Audio playback error', 'error');
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+        };
+        
+        updatePlayButtonState(messageId, true, 'playing');
+        
+        try {
+            await currentAudio.play();
+        } catch (e) {
+            console.error('Failed to play audio:', e);
+            URL.revokeObjectURL(audioUrl);
+            showToast('Failed to play audio: ' + e.message, 'error');
+            playingMessageId = null;
+            updatePlayButtonState(messageId, false);
+        }
+    }
+    
     window.playMessageAudio = function(messageId, sender, content) {
         const settings = getSettings();
         const openvoiceServer = settings.openvoiceServer;
@@ -671,98 +838,50 @@
             return;
         }
         
-        // Generate TTS URL and play
-        const ttsUrl = getTTSUrl(openvoiceServer, textContent, voice);
-        console.log('TTS URL:', ttsUrl);
-        console.log('Voice:', voice, 'Sender:', sender);
+        // Split text into chunks to avoid timeout
+        const chunks = splitTextIntoChunks(textContent);
+        console.log(`Split text into ${chunks.length} chunks`);
         
-        if (!ttsUrl) {
-            showToast('Failed to generate TTS URL', 'error');
+        if (chunks.length === 0) {
+            showToast('No text content to play', 'error');
             return;
         }
         
         playingMessageId = messageId;
+        
+        // Reset prefetch state
+        prefetchedBlobs = [];
+        currentPlayIndex = 0;
+        nextFetchIndex = 0;
+        isFetching = false;
+        
+        showToast(`Generating audio (${chunks.length} part${chunks.length > 1 ? 's' : ''})...`, 'info');
         updatePlayButtonState(messageId, true, 'loading');
-        showToast('Generating audio...', 'info');
         
-        // Show periodic updates for long generation
-        const progressInterval = setInterval(() => {
-            if (playingMessageId === messageId) {
-                showToast('Still generating audio...', 'info');
-            } else {
-                clearInterval(progressInterval);
-            }
-        }, 15000);
-        
-        // Fetch through local proxy (handles long timeouts, no CORS issues)
-        fetch(ttsUrl)
-            .then(async response => {
-                clearInterval(progressInterval);
-                if (!response.ok) {
-                    // Try to get error message from JSON response
-                    try {
-                        const err = await response.json();
-                        throw new Error(err.error || `Server returned ${response.status}`);
-                    } catch {
-                        throw new Error(`Server returned ${response.status}`);
-                    }
-                }
-                const contentType = response.headers.get('content-type') || '';
-                if (contentType.includes('json')) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'TTS server returned error');
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                // Check if playback was cancelled while fetching
-                if (playingMessageId !== messageId) {
-                    return;
-                }
-                
-                const audioUrl = URL.createObjectURL(blob);
-                currentAudio = new Audio(audioUrl);
-                
-                currentAudio.onended = () => {
-                    URL.revokeObjectURL(audioUrl);
-                    playingMessageId = null;
-                    updatePlayButtonState(messageId, false);
-                    playedAudioMessages.add(messageId);
-                };
-                
-                currentAudio.onerror = () => {
-                    URL.revokeObjectURL(audioUrl);
-                    showToast('Audio playback error', 'error');
-                    playingMessageId = null;
-                    updatePlayButtonState(messageId, false);
-                };
-                
-                updatePlayButtonState(messageId, true, 'playing');
-                currentAudio.play().catch(e => {
-                    console.error('Failed to play audio:', e);
-                    URL.revokeObjectURL(audioUrl);
-                    showToast('Failed to play audio: ' + e.message, 'error');
-                    playingMessageId = null;
-                    updatePlayButtonState(messageId, false);
-                });
-            })
-            .catch(e => {
-                clearInterval(progressInterval);
-                console.error('Failed to fetch audio:', e);
-                showToast('Failed to generate audio: ' + e.message, 'error');
-                playingMessageId = null;
-                updatePlayButtonState(messageId, false);
-            });
+        // Start prefetching and playing
+        prefetchChunks(messageId, openvoiceServer, voice, chunks);
     };
     
     window.stopMessageAudio = function() {
+        const wasPlaying = playingMessageId;
+        playingMessageId = null;  // Signal cancellation to prefetch/play loops
+        
         if (currentAudio) {
             currentAudio.pause();
             currentAudio = null;
-            if (playingMessageId) {
-                updatePlayButtonState(playingMessageId, false);
-                playingMessageId = null;
+        }
+        
+        // Clean up prefetched blobs
+        prefetchedBlobs.forEach((blob, i) => {
+            if (blob && !blob.error) {
+                // Blobs don't need explicit cleanup, but clear reference
+                prefetchedBlobs[i] = null;
             }
+        });
+        prefetchedBlobs = [];
+        
+        if (wasPlaying) {
+            updatePlayButtonState(wasPlaying, false);
         }
     };
     
