@@ -1312,9 +1312,12 @@
             `;
         }
         
-        // Highlight code blocks
+        // Highlight code blocks (skip TOOL: language identifiers)
         div.querySelectorAll('pre code').forEach(block => {
-            hljs.highlightElement(block);
+            const lang = block.className.match(/language-(\S+)/)?.[1] || '';
+            if (!lang.startsWith('TOOL:')) {
+                hljs.highlightElement(block);
+            }
         });
         
         // Render mermaid diagrams
@@ -2341,9 +2344,12 @@
             });
             contentEl.innerHTML = html;
             
-            // Highlight code blocks
+            // Highlight code blocks (skip TOOL: language identifiers)
             contentEl.querySelectorAll('pre code').forEach(block => {
-                hljs.highlightElement(block);
+                const lang = block.className.match(/language-(\S+)/)?.[1] || '';
+                if (!lang.startsWith('TOOL:')) {
+                    hljs.highlightElement(block);
+                }
             });
             
             // Render mermaid diagrams
