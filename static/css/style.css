@@ -206,7 +206,7 @@ body {
 .message-card.info-message {
     margin-left: auto;
     margin-right: auto;
-    max-width: 28rem;
+    max-width: 100%;
     justify-content: center;
 }
 

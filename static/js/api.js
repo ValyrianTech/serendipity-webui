@@ -117,6 +117,22 @@ export async function getWorkspace(agentName) {
     return response.json();
 }
 
+// Skills API
+export async function getSkills(enabledOnly = false) {
+    const params = enabledOnly ? '?enabled_only=true' : '';
+    const response = await fetch(`${getBaseUrl()}/api/GetSkills${params}`);
+    return response.json();
+}
+
+export async function getSkill(skillName, includeInstructions = true) {
+    const params = new URLSearchParams({
+        skill_name: skillName,
+        include_instructions: includeInstructions
+    });
+    const response = await fetch(`${getBaseUrl()}/api/GetSkill?${params}`);
+    return response.json();
+}
+
 export async function getLLMs() {
     const response = await fetch(`${getBaseUrl()}/spellbook/llms`);
     return response.json();
@@ -139,6 +155,7 @@ export async function addMessage(wif, data) {
         folder_name: data.folderName || data.folder_name,
         enabled_tools: data.enabledTools || data.enabled_tools || [],
         enabled_roles: data.enabledRoles || data.enabled_roles || [],
+        enabled_skills: data.enabledSkills || data.enabled_skills || [],
         memory: data.memory || 0,
         temperature: data.temperature,
         model_name: data.modelName || data.model_name,
@@ -298,6 +315,27 @@ export async function saveDefaultLLM(wif, data) {
 export async function editAgentRole(wif, data) {
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/EditAgentRole/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+// Skills POST requests (signed)
+export async function saveSkill(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveSkill/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function deleteSkill(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/DeleteSkill/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)

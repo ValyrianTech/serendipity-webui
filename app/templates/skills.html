@@ -1,0 +1,726 @@
+{% extends "base.html" %}
+
+{% block title %}Skills - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <h1 class="text-xl font-bold">Skills</h1>
+        <button onclick="showAddNew()" class="btn-primary flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add New
+        </button>
+    </div>
+    
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-6xl mx-auto">
+            <!-- Skill Selection -->
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 block mb-2">Select Skill</label>
+                <select id="skill-select" onchange="loadSkillConfig()" 
+                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    <option value="">-- Select a skill --</option>
+                </select>
+            </div>
+            
+            <!-- Loading -->
+            <div id="loading" class="flex items-center justify-center py-12 hidden">
+                <div class="spinner"></div>
+            </div>
+            
+            <!-- Config Form -->
+            <div id="config-form" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Left Column: Basic Info & Instructions -->
+                    <div class="space-y-6">
+                        <!-- Basic Info -->
+                        <div class="bg-slate-800 rounded-lg p-6">
+                            <h2 class="text-lg font-semibold mb-4">Basic Information</h2>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="text-sm text-slate-400 block mb-2">Name</label>
+                                    <input type="text" id="skill-name" placeholder="skill-name (lowercase, hyphens only)"
+                                           pattern="[a-z0-9-]+"
+                                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3">
+                                    <p class="text-xs text-slate-500 mt-1">Lowercase letters, numbers, and hyphens only</p>
+                                </div>
+                                <div>
+                                    <label class="text-sm text-slate-400 block mb-2">Description</label>
+                                    <textarea id="skill-description" rows="3" placeholder="When to use this skill and what it does..."
+                                              class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3"></textarea>
+                                    <p class="text-xs text-slate-500 mt-1">Helps the agent decide when to load this skill</p>
+                                </div>
+                                <div>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" id="skill-enabled" checked class="w-5 h-5 rounded">
+                                        <span>Enabled</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Instructions Editor -->
+                        <div class="bg-slate-800 rounded-lg p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-lg font-semibold">Instructions</h2>
+                                <div class="flex gap-2">
+                                    <button onclick="setEditorTab('edit')" id="tab-edit" 
+                                            class="px-3 py-1 text-sm rounded-lg bg-indigo-600 text-white">Edit</button>
+                                    <button onclick="setEditorTab('preview')" id="tab-preview"
+                                            class="px-3 py-1 text-sm rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600">Preview</button>
+                                </div>
+                            </div>
+                            <div id="editor-edit">
+                                <textarea id="skill-instructions" rows="20" placeholder="# Skill Instructions
+
+Write your skill instructions in Markdown format.
+
+## When to Use
+Describe when the agent should use this skill.
+
+## Steps
+1. First step
+2. Second step
+
+## Examples
+Provide examples of how to use this skill."
+                                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 font-mono text-sm"></textarea>
+                            </div>
+                            <div id="editor-preview" class="hidden">
+                                <div id="instructions-preview" class="prose prose-invert max-w-none bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 min-h-[480px] overflow-y-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column: Resources & Scripts -->
+                    <div class="space-y-6">
+                        <!-- Resources -->
+                        <div class="bg-slate-800 rounded-lg p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-lg font-semibold">Resources</h2>
+                                <button onclick="showAddResourceModal()" class="btn-secondary text-sm flex items-center gap-1">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-500 mb-4">Additional markdown files the agent can load on demand (Level 3)</p>
+                            <div id="resources-list" class="space-y-2">
+                                <p class="text-slate-500 text-sm">No resources</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Scripts -->
+                        <div class="bg-slate-800 rounded-lg p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-lg font-semibold">Scripts</h2>
+                                <button onclick="showAddScriptModal()" class="btn-secondary text-sm flex items-center gap-1">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-500 mb-4">Python scripts the agent can execute</p>
+                            <div id="scripts-list" class="space-y-2">
+                                <p class="text-slate-500 text-sm">No scripts</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Skill Info (read-only) -->
+                        <div id="skill-info" class="bg-slate-800 rounded-lg p-6 hidden">
+                            <h2 class="text-lg font-semibold mb-4">Skill Info</h2>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-400">Directory:</span>
+                                    <span id="skill-directory" class="text-slate-300 font-mono text-xs"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="flex gap-4 pt-6 mt-6 border-t border-slate-700">
+                    <button onclick="saveSkill()" class="btn-primary flex-1 py-3">Save Skill</button>
+                    <button onclick="deleteSkillConfig()" id="delete-btn" class="btn-danger py-3 px-6 hidden">Delete</button>
+                </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                <p class="text-slate-400 mb-2">Select a skill to edit or create a new one</p>
+                <p class="text-slate-500 text-sm">Skills are modular capabilities that extend agent functionality</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Resource Modal -->
+<div id="resource-modal" class="modal-backdrop hidden">
+    <div class="modal-content max-w-4xl">
+        <div class="flex items-center justify-between mb-4">
+            <h2 id="resource-modal-title" class="text-xl font-bold">Add Resource</h2>
+            <button onclick="closeResourceModal()" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">Filename</label>
+                <input type="text" id="resource-filename" placeholder="reference.md"
+                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                <p class="text-xs text-slate-500 mt-1">Must end with .md</p>
+            </div>
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm text-slate-400">Content</label>
+                    <div class="flex gap-2">
+                        <button onclick="setResourceTab('edit')" id="resource-tab-edit" 
+                                class="px-2 py-1 text-xs rounded bg-indigo-600 text-white">Edit</button>
+                        <button onclick="setResourceTab('preview')" id="resource-tab-preview"
+                                class="px-2 py-1 text-xs rounded bg-slate-700 text-slate-300 hover:bg-slate-600">Preview</button>
+                    </div>
+                </div>
+                <div id="resource-editor-edit">
+                    <textarea id="resource-content" rows="15" placeholder="# Resource Title
+
+Additional reference material for the skill..."
+                              class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 font-mono text-sm"></textarea>
+                </div>
+                <div id="resource-editor-preview" class="hidden">
+                    <div id="resource-preview" class="prose prose-invert max-w-none bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 min-h-[360px] overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="saveResource()" class="btn-primary flex-1">Save Resource</button>
+            <button onclick="closeResourceModal()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Script Modal -->
+<div id="script-modal" class="modal-backdrop hidden">
+    <div class="modal-content max-w-4xl">
+        <div class="flex items-center justify-between mb-4">
+            <h2 id="script-modal-title" class="text-xl font-bold">Add Script</h2>
+            <button onclick="closeScriptModal()" class="text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">Filename</label>
+                <input type="text" id="script-filename" placeholder="helper.py"
+                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                <p class="text-xs text-slate-500 mt-1">Must end with .py (will be placed in scripts/ folder)</p>
+            </div>
+            <div>
+                <label class="text-sm text-slate-400 block mb-2">Content</label>
+                <textarea id="script-content" rows="15" placeholder="#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()"
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 font-mono text-sm"></textarea>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+            <button onclick="saveScript()" class="btn-primary flex-1">Save Script</button>
+            <button onclick="closeScriptModal()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { getSkills, getSkill, saveSkill as saveSkillApi, deleteSkill } from '/static/js/api.js';
+    
+    let isNewSkill = false;
+    let currentSkillName = '';
+    let resources = [];
+    let scripts = [];
+    let editingResourceIndex = -1;
+    let editingScriptIndex = -1;
+    
+    // Local storage for resources/scripts content (not yet saved to backend)
+    let resourceContents = {};
+    let scriptContents = {};
+    
+    async function loadSkills() {
+        try {
+            const data = await getSkills();
+            const select = document.getElementById('skill-select');
+            const skillsList = data.skills || [];
+            
+            select.innerHTML = '<option value="">-- Select a skill --</option>' +
+                skillsList.map(s => `<option value="${s.name}">${s.name}${s.enabled ? '' : ' (disabled)'}</option>`).join('');
+        } catch (e) {
+            console.error('Failed to load skills:', e);
+            showToast('Failed to load skills', 'error');
+        }
+    }
+    
+    window.loadSkillConfig = async function() {
+        const skillName = document.getElementById('skill-select').value;
+        if (!skillName) {
+            document.getElementById('config-form').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+            return;
+        }
+        
+        isNewSkill = false;
+        currentSkillName = skillName;
+        
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('config-form').classList.add('hidden');
+        document.getElementById('empty-state').classList.add('hidden');
+        
+        try {
+            const data = await getSkill(skillName, true);
+            const skill = data.skill || {};
+            
+            document.getElementById('skill-name').value = skill.name || skillName;
+            document.getElementById('skill-name').readOnly = true;
+            document.getElementById('skill-description').value = skill.description || '';
+            document.getElementById('skill-instructions').value = skill.instructions || '';
+            document.getElementById('skill-enabled').checked = skill.enabled !== false;
+            
+            resources = skill.resources || [];
+            scripts = skill.scripts || [];
+            resourceContents = {};
+            scriptContents = {};
+            
+            renderResources();
+            renderScripts();
+            
+            // Show skill info
+            if (skill.directory) {
+                document.getElementById('skill-directory').textContent = skill.directory;
+                document.getElementById('skill-info').classList.remove('hidden');
+            }
+            
+            document.getElementById('delete-btn').classList.remove('hidden');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('config-form').classList.remove('hidden');
+            
+            // Update preview
+            updateInstructionsPreview();
+        } catch (e) {
+            console.error('Failed to load skill config:', e);
+            showToast('Failed to load skill: ' + e.message, 'error');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('empty-state').classList.remove('hidden');
+        }
+    };
+    
+    window.showAddNew = function() {
+        isNewSkill = true;
+        currentSkillName = '';
+        
+        document.getElementById('skill-name').value = '';
+        document.getElementById('skill-name').readOnly = false;
+        document.getElementById('skill-description').value = '';
+        document.getElementById('skill-instructions').value = '';
+        document.getElementById('skill-enabled').checked = true;
+        
+        resources = [];
+        scripts = [];
+        resourceContents = {};
+        scriptContents = {};
+        
+        renderResources();
+        renderScripts();
+        
+        document.getElementById('skill-info').classList.add('hidden');
+        document.getElementById('skill-select').value = '';
+        document.getElementById('delete-btn').classList.add('hidden');
+        
+        document.getElementById('empty-state').classList.add('hidden');
+        document.getElementById('config-form').classList.remove('hidden');
+        
+        // Reset to edit tab
+        setEditorTab('edit');
+    };
+    
+    function renderResources() {
+        const container = document.getElementById('resources-list');
+        if (resources.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 text-sm">No resources</p>';
+            return;
+        }
+        
+        container.innerHTML = resources.map((resource, idx) => `
+            <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <span class="font-mono text-sm">${resource}</span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="editResource(${idx})" class="text-indigo-400 hover:text-indigo-300 p-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                    </button>
+                    <button onclick="removeResource(${idx})" class="text-red-400 hover:text-red-300 p-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function renderScripts() {
+        const container = document.getElementById('scripts-list');
+        if (scripts.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 text-sm">No scripts</p>';
+            return;
+        }
+        
+        container.innerHTML = scripts.map((script, idx) => `
+            <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                    </svg>
+                    <span class="font-mono text-sm">${script}</span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="editScript(${idx})" class="text-indigo-400 hover:text-indigo-300 p-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                    </button>
+                    <button onclick="removeScript(${idx})" class="text-red-400 hover:text-red-300 p-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // Editor tabs
+    window.setEditorTab = function(tab) {
+        const editTab = document.getElementById('tab-edit');
+        const previewTab = document.getElementById('tab-preview');
+        const editPane = document.getElementById('editor-edit');
+        const previewPane = document.getElementById('editor-preview');
+        
+        if (tab === 'edit') {
+            editTab.classList.remove('bg-slate-700', 'text-slate-300');
+            editTab.classList.add('bg-indigo-600', 'text-white');
+            previewTab.classList.remove('bg-indigo-600', 'text-white');
+            previewTab.classList.add('bg-slate-700', 'text-slate-300');
+            editPane.classList.remove('hidden');
+            previewPane.classList.add('hidden');
+        } else {
+            previewTab.classList.remove('bg-slate-700', 'text-slate-300');
+            previewTab.classList.add('bg-indigo-600', 'text-white');
+            editTab.classList.remove('bg-indigo-600', 'text-white');
+            editTab.classList.add('bg-slate-700', 'text-slate-300');
+            previewPane.classList.remove('hidden');
+            editPane.classList.add('hidden');
+            updateInstructionsPreview();
+        }
+    };
+    
+    function updateInstructionsPreview() {
+        const content = document.getElementById('skill-instructions').value;
+        const preview = document.getElementById('instructions-preview');
+        if (typeof marked !== 'undefined') {
+            preview.innerHTML = marked.parse(content || '*No instructions*');
+            // Highlight code blocks
+            preview.querySelectorAll('pre code').forEach((block) => {
+                if (typeof hljs !== 'undefined') {
+                    hljs.highlightElement(block);
+                }
+            });
+        } else {
+            preview.innerHTML = '<pre>' + (content || 'No instructions') + '</pre>';
+        }
+    }
+    
+    // Resource modal
+    window.showAddResourceModal = function() {
+        editingResourceIndex = -1;
+        document.getElementById('resource-modal-title').textContent = 'Add Resource';
+        document.getElementById('resource-filename').value = '';
+        document.getElementById('resource-filename').readOnly = false;
+        document.getElementById('resource-content').value = '';
+        setResourceTab('edit');
+        document.getElementById('resource-modal').classList.remove('hidden');
+    };
+    
+    window.editResource = async function(idx) {
+        editingResourceIndex = idx;
+        const resourceName = resources[idx];
+        
+        document.getElementById('resource-modal-title').textContent = 'Edit Resource';
+        document.getElementById('resource-filename').value = resourceName;
+        document.getElementById('resource-filename').readOnly = true;
+        
+        // Check if we have local content, otherwise it would need to be fetched from backend
+        // For now, show placeholder - full implementation would need a GetSkillResource endpoint
+        const content = resourceContents[resourceName] || '# ' + resourceName + '\n\nResource content would be loaded here.\n\n(Note: Editing existing resources requires backend support)';
+        document.getElementById('resource-content').value = content;
+        
+        setResourceTab('edit');
+        document.getElementById('resource-modal').classList.remove('hidden');
+    };
+    
+    window.closeResourceModal = function() {
+        document.getElementById('resource-modal').classList.add('hidden');
+        editingResourceIndex = -1;
+    };
+    
+    window.saveResource = function() {
+        const filename = document.getElementById('resource-filename').value.trim();
+        const content = document.getElementById('resource-content').value;
+        
+        if (!filename) {
+            showToast('Filename is required', 'error');
+            return;
+        }
+        
+        if (!filename.endsWith('.md')) {
+            showToast('Filename must end with .md', 'error');
+            return;
+        }
+        
+        if (editingResourceIndex >= 0) {
+            // Update existing
+            resourceContents[filename] = content;
+        } else {
+            // Add new
+            if (resources.includes(filename)) {
+                showToast('Resource already exists', 'error');
+                return;
+            }
+            resources.push(filename);
+            resourceContents[filename] = content;
+        }
+        
+        renderResources();
+        closeResourceModal();
+        showToast('Resource saved locally. Save skill to persist.', 'info');
+    };
+    
+    window.removeResource = function(idx) {
+        const resourceName = resources[idx];
+        if (confirm(`Remove resource "${resourceName}"?`)) {
+            resources.splice(idx, 1);
+            delete resourceContents[resourceName];
+            renderResources();
+        }
+    };
+    
+    window.setResourceTab = function(tab) {
+        const editTab = document.getElementById('resource-tab-edit');
+        const previewTab = document.getElementById('resource-tab-preview');
+        const editPane = document.getElementById('resource-editor-edit');
+        const previewPane = document.getElementById('resource-editor-preview');
+        
+        if (tab === 'edit') {
+            editTab.classList.remove('bg-slate-700', 'text-slate-300');
+            editTab.classList.add('bg-indigo-600', 'text-white');
+            previewTab.classList.remove('bg-indigo-600', 'text-white');
+            previewTab.classList.add('bg-slate-700', 'text-slate-300');
+            editPane.classList.remove('hidden');
+            previewPane.classList.add('hidden');
+        } else {
+            previewTab.classList.remove('bg-slate-700', 'text-slate-300');
+            previewTab.classList.add('bg-indigo-600', 'text-white');
+            editTab.classList.remove('bg-indigo-600', 'text-white');
+            editTab.classList.add('bg-slate-700', 'text-slate-300');
+            previewPane.classList.remove('hidden');
+            editPane.classList.add('hidden');
+            
+            const content = document.getElementById('resource-content').value;
+            const preview = document.getElementById('resource-preview');
+            if (typeof marked !== 'undefined') {
+                preview.innerHTML = marked.parse(content || '*No content*');
+                preview.querySelectorAll('pre code').forEach((block) => {
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(block);
+                    }
+                });
+            }
+        }
+    };
+    
+    // Script modal
+    window.showAddScriptModal = function() {
+        editingScriptIndex = -1;
+        document.getElementById('script-modal-title').textContent = 'Add Script';
+        document.getElementById('script-filename').value = '';
+        document.getElementById('script-filename').readOnly = false;
+        document.getElementById('script-content').value = `#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()`;
+        document.getElementById('script-modal').classList.remove('hidden');
+    };
+    
+    window.editScript = function(idx) {
+        editingScriptIndex = idx;
+        const scriptName = scripts[idx];
+        
+        document.getElementById('script-modal-title').textContent = 'Edit Script';
+        document.getElementById('script-filename').value = scriptName.replace('scripts/', '');
+        document.getElementById('script-filename').readOnly = true;
+        
+        const content = scriptContents[scriptName] || '#!/usr/bin/env python\n# Script content would be loaded here';
+        document.getElementById('script-content').value = content;
+        
+        document.getElementById('script-modal').classList.remove('hidden');
+    };
+    
+    window.closeScriptModal = function() {
+        document.getElementById('script-modal').classList.add('hidden');
+        editingScriptIndex = -1;
+    };
+    
+    window.saveScript = function() {
+        let filename = document.getElementById('script-filename').value.trim();
+        const content = document.getElementById('script-content').value;
+        
+        if (!filename) {
+            showToast('Filename is required', 'error');
+            return;
+        }
+        
+        if (!filename.endsWith('.py')) {
+            showToast('Filename must end with .py', 'error');
+            return;
+        }
+        
+        // Scripts go in scripts/ folder
+        const fullPath = 'scripts/' + filename;
+        
+        if (editingScriptIndex >= 0) {
+            scriptContents[scripts[editingScriptIndex]] = content;
+        } else {
+            if (scripts.includes(fullPath)) {
+                showToast('Script already exists', 'error');
+                return;
+            }
+            scripts.push(fullPath);
+            scriptContents[fullPath] = content;
+        }
+        
+        renderScripts();
+        closeScriptModal();
+        showToast('Script saved locally. Save skill to persist.', 'info');
+    };
+    
+    window.removeScript = function(idx) {
+        const scriptName = scripts[idx];
+        if (confirm(`Remove script "${scriptName}"?`)) {
+            scripts.splice(idx, 1);
+            delete scriptContents[scriptName];
+            renderScripts();
+        }
+    };
+    
+    // Save skill
+    window.saveSkill = async function() {
+        const name = document.getElementById('skill-name').value.trim();
+        const description = document.getElementById('skill-description').value.trim();
+        const instructions = document.getElementById('skill-instructions').value;
+        const enabled = document.getElementById('skill-enabled').checked;
+        
+        if (!name) {
+            showToast('Name is required', 'error');
+            return;
+        }
+        
+        // Validate name format
+        if (!/^[a-z0-9-]+$/.test(name)) {
+            showToast('Name must contain only lowercase letters, numbers, and hyphens', 'error');
+            return;
+        }
+        
+        if (!description) {
+            showToast('Description is required', 'error');
+            return;
+        }
+        
+        const data = {
+            name: name,
+            description: description,
+            instructions: instructions,
+            enabled: enabled
+        };
+        
+        try {
+            const response = await saveSkillApi(window.currentWif, data);
+            
+            if (response.success) {
+                showToast(`Skill ${response.action || 'saved'} successfully`, 'success');
+                currentSkillName = name;
+                isNewSkill = false;
+                document.getElementById('skill-name').readOnly = true;
+                document.getElementById('delete-btn').classList.remove('hidden');
+                await loadSkills();
+                document.getElementById('skill-select').value = name;
+            } else {
+                showToast('Failed to save: ' + (response.error || response.message || 'Unknown error'), 'error');
+            }
+        } catch (e) {
+            showToast('Failed to save: ' + e.message, 'error');
+        }
+    };
+    
+    // Delete skill
+    window.deleteSkillConfig = async function() {
+        if (!currentSkillName) return;
+        
+        if (!confirm(`Are you sure you want to delete "${currentSkillName}"? This will delete all resources and scripts.`)) return;
+        
+        try {
+            const response = await deleteSkill(window.currentWif, { skill_name: currentSkillName });
+            
+            if (response.success) {
+                showToast('Skill deleted', 'success');
+                await loadSkills();
+                document.getElementById('config-form').classList.add('hidden');
+                document.getElementById('empty-state').classList.remove('hidden');
+                currentSkillName = '';
+            } else {
+                showToast('Failed to delete: ' + (response.error || response.message || 'Unknown error'), 'error');
+            }
+        } catch (e) {
+            showToast('Failed to delete: ' + e.message, 'error');
+        }
+    };
+    
+    // Initialize
+    loadSkills();
+</script>
+{% endblock %}

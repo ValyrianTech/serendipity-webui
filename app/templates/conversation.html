@@ -202,6 +202,14 @@
             </div>
         </div>
         
+        <!-- Skills -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Skills</label>
+            <div id="skills-list" class="space-y-2">
+                <span class="text-slate-500 text-sm">Loading...</span>
+            </div>
+        </div>
+        
         <!-- System Message (Collapsible) -->
         <div class="border-t border-slate-700 pt-4 mt-4">
             <button onclick="togglePanel('system-message-panel')" class="flex items-center justify-between w-full text-left">
@@ -461,7 +469,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = '{{ agent_name }}';
@@ -533,6 +541,7 @@
         await loadAgentData();
         await loadModels();
         await loadAvailableVoices();
+        await loadAvailableSkills();
         
         if (conversationId) {
             await loadConversation();
@@ -551,6 +560,11 @@
                 document.getElementById('memory').value = agentData.agent.memory;
                 document.getElementById('memory-value').textContent = agentData.agent.memory;
             }
+            
+            // Initialize tools, roles, and skills lists for new conversations
+            updateToolsList(agentData?.agent?.tools || []);
+            updateRolesList(agentData?.agent?.roles || []);
+            updateSkillsList(agentData?.agent?.skills || []);
             
             // Initialize new conversation with info message (like Flutter app does)
             await initializeNewConversation();
@@ -1102,6 +1116,9 @@
             // Update roles list
             updateRolesList(data.conversation?.enabled_roles || []);
             
+            // Update skills list
+            updateSkillsList(data.conversation?.enabled_skills || agentData?.agent?.skills || []);
+            
             // Update staged files
             if (data.staged_files && data.staged_files.length > 0) {
                 stagedFiles = data.staged_files;
@@ -1502,9 +1519,10 @@
         const temperature = parseFloat(document.getElementById('temperature').value);
         const memory = parseInt(document.getElementById('memory').value);
         
-        // Get enabled tools and roles
+        // Get enabled tools, roles, and skills
         const enabledTools = Array.from(document.querySelectorAll('#tools-list input:checked')).map(cb => cb.value);
         const enabledRoles = Array.from(document.querySelectorAll('#roles-list input:checked')).map(cb => cb.value);
+        const enabledSkills = Array.from(document.querySelectorAll('#skills-list input:checked')).map(cb => cb.value);
         
         const messageData = {
             conversationId: conversationId,
@@ -1517,6 +1535,7 @@
             temperature: temperature,
             enabledRoles: enabledRoles,
             enabledTools: enabledTools,
+            enabledSkills: enabledSkills,
             memory: memory,
             run: run,
             files: stagedFiles.map(f => f.fileName || f)
@@ -2076,6 +2095,44 @@
             }).join('');
         } else {
             container.innerHTML = '<span class="text-slate-500 text-sm">No roles available</span>';
+        }
+    }
+    
+    // Skills list - available skills loaded from backend
+    let availableSkills = [];
+    
+    async function loadAvailableSkills() {
+        try {
+            const data = await getSkills();
+            availableSkills = data.skills || [];
+        } catch (e) {
+            console.debug('Failed to load skills:', e.message);
+            availableSkills = [];
+        }
+    }
+    
+    function updateSkillsList(enabledSkills) {
+        const container = document.getElementById('skills-list');
+        // Show skills from agent config, with checkboxes
+        const agentSkills = agentData?.agent?.skills || [];
+        
+        if (agentSkills.length > 0) {
+            // Get skill descriptions from availableSkills for tooltips
+            const skillDescriptions = {};
+            availableSkills.forEach(s => { skillDescriptions[s.name] = s.description; });
+            
+            container.innerHTML = agentSkills.map(skillName => {
+                const isEnabled = enabledSkills.includes(skillName);
+                const description = skillDescriptions[skillName] || '';
+                return `
+                    <label class="flex items-center gap-2 cursor-pointer" title="${description}">
+                        <input type="checkbox" value="${skillName}" ${isEnabled ? 'checked' : ''} class="w-4 h-4 rounded">
+                        <span class="text-sm">${skillName}</span>
+                    </label>
+                `;
+            }).join('');
+        } else {
+            container.innerHTML = '<span class="text-slate-500 text-sm">No skills configured</span>';
         }
     }
     

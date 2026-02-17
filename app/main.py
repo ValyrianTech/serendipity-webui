@@ -56,6 +56,11 @@ async def toolsets(request: Request):
     return templates.TemplateResponse("toolsets.html", {"request": request})
 
 
+@app.get("/skills", response_class=HTMLResponse)
+async def skills(request: Request):
+    return templates.TemplateResponse("skills.html", {"request": request})
+
+
 @app.get("/llms", response_class=HTMLResponse)
 async def llms(request: Request):
     return templates.TemplateResponse("llms.html", {"request": request})

@@ -140,6 +140,19 @@
                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
             </div>
             
+            <!-- Skills -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Skills</h2>
+                <p class="text-xs text-slate-500 mb-3">Skills are modular capabilities the agent can load on-demand. <a href="/skills" class="text-indigo-400 hover:text-indigo-300">Manage skills →</a></p>
+                <div id="skills-list" class="flex flex-wrap gap-2 mb-4"></div>
+                <div class="flex gap-2">
+                    <select id="new-skill" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        <option value="">-- Select a skill to add --</option>
+                    </select>
+                    <button onclick="addSkill()" class="btn-secondary">Add</button>
+                </div>
+            </div>
+            
             <!-- Participants -->
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Participants</h2>
@@ -224,7 +237,7 @@
 </div>
 
 <script type="module">
-    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings } from '/static/js/api.js';
+    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
@@ -234,13 +247,16 @@
     let orderOfSpeakers = [];
     let voices = [];
     let roles = [];
+    let skills = [];
+    let availableSkills = [];
     let editingRoleIndex = -1; // -1 means adding new, >= 0 means editing existing
     
     async function loadAgent() {
         try {
-            const [agentResponse, modelsResponse] = await Promise.all([
+            const [agentResponse, modelsResponse, skillsResponse] = await Promise.all([
                 getAgent(agentName),
-                getModels()
+                getModels(),
+                getSkills()
             ]);
             
             agentData = agentResponse.agent;
@@ -281,6 +297,8 @@
             orderOfSpeakers = agentData.order_of_speakers || [];
             voices = agentData.voices || [];
             roles = agentData.roles || [];
+            skills = agentData.skills || [];
+            availableSkills = skillsResponse.skills || [];
             
             renderTools();
             renderAutoAllowTools();
@@ -288,6 +306,8 @@
             renderSpeakers();
             renderVoices();
             renderRoles();
+            renderSkills();
+            populateSkillsDropdown();
             
             document.getElementById('loading').classList.add('hidden');
             document.getElementById('edit-form').classList.remove('hidden');
@@ -459,6 +479,43 @@
             `;
         }).join('');
     }
+    
+    function renderSkills() {
+        const container = document.getElementById('skills-list');
+        if (skills.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No skills assigned</p>';
+            return;
+        }
+        container.innerHTML = skills.map((skill, idx) => `
+            <span class="bg-yellow-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                ${skill}
+                <button onclick="removeSkill(${idx})" class="hover:text-red-300">&times;</button>
+            </span>
+        `).join('');
+    }
+    
+    function populateSkillsDropdown() {
+        const select = document.getElementById('new-skill');
+        // Filter out already assigned skills
+        const unassignedSkills = availableSkills.filter(s => !skills.includes(s.name));
+        select.innerHTML = '<option value="">-- Select a skill to add --</option>' +
+            unassignedSkills.map(s => `<option value="${s.name}" title="${s.description}">${s.name}${s.enabled ? '' : ' (disabled)'}</option>`).join('');
+    }
+    
+    window.addSkill = function() {
+        const select = document.getElementById('new-skill');
+        if (select.value) {
+            skills.push(select.value);
+            renderSkills();
+            populateSkillsDropdown();
+        }
+    };
+    
+    window.removeSkill = function(idx) {
+        skills.splice(idx, 1);
+        renderSkills();
+        populateSkillsDropdown();
+    };
     
     window.addTool = function() {
         const input = document.getElementById('new-tool');
@@ -735,7 +792,8 @@
             order_of_speakers: orderOfSpeakers,
             voices: voices,
             toolsets: toolsetsList,
-            roles: roles
+            roles: roles,
+            skills: skills
         };
         
         try {
