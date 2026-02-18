@@ -209,6 +209,34 @@
                     </label>
                 </div>
             </div>
+            
+            <!-- Avatar Animation Settings -->
+            <div class="bg-slate-800 rounded-lg p-6">
+                <h2 class="text-lg font-semibold mb-4">Avatar Animation</h2>
+                <p class="text-xs text-slate-500 mb-4">Control a 3D avatar that displays animations and emotions based on message content.</p>
+                
+                <div class="space-y-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="avatar-enabled" class="w-5 h-5 rounded" onchange="toggleAvatarSettings()">
+                        <span>Enable Avatar Animations</span>
+                    </label>
+                    
+                    <div id="avatar-settings" class="hidden space-y-4 mt-4 pl-7">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Avatar Server URL</label>
+                            <input type="text" id="avatar-url" placeholder="http://localhost:8000"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            <p class="text-xs text-slate-500 mt-1">URL of the Agent Rig server</p>
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Avatar Model</label>
+                            <input type="text" id="avatar-model" placeholder="robot"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                            <p class="text-xs text-slate-500 mt-1">3D model to use (e.g., robot, xbot, soldier)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -250,6 +278,9 @@
     let skills = [];
     let availableSkills = [];
     let editingRoleIndex = -1; // -1 means adding new, >= 0 means editing existing
+    let avatarEnabled = false;
+    let avatarUrl = 'http://localhost:8000';
+    let avatarModel = null;
     
     async function loadAgent() {
         try {
@@ -289,6 +320,15 @@
             document.getElementById('serendipity-flag').checked = agentData.SERENDIPITY || false;
             document.getElementById('public-flag').checked = agentData.public || false;
             document.getElementById('toolsets').value = (agentData.toolsets || []).join(', ');
+            
+            // Avatar settings
+            avatarEnabled = agentData.avatar_enabled || false;
+            avatarUrl = agentData.avatar_url || 'http://localhost:8000';
+            avatarModel = agentData.avatar_model || null;
+            document.getElementById('avatar-enabled').checked = avatarEnabled;
+            document.getElementById('avatar-url').value = avatarUrl;
+            document.getElementById('avatar-model').value = avatarModel || '';
+            toggleAvatarSettings();
             
             // Initialize arrays
             tools = agentData.tools || [];
@@ -793,7 +833,10 @@
             voices: voices,
             toolsets: toolsetsList,
             roles: roles,
-            skills: skills
+            skills: skills,
+            avatar_enabled: document.getElementById('avatar-enabled').checked,
+            avatar_url: document.getElementById('avatar-url').value || 'http://localhost:8000',
+            avatar_model: document.getElementById('avatar-model').value || null
         };
         
         try {
@@ -808,6 +851,17 @@
     document.getElementById('profile-picture').addEventListener('input', (e) => {
         document.getElementById('profile-preview').src = e.target.value;
     });
+    
+    // Avatar settings toggle
+    window.toggleAvatarSettings = function() {
+        const enabled = document.getElementById('avatar-enabled').checked;
+        const settingsDiv = document.getElementById('avatar-settings');
+        if (enabled) {
+            settingsDiv.classList.remove('hidden');
+        } else {
+            settingsDiv.classList.add('hidden');
+        }
+    };
     
     // Load agent on page load
     loadAgent();
