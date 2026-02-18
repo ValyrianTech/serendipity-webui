@@ -590,16 +590,22 @@
             }
             
             // Update respond-as options for new conversations
+            // Use order_of_speakers as the source (it contains all possible responders)
             const respondAs = document.getElementById('respond-as');
-            if (agentData?.agent?.participants) {
-                respondAs.innerHTML = '';
-                agentData.agent.participants.forEach(p => {
-                    const option = document.createElement('option');
-                    option.value = p;
-                    option.textContent = p;
-                    respondAs.appendChild(option);
-                });
-            }
+            const orderOfSpeakers = agentData?.agent?.order_of_speakers;
+            const agentParticipants = agentData?.agent?.participants;
+            const participants = (orderOfSpeakers && orderOfSpeakers.length > 0) 
+                ? orderOfSpeakers 
+                : (agentParticipants && agentParticipants.length > 0) 
+                    ? agentParticipants 
+                    : [agentName];
+            respondAs.innerHTML = '';
+            participants.forEach(p => {
+                const option = document.createElement('option');
+                option.value = p;
+                option.textContent = p;
+                respondAs.appendChild(option);
+            });
             
             // For new conversations, select first speaker from order_of_speakers
             updateNextSpeaker(0);
@@ -1094,17 +1100,28 @@
                 document.getElementById('temp-value').textContent = data.conversation.temperature;
             }
             
-            // Update respond-as options
+            // Update respond-as options (use order_of_speakers as it contains all possible responders)
             const respondAs = document.getElementById('respond-as');
             respondAs.innerHTML = '';
-            if (data.conversation?.participants) {
-                data.conversation.participants.forEach(p => {
-                    const option = document.createElement('option');
-                    option.value = p;
-                    option.textContent = p;
-                    respondAs.appendChild(option);
-                });
-            }
+            const convOrderOfSpeakers = data.conversation?.order_of_speakers;
+            const agentOrderOfSpeakers = agentData?.agent?.order_of_speakers;
+            const convParticipants = data.conversation?.participants;
+            const agentParticipants = agentData?.agent?.participants;
+            const participants = (convOrderOfSpeakers && convOrderOfSpeakers.length > 0) 
+                ? convOrderOfSpeakers 
+                : (agentOrderOfSpeakers && agentOrderOfSpeakers.length > 0) 
+                    ? agentOrderOfSpeakers 
+                    : (convParticipants && convParticipants.length > 0) 
+                        ? convParticipants 
+                        : (agentParticipants && agentParticipants.length > 0) 
+                            ? agentParticipants 
+                            : [agentName];
+            participants.forEach(p => {
+                const option = document.createElement('option');
+                option.value = p;
+                option.textContent = p;
+                respondAs.appendChild(option);
+            });
             
             // Auto-select next speaker based on order_of_speakers and message count
             const messageCount = data.conversation?.messages?.length || 0;
