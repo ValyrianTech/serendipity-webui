@@ -186,6 +186,19 @@
                    class="w-full" oninput="document.getElementById('memory-value').textContent = this.value">
         </div>
         
+        <!-- Thinking Level -->
+        <div class="mb-4">
+            <label class="text-sm text-slate-400 block mb-2">Thinking Level</label>
+            <select id="thinking-level" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2">
+                <option value="off">Off</option>
+                <option value="minimal">Minimal</option>
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+                <option value="xhigh">Extra High</option>
+            </select>
+        </div>
+        
         <!-- Tools -->
         <div class="mb-4">
             <label class="text-sm text-slate-400 block mb-2">Tools</label>
@@ -559,6 +572,9 @@
             if (agentData?.agent?.memory !== undefined) {
                 document.getElementById('memory').value = agentData.agent.memory;
                 document.getElementById('memory-value').textContent = agentData.agent.memory;
+            }
+            if (agentData?.agent?.thinking_level) {
+                document.getElementById('thinking-level').value = agentData.agent.thinking_level;
             }
             
             // Initialize tools, roles, and skills lists for new conversations
@@ -1099,6 +1115,9 @@
                 document.getElementById('temperature').value = data.conversation.temperature;
                 document.getElementById('temp-value').textContent = data.conversation.temperature;
             }
+            if (data.conversation?.thinking_level) {
+                document.getElementById('thinking-level').value = data.conversation.thinking_level;
+            }
             
             // Update respond-as options (use order_of_speakers as it contains all possible responders)
             const respondAs = document.getElementById('respond-as');
@@ -1538,6 +1557,7 @@
         const model = document.getElementById('model-select').value;
         const temperature = parseFloat(document.getElementById('temperature').value);
         const memory = parseInt(document.getElementById('memory').value);
+        const thinkingLevel = document.getElementById('thinking-level').value;
         
         // Get enabled tools, roles, and skills
         const enabledTools = Array.from(document.querySelectorAll('#tools-list input:checked')).map(cb => cb.value);
@@ -1557,6 +1577,7 @@
             enabledTools: enabledTools,
             enabledSkills: enabledSkills,
             memory: memory,
+            thinking_level: thinkingLevel,
             run: run,
             files: stagedFiles.map(f => f.fileName || f)
         };

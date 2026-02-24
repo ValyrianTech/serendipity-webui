@@ -158,6 +158,7 @@ export async function addMessage(wif, data) {
         enabled_skills: data.enabledSkills || data.enabled_skills || [],
         memory: data.memory || 0,
         temperature: data.temperature,
+        thinking_level: data.thinking_level,
         model_name: data.modelName || data.model_name,
         run: data.run,
         files: data.files || []
