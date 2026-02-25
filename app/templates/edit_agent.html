@@ -347,7 +347,7 @@
             autoAllowTools = agentData.auto_allow_tools || [];
             participants = agentData.participants || [];
             orderOfSpeakers = agentData.order_of_speakers || [];
-            voices = agentData.voices || [];
+            voices = Array.isArray(agentData.voices) ? agentData.voices : [];
             roles = agentData.roles || [];
             skills = agentData.skills || [];
             availableSkills = skillsResponse.skills || [];
@@ -484,6 +484,10 @@
     
     function renderVoices() {
         const container = document.getElementById('voices-list');
+        if (!Array.isArray(voices) || voices.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No voices configured</p>';
+            return;
+        }
         container.innerHTML = voices.map((v, idx) => `
             <span class="bg-purple-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
                 ${v}

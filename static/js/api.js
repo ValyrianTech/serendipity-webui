@@ -473,6 +473,17 @@ export async function editWorkflowStep(wif, data) {
     return response.json();
 }
 
+// Clone persona
+export async function clonePersona(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/ClonePersona/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
 // Generate TTS audio URL using local proxy to avoid browser timeouts
 export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'default', language = 'English') {
     if (!openvoiceServer || !text || !voice) return null;
