@@ -2523,13 +2523,14 @@
             
             const result = await transcribeAudio(audioBlob);
             
-            if (result.text) {
+            const transcribedText = result.full_text || result.text;
+            if (transcribedText) {
                 const input = document.getElementById('message-input');
                 // Append to existing text with a space if needed
                 if (input.value && !input.value.endsWith(' ')) {
                     input.value += ' ';
                 }
-                input.value += result.text;
+                input.value += transcribedText;
                 
                 // Trigger resize
                 input.dispatchEvent(new Event('input'));
