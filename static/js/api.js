@@ -139,7 +139,10 @@ export async function getLLMs() {
 }
 
 export async function getLLMConfig(llmName) {
-    const response = await fetch(`${getBaseUrl()}/spellbook/llms/${encodeURIComponent(llmName)}`);
+    // Encode special characters but keep forward slashes unencoded - the backend regex pattern
+    // explicitly allows slashes in the llm_id: [a-zA-Z0-9_\-.:\/]+
+    const encodedName = encodeURIComponent(llmName).replace(/%2F/gi, '/');
+    const response = await fetch(`${getBaseUrl()}/spellbook/llms/${encodedName}`);
     return response.json();
 }
 

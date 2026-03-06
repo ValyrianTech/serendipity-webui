@@ -201,6 +201,13 @@
     let currentLLMName = '';
     let defaultModel = '';
     
+    // Helper to escape HTML special characters for safe attribute insertion
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    
     async function loadLLMs() {
         try {
             const [llmsData, modelsData] = await Promise.all([
@@ -214,13 +221,13 @@
             const select = document.getElementById('llm-select');
             const llmsList = llmsData || [];
             select.innerHTML = '<option value="">-- Select an LLM --</option>' +
-                llmsList.map(name => `<option value="${name}">${name}</option>`).join('');
+                llmsList.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
             
             // Populate default LLM select
             const defaultSelect = document.getElementById('default-llm');
             const modelNames = modelsData.model_names || [];
             defaultSelect.innerHTML = modelNames.map(name => 
-                `<option value="${name}" ${name === defaultModel ? 'selected' : ''}>${name}</option>`
+                `<option value="${escapeHtml(name)}" ${name === defaultModel ? 'selected' : ''}>${escapeHtml(name)}</option>`
             ).join('');
         } catch (e) {
             console.error('Failed to load LLMs:', e);
