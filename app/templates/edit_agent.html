@@ -218,6 +218,10 @@
                         <input type="checkbox" id="public-flag" class="w-5 h-5 rounded">
                         <span>Public</span>
                     </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="available-flag" class="w-5 h-5 rounded">
+                        <span>Available</span>
+                    </label>
                 </div>
             </div>
             
@@ -331,6 +335,7 @@
             document.getElementById('bootup-message').value = agentData.bootup_message || '';
             document.getElementById('serendipity-flag').checked = agentData.SERENDIPITY || false;
             document.getElementById('public-flag').checked = agentData.public || false;
+            document.getElementById('available-flag').checked = agentData.available || false;
             document.getElementById('toolsets').value = (agentData.toolsets || []).join(', ');
             
             // Avatar settings
@@ -843,6 +848,7 @@
             bootup_message: document.getElementById('bootup-message').value,
             serendipity: document.getElementById('serendipity-flag').checked,
             public: document.getElementById('public-flag').checked,
+            available: document.getElementById('available-flag').checked,
             tools: tools,
             auto_allow_tools: autoAllowTools,
             participants: participants,
