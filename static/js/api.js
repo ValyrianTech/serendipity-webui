@@ -97,6 +97,11 @@ export async function getToolset(toolsetName) {
     return response.json();
 }
 
+export async function getCustomTools() {
+    const response = await fetch(`${getBaseUrl()}/api/GetCustomTools`);
+    return response.json();
+}
+
 export async function getTodo(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetTodo?agent=${encodeURIComponent(agentName)}`);
     return response.json();

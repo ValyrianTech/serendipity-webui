@@ -51,7 +51,7 @@
                     
                     <!-- Servers -->
                     <div>
-                        <h3 class="text-lg font-semibold mb-5">Servers</h3>
+                        <h3 class="text-lg font-semibold mb-5">MCP Servers</h3>
                         <div id="servers-list" class="space-y-4 mb-6"></div>
                         <button onclick="addServer()" class="btn-secondary flex items-center gap-2 mt-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,6 +59,42 @@
                             </svg>
                             Add Server
                         </button>
+                    </div>
+                    
+                    <!-- Skills -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-5">Skills</h3>
+                        <p class="text-sm text-slate-400 mb-4">Skills are read-only knowledge resources the agent can reference.</p>
+                        <div id="skills-list" class="space-y-2 mb-4"></div>
+                        <div class="flex gap-2">
+                            <select id="skill-select" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                                <option value="">-- Select a skill --</option>
+                            </select>
+                            <button onclick="addSkill()" class="btn-secondary flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Custom Tools -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-5">Custom Tools</h3>
+                        <p class="text-sm text-slate-400 mb-4">Custom tools from the tools/ directory with permission control.</p>
+                        <div id="tools-list" class="space-y-2 mb-4"></div>
+                        <div class="flex gap-2">
+                            <select id="tool-select" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                                <option value="">-- Select a tool --</option>
+                            </select>
+                            <button onclick="addTool()" class="btn-secondary flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Add
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Actions -->
@@ -82,21 +118,29 @@
 </div>
 
 <script type="module">
-    import { getToolsets, getToolset, getMCPServers, saveToolset as saveToolsetApi, deleteToolset } from '/static/js/api.js';
+    import { getToolsets, getToolset, getMCPServers, getSkills, getCustomTools, saveToolset as saveToolsetApi, deleteToolset } from '/static/js/api.js';
     
     let isNewToolset = false;
     let currentToolsetName = '';
     let servers = [];
+    let skills = [];
+    let tools = [];
     let availableMCPServers = [];
+    let availableSkills = [];
+    let availableCustomTools = [];
     
     async function loadToolsets() {
         try {
-            const [toolsetsData, mcpData] = await Promise.all([
+            const [toolsetsData, mcpData, skillsData, customToolsData] = await Promise.all([
                 getToolsets(),
-                getMCPServers()
+                getMCPServers(),
+                getSkills(),
+                getCustomTools()
             ]);
             
             availableMCPServers = (mcpData.mcp_servers || []).map(s => s.name || s);
+            availableSkills = (skillsData.skills || []).map(s => s.name || s);
+            availableCustomTools = customToolsData.tools || [];
             
             const select = document.getElementById('toolset-select');
             // Handle both array and object responses
@@ -107,6 +151,15 @@
             }
             select.innerHTML = '<option value="">-- Select a toolset --</option>' +
                 toolsetsList.map(t => `<option value="${t}">${t}</option>`).join('');
+            
+            // Populate skill and tool dropdowns
+            const skillSelect = document.getElementById('skill-select');
+            skillSelect.innerHTML = '<option value="">-- Select a skill --</option>' +
+                availableSkills.map(s => `<option value="${s}">${s}</option>`).join('');
+            
+            const toolSelect = document.getElementById('tool-select');
+            toolSelect.innerHTML = '<option value="">-- Select a tool --</option>' +
+                availableCustomTools.map(t => `<option value="${t.name}" title="${t.description || ''}">${t.name}${t.passive ? ' (passive)' : ''}</option>`).join('');
         } catch (e) {
             console.error('Failed to load toolsets:', e);
             showToast('Failed to load toolsets', 'error');
@@ -141,7 +194,16 @@
                 permissionType: s.permission_type || s.permissionType || 'always_allow'
             }));
             
+            skills = toolset.skills || [];
+            
+            tools = (toolset.tools || []).map(t => ({
+                name: t.name || t,
+                permissionType: t.permission_type || t.permissionType || 'always_allow'
+            }));
+            
             renderServers();
+            renderSkills();
+            renderTools();
             
             document.getElementById('delete-btn').classList.remove('hidden');
             document.getElementById('loading').classList.add('hidden');
@@ -161,7 +223,11 @@
         document.getElementById('toolset-name').value = '';
         document.getElementById('toolset-description').value = '';
         servers = [];
+        skills = [];
+        tools = [];
         renderServers();
+        renderSkills();
+        renderTools();
         
         document.getElementById('toolset-select').value = '';
         document.getElementById('delete-btn').classList.add('hidden');
@@ -239,6 +305,89 @@
         servers[idx].permissionType = value;
     };
     
+    // Skills functions
+    function renderSkills() {
+        const container = document.getElementById('skills-list');
+        if (skills.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No skills added yet</p>';
+            return;
+        }
+        
+        container.innerHTML = skills.map((skill, idx) => `
+            <div class="flex items-center gap-3 bg-slate-700 px-4 py-3 rounded-lg">
+                <span class="flex-1">${skill}</span>
+                <button onclick="removeSkill(${idx})" class="text-red-400 hover:text-red-300">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+    }
+    
+    window.addSkill = function() {
+        const select = document.getElementById('skill-select');
+        const skillName = select.value;
+        if (!skillName || skills.includes(skillName)) return;
+        skills.push(skillName);
+        select.value = '';
+        renderSkills();
+    };
+    
+    window.removeSkill = function(idx) {
+        skills.splice(idx, 1);
+        renderSkills();
+    };
+    
+    // Custom Tools functions
+    function renderTools() {
+        const container = document.getElementById('tools-list');
+        if (tools.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No custom tools added yet</p>';
+            return;
+        }
+        
+        container.innerHTML = tools.map((tool, idx) => {
+            const toolInfo = availableCustomTools.find(t => t.name === tool.name) || {};
+            return `
+            <div class="bg-slate-700 p-4 rounded-lg flex items-center gap-4">
+                <div class="flex-1">
+                    <span class="font-medium">${tool.name}</span>
+                    ${toolInfo.passive ? '<span class="ml-2 text-xs bg-slate-600 px-2 py-0.5 rounded">passive</span>' : ''}
+                    ${toolInfo.description ? `<p class="text-sm text-slate-400 mt-1">${toolInfo.description}</p>` : ''}
+                </div>
+                <select onchange="updateToolPermission(${idx}, this.value)"
+                        class="bg-slate-600 border border-slate-500 rounded-lg px-3 py-2 text-sm">
+                    <option value="always_allow" ${(tool.permissionType || 'always_allow') === 'always_allow' ? 'selected' : ''}>Always Allow</option>
+                    <option value="ask_permission" ${tool.permissionType === 'ask_permission' ? 'selected' : ''}>Ask Permission</option>
+                </select>
+                <button onclick="removeTool(${idx})" class="text-red-400 hover:text-red-300">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `}).join('');
+    }
+    
+    window.addTool = function() {
+        const select = document.getElementById('tool-select');
+        const toolName = select.value;
+        if (!toolName || tools.find(t => t.name === toolName)) return;
+        tools.push({ name: toolName, permissionType: 'always_allow' });
+        select.value = '';
+        renderTools();
+    };
+    
+    window.removeTool = function(idx) {
+        tools.splice(idx, 1);
+        renderTools();
+    };
+    
+    window.updateToolPermission = function(idx, value) {
+        tools[idx].permissionType = value;
+    };
+    
     window.saveToolset = async function() {
         const name = document.getElementById('toolset-name').value.trim();
         if (!name) {
@@ -258,7 +407,12 @@
         const data = {
             name: name,
             description: document.getElementById('toolset-description').value,
-            servers: validServers
+            servers: validServers,
+            skills: skills,
+            tools: tools.map(t => ({
+                name: t.name,
+                permission_type: t.permissionType || 'always_allow'
+            }))
         };
         
         try {
