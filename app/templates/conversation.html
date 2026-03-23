@@ -577,12 +577,13 @@
                 document.getElementById('thinking-level').value = agentData.agent.thinking_level;
             }
             
-            // Initialize tools, roles, and skills lists for new conversations
-            updateToolsList(agentData?.agent?.tools || []);
-            updateRolesList(agentData?.agent?.roles || []);
-            updateSkillsList(agentData?.agent?.skills || []);
+            // Initialize tools, roles, and skills lists for new conversations (empty - backend will set defaults)
+            updateToolsList([]);
+            updateRolesList([]);
+            updateSkillsList([]);
             
             // Initialize new conversation with info message (like Flutter app does)
+            // After this, loadConversation() is called which will update the UI with backend defaults
             await initializeNewConversation();
         }
         
@@ -981,6 +982,7 @@
         const temperature = parseFloat(document.getElementById('temperature').value);
         
         // Create initial info message with current datetime (like Flutter app)
+        // Don't pass enabled_tools, enabled_roles, enabled_skills - let backend set defaults
         const messageData = {
             conversation_id: '',
             sender: agentName,
@@ -988,8 +990,6 @@
             content: '',
             agent: agentName,
             folder_name: currentFolderName,
-            enabled_tools: [],
-            enabled_roles: [],
             memory: agentData?.agent?.memory || 0,
             temperature: temperature,
             model_name: model,
@@ -1152,8 +1152,8 @@
             // Update roles list
             updateRolesList(data.conversation?.enabled_roles || []);
             
-            // Update skills list
-            updateSkillsList(data.conversation?.enabled_skills || agentData?.agent?.skills || []);
+            // Update skills list (use enabled_skills from conversation, don't fall back to all skills)
+            updateSkillsList(data.conversation?.enabled_skills || []);
             
             // Update staged files
             if (data.staged_files && data.staged_files.length > 0) {

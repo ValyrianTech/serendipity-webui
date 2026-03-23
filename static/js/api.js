@@ -161,9 +161,6 @@ export async function addMessage(wif, data) {
         content: data.content,
         agent: data.agent,
         folder_name: data.folderName || data.folder_name,
-        enabled_tools: data.enabledTools || data.enabled_tools || [],
-        enabled_roles: data.enabledRoles || data.enabled_roles || [],
-        enabled_skills: data.enabledSkills || data.enabled_skills || [],
         memory: data.memory || 0,
         temperature: data.temperature,
         thinking_level: data.thinking_level,
@@ -171,6 +168,14 @@ export async function addMessage(wif, data) {
         run: data.run,
         files: data.files || []
     };
+    
+    // Only include enabled_tools/roles/skills if provided - let backend set defaults otherwise
+    const enabledTools = data.enabledTools || data.enabled_tools;
+    const enabledRoles = data.enabledRoles || data.enabled_roles;
+    const enabledSkills = data.enabledSkills || data.enabled_skills;
+    if (enabledTools !== undefined) apiData.enabled_tools = enabledTools;
+    if (enabledRoles !== undefined) apiData.enabled_roles = enabledRoles;
+    if (enabledSkills !== undefined) apiData.enabled_skills = enabledSkills;
     
     const signedData = await signData(apiData, wif);
     const response = await fetch(`${getBaseUrl()}/api/AddMessage/message`, {
