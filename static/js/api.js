@@ -507,6 +507,38 @@ export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'de
     return `/api/tts-proxy?${params.toString()}`;
 }
 
+// Scheduled Tasks API
+export async function getScheduledTasks(enabledOnly = false) {
+    const params = enabledOnly ? '?enabled_only=true' : '';
+    const response = await fetch(`${getBaseUrl()}/api/GetScheduledTasks${params}`);
+    return response.json();
+}
+
+export async function getScheduledTask(taskId) {
+    const response = await fetch(`${getBaseUrl()}/api/GetScheduledTask?task_id=${encodeURIComponent(taskId)}`);
+    return response.json();
+}
+
+export async function saveScheduledTask(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveScheduledTask/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
+export async function deleteScheduledTask(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/DeleteScheduledTask/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
 // WebSocket connection for streaming
 export function createStreamingConnection(conversationId, onMessage, onError, onClose) {
     const settings = getSettings();

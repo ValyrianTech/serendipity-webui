@@ -1,0 +1,987 @@
+{% extends "base.html" %}
+
+{% block title %}Scheduled Tasks - Serendipity{% endblock %}
+
+{% block content %}
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-3xl font-bold">Scheduled Tasks</h1>
+                <p class="text-slate-400 mt-1">Automate agent conversations with cron-based scheduling</p>
+            </div>
+            <button onclick="showCreateTaskDialog()" class="btn-primary flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Task
+            </button>
+        </div>
+        
+        <div id="tasks-loading" class="flex justify-center py-12">
+            <div class="spinner"></div>
+        </div>
+        
+        <div id="tasks-list" class="space-y-3 hidden">
+            <!-- Task items will be inserted here -->
+        </div>
+        
+        <div id="tasks-empty" class="text-center py-12 hidden">
+            <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p class="text-slate-400 mb-4">No scheduled tasks yet</p>
+            <button onclick="showCreateTaskDialog()" class="btn-primary">Create your first task</button>
+        </div>
+        
+        <div id="tasks-error" class="text-center py-12 hidden">
+            <p class="text-red-400 mb-4">Failed to load scheduled tasks</p>
+            <button onclick="loadTasks()" class="btn-primary">Retry</button>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Task Dialog -->
+<div id="task-dialog" class="modal-backdrop hidden">
+    <div class="modal-content max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-6">
+            <h2 id="dialog-title" class="text-xl font-bold">New Scheduled Task</h2>
+            <button onclick="closeTaskDialog()" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="task-form" onsubmit="saveTask(event)">
+            <input type="hidden" id="task-id" value="">
+            
+            <!-- Basic Info -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">Task Name</label>
+                    <input type="text" id="task-name" placeholder="e.g., Daily Summary" 
+                           class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400 block mb-2">Agent *</label>
+                    <select id="task-agent" required class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        <option value="">Select an agent...</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 block mb-2">Description</label>
+                <input type="text" id="task-description" placeholder="What does this task do?" 
+                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+            </div>
+            
+            <!-- Schedule Section -->
+            <div class="mb-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Schedule
+                </h3>
+                
+                <!-- Preset Buttons -->
+                <div class="mb-4">
+                    <label class="text-sm text-slate-400 block mb-2">Quick Presets</label>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="setCronPreset('* * * * *')" class="preset-btn">Every minute</button>
+                        <button type="button" onclick="setCronPreset('*/5 * * * *')" class="preset-btn">Every 5 min</button>
+                        <button type="button" onclick="setCronPreset('*/15 * * * *')" class="preset-btn">Every 15 min</button>
+                        <button type="button" onclick="setCronPreset('0 * * * *')" class="preset-btn">Every hour</button>
+                        <button type="button" onclick="setCronPreset('0 9 * * *')" class="preset-btn">Daily 9 AM</button>
+                        <button type="button" onclick="setCronPreset('0 9 * * 1')" class="preset-btn">Weekly Mon 9 AM</button>
+                        <button type="button" onclick="setCronPreset('0 9 1 * *')" class="preset-btn">Monthly 1st 9 AM</button>
+                    </div>
+                </div>
+                
+                <!-- Visual Cron Builder -->
+                <div class="grid grid-cols-5 gap-3 mb-4">
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Minute</label>
+                        <select id="cron-minute" onchange="updateCronFromBuilder()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-sm">
+                            <option value="*">Every (*)</option>
+                            <option value="*/5">Every 5</option>
+                            <option value="*/10">Every 10</option>
+                            <option value="*/15">Every 15</option>
+                            <option value="*/30">Every 30</option>
+                            <option value="0">:00</option>
+                            <option value="15">:15</option>
+                            <option value="30">:30</option>
+                            <option value="45">:45</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Hour</label>
+                        <select id="cron-hour" onchange="updateCronFromBuilder()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-sm">
+                            <option value="*">Every (*)</option>
+                            <option value="*/2">Every 2h</option>
+                            <option value="*/4">Every 4h</option>
+                            <option value="*/6">Every 6h</option>
+                            <option value="*/12">Every 12h</option>
+                            <option value="0">0 (12 AM)</option>
+                            <option value="6">6 (6 AM)</option>
+                            <option value="8">8 (8 AM)</option>
+                            <option value="9">9 (9 AM)</option>
+                            <option value="12">12 (Noon)</option>
+                            <option value="17">17 (5 PM)</option>
+                            <option value="18">18 (6 PM)</option>
+                            <option value="21">21 (9 PM)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Day of Month</label>
+                        <select id="cron-dom" onchange="updateCronFromBuilder()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-sm">
+                            <option value="*">Every (*)</option>
+                            <option value="1">1st</option>
+                            <option value="15">15th</option>
+                            <option value="1,15">1st & 15th</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Month</label>
+                        <select id="cron-month" onchange="updateCronFromBuilder()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-sm">
+                            <option value="*">Every (*)</option>
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Day of Week</label>
+                        <select id="cron-dow" onchange="updateCronFromBuilder()" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-2 text-sm">
+                            <option value="*">Every (*)</option>
+                            <option value="1-5">Weekdays</option>
+                            <option value="0,6">Weekends</option>
+                            <option value="0">Sunday</option>
+                            <option value="1">Monday</option>
+                            <option value="2">Tuesday</option>
+                            <option value="3">Wednesday</option>
+                            <option value="4">Thursday</option>
+                            <option value="5">Friday</option>
+                            <option value="6">Saturday</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Raw Cron Expression -->
+                <div class="flex gap-3 items-end">
+                    <div class="flex-1">
+                        <label class="text-sm text-slate-400 block mb-2">Cron Expression *</label>
+                        <input type="text" id="task-cron" required placeholder="* * * * *" 
+                               oninput="updateBuilderFromCron()"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 font-mono">
+                    </div>
+                    <div class="pb-2">
+                        <span id="cron-description" class="text-sm text-indigo-400"></span>
+                    </div>
+                </div>
+                
+                <!-- Next Run Preview -->
+                <div id="next-run-preview" class="mt-3 text-sm text-slate-400 hidden">
+                    <span class="text-slate-500">Next run:</span> <span id="next-run-time" class="text-green-400"></span>
+                </div>
+            </div>
+            
+            <!-- Message Content -->
+            <div class="mb-6">
+                <label class="text-sm text-slate-400 block mb-2">Message Content</label>
+                <textarea id="task-content" rows="3" placeholder="The message to send to the agent..."
+                          class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 resize-none"></textarea>
+            </div>
+            
+            <!-- Advanced Settings (Collapsible) -->
+            <details class="mb-6">
+                <summary class="cursor-pointer text-slate-300 hover:text-white font-medium mb-4">
+                    Advanced Settings
+                </summary>
+                
+                <div class="space-y-4 pl-4 border-l-2 border-slate-700">
+                    <!-- Folder -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Folder Name</label>
+                        <input type="text" id="task-folder" value="scheduled" placeholder="scheduled"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    </div>
+                    
+                    <!-- Model Override -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Model Override</label>
+                            <select id="task-model" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                                <option value="">Use agent default</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm text-slate-400 block mb-2">Temperature</label>
+                            <input type="number" id="task-temperature" min="0" max="2" step="0.1" placeholder="Agent default"
+                                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        </div>
+                    </div>
+                    
+                    <!-- Memory -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Memory Hits</label>
+                        <input type="number" id="task-memory" min="0" max="20" value="0" placeholder="0"
+                               class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                    </div>
+                    
+                    <!-- Tools -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Enabled Tools</label>
+                        <div class="flex gap-2 mb-2">
+                            <select id="tools-dropdown" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                                <option value="">Select an agent first...</option>
+                            </select>
+                            <button type="button" onclick="addSelectedTool()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm transition-colors">Add</button>
+                        </div>
+                        <div id="tools-container" class="flex flex-wrap gap-2 min-h-[40px]">
+                            <span class="text-slate-500 text-sm italic">No tools selected</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Roles -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Enabled Roles</label>
+                        <div class="flex gap-2 mb-2">
+                            <select id="roles-dropdown" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                                <option value="">Select an agent first...</option>
+                            </select>
+                            <button type="button" onclick="addSelectedRole()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm transition-colors">Add</button>
+                        </div>
+                        <div id="roles-container" class="flex flex-wrap gap-2 min-h-[40px]">
+                            <span class="text-slate-500 text-sm italic">No roles selected</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Skills -->
+                    <div>
+                        <label class="text-sm text-slate-400 block mb-2">Enabled Skills</label>
+                        <div class="flex gap-2 mb-2">
+                            <select id="skills-dropdown" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                                <option value="">Select a skill to add...</option>
+                            </select>
+                            <button type="button" onclick="addSelectedSkill()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm transition-colors">Add</button>
+                        </div>
+                        <div id="skills-container" class="flex flex-wrap gap-2 min-h-[40px]">
+                            <span class="text-slate-500 text-sm italic">No skills selected</span>
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Enabled Toggle -->
+            <div class="flex items-center gap-3 mb-6">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="task-enabled" checked class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+                <span class="text-slate-300">Task Enabled</span>
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex gap-3">
+                <button type="submit" class="btn-primary flex-1">Save Task</button>
+                <button type="button" onclick="closeTaskDialog()" class="btn-secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Confirmation Dialog -->
+<div id="delete-dialog" class="modal-backdrop hidden">
+    <div class="modal-content max-w-md">
+        <h2 class="text-xl font-bold mb-4">Delete Task</h2>
+        <p class="text-slate-400 mb-6">Are you sure you want to delete this scheduled task? This action cannot be undone.</p>
+        <div class="flex gap-3">
+            <button onclick="confirmDelete()" class="btn-danger flex-1">Delete</button>
+            <button onclick="closeDeleteDialog()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.preset-btn {
+    @apply px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors;
+}
+.preset-btn:hover {
+    @apply bg-indigo-600;
+}
+.selected-chip {
+    @apply px-3 py-1 text-sm rounded-full bg-indigo-600 text-white flex items-center gap-1;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getScheduledTasks, getScheduledTask, saveScheduledTask, deleteScheduledTask, getAgents, getAgent, getModels, getSkills, getCustomTools } from '/static/js/api.js';
+    
+    let tasksData = [];
+    let agentsData = [];
+    let modelsData = [];
+    let skillsData = [];
+    let toolsData = [];
+    let currentAgentData = null;
+    let deleteTaskId = null;
+    let selectedTools = [];
+    let selectedRoles = [];
+    let selectedSkills = [];
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadTasks();
+        await loadFormData();
+    });
+    
+    window.loadTasks = async function() {
+        const loading = document.getElementById('tasks-loading');
+        const list = document.getElementById('tasks-list');
+        const empty = document.getElementById('tasks-empty');
+        const error = document.getElementById('tasks-error');
+        
+        loading.classList.remove('hidden');
+        list.classList.add('hidden');
+        empty.classList.add('hidden');
+        error.classList.add('hidden');
+        
+        try {
+            const data = await getScheduledTasks();
+            tasksData = data.tasks || [];
+            
+            if (tasksData.length > 0) {
+                list.innerHTML = '';
+                tasksData.forEach(task => {
+                    const item = createTaskItem(task);
+                    list.appendChild(item);
+                });
+                loading.classList.add('hidden');
+                list.classList.remove('hidden');
+            } else {
+                loading.classList.add('hidden');
+                empty.classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error('Failed to load tasks:', e);
+            loading.classList.add('hidden');
+            error.classList.remove('hidden');
+        }
+    };
+    
+    async function loadFormData() {
+        try {
+            const [agentsRes, modelsRes, skillsRes, toolsRes] = await Promise.all([
+                getAgents(),
+                getModels(),
+                getSkills(),
+                getCustomTools()
+            ]);
+            
+            agentsData = agentsRes.agents || [];
+            modelsData = modelsRes.model_names || [];
+            skillsData = skillsRes.skills || [];
+            toolsData = toolsRes.tools || [];
+            
+            // Populate agents dropdown
+            const agentSelect = document.getElementById('task-agent');
+            agentSelect.innerHTML = '<option value="">Select an agent...</option>';
+            agentsData.forEach(agent => {
+                const option = document.createElement('option');
+                option.value = agent.name;
+                option.textContent = agent.name;
+                agentSelect.appendChild(option);
+            });
+            
+            // Populate models dropdown
+            const modelSelect = document.getElementById('task-model');
+            modelSelect.innerHTML = '<option value="">Use agent default</option>';
+            modelsData.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                modelSelect.appendChild(option);
+            });
+            
+            // Populate skills dropdown
+            populateSkillsDropdown();
+            renderSelectedSkills();
+            
+            // Tools and roles dropdowns will be populated when agent is selected
+            renderSelectedTools();
+            renderSelectedRoles();
+            
+        } catch (e) {
+            console.error('Failed to load form data:', e);
+        }
+    }
+    
+    // === TOOLS ===
+    function populateToolsDropdown() {
+        const dropdown = document.getElementById('tools-dropdown');
+        const agentTools = currentAgentData?.tools || [];
+        
+        dropdown.innerHTML = '<option value="">Select a tool to add...</option>';
+        agentTools.forEach(toolName => {
+            if (!selectedTools.includes(toolName)) {
+                const option = document.createElement('option');
+                option.value = toolName;
+                option.textContent = toolName;
+                dropdown.appendChild(option);
+            }
+        });
+        
+        if (agentTools.length === 0) {
+            dropdown.innerHTML = '<option value="">No tools available</option>';
+        }
+    }
+    
+    function renderSelectedTools() {
+        const container = document.getElementById('tools-container');
+        
+        if (selectedTools.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-sm italic">No tools selected</span>';
+            return;
+        }
+        
+        container.innerHTML = selectedTools.map(toolName => 
+            `<span class="selected-chip">
+                ${toolName}
+                <button type="button" onclick="removeTool('${toolName}')" class="ml-1 hover:text-red-400">&times;</button>
+            </span>`
+        ).join('');
+    }
+    
+    window.addSelectedTool = function() {
+        const dropdown = document.getElementById('tools-dropdown');
+        const toolName = dropdown.value;
+        if (toolName && !selectedTools.includes(toolName)) {
+            selectedTools.push(toolName);
+            renderSelectedTools();
+            populateToolsDropdown();
+        }
+    };
+    
+    window.removeTool = function(toolName) {
+        const idx = selectedTools.indexOf(toolName);
+        if (idx !== -1) {
+            selectedTools.splice(idx, 1);
+            renderSelectedTools();
+            populateToolsDropdown();
+        }
+    };
+    
+    // === ROLES ===
+    function populateRolesDropdown() {
+        const dropdown = document.getElementById('roles-dropdown');
+        const roles = currentAgentData?.roles || [];
+        
+        dropdown.innerHTML = '<option value="">Select a role to add...</option>';
+        roles.forEach(role => {
+            const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
+            if (!selectedRoles.includes(roleName)) {
+                const option = document.createElement('option');
+                option.value = roleName;
+                option.textContent = roleName;
+                dropdown.appendChild(option);
+            }
+        });
+        
+        if (roles.length === 0) {
+            dropdown.innerHTML = '<option value="">No roles available</option>';
+        }
+    }
+    
+    function renderSelectedRoles() {
+        const container = document.getElementById('roles-container');
+        
+        if (selectedRoles.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-sm italic">No roles selected</span>';
+            return;
+        }
+        
+        container.innerHTML = selectedRoles.map(roleName => 
+            `<span class="selected-chip">
+                ${roleName}
+                <button type="button" onclick="removeRole('${roleName}')" class="ml-1 hover:text-red-400">&times;</button>
+            </span>`
+        ).join('');
+    }
+    
+    window.addSelectedRole = function() {
+        const dropdown = document.getElementById('roles-dropdown');
+        const roleName = dropdown.value;
+        if (roleName && !selectedRoles.includes(roleName)) {
+            selectedRoles.push(roleName);
+            renderSelectedRoles();
+            populateRolesDropdown();
+        }
+    };
+    
+    window.removeRole = function(roleName) {
+        const idx = selectedRoles.indexOf(roleName);
+        if (idx !== -1) {
+            selectedRoles.splice(idx, 1);
+            renderSelectedRoles();
+            populateRolesDropdown();
+        }
+    };
+    
+    // === SKILLS ===
+    function populateSkillsDropdown() {
+        const dropdown = document.getElementById('skills-dropdown');
+        
+        dropdown.innerHTML = '<option value="">Select a skill to add...</option>';
+        skillsData.forEach(skill => {
+            if (!selectedSkills.includes(skill.name)) {
+                const option = document.createElement('option');
+                option.value = skill.name;
+                option.textContent = skill.name;
+                dropdown.appendChild(option);
+            }
+        });
+        
+        if (skillsData.length === 0) {
+            dropdown.innerHTML = '<option value="">No skills available</option>';
+        }
+    }
+    
+    function renderSelectedSkills() {
+        const container = document.getElementById('skills-container');
+        
+        if (selectedSkills.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-sm italic">No skills selected</span>';
+            return;
+        }
+        
+        container.innerHTML = selectedSkills.map(skillName => 
+            `<span class="selected-chip">
+                ${skillName}
+                <button type="button" onclick="removeSkill('${skillName}')" class="ml-1 hover:text-red-400">&times;</button>
+            </span>`
+        ).join('');
+    }
+    
+    window.addSelectedSkill = function() {
+        const dropdown = document.getElementById('skills-dropdown');
+        const skillName = dropdown.value;
+        if (skillName && !selectedSkills.includes(skillName)) {
+            selectedSkills.push(skillName);
+            renderSelectedSkills();
+            populateSkillsDropdown();
+        }
+    };
+    
+    window.removeSkill = function(skillName) {
+        const idx = selectedSkills.indexOf(skillName);
+        if (idx !== -1) {
+            selectedSkills.splice(idx, 1);
+            renderSelectedSkills();
+            populateSkillsDropdown();
+        }
+    };
+    
+    // Load agent data when agent is selected
+    document.getElementById('task-agent').addEventListener('change', async (e) => {
+        const agentName = e.target.value;
+        if (agentName) {
+            try {
+                const data = await getAgent(agentName);
+                currentAgentData = data.agent;
+                // Clear selections when agent changes
+                selectedTools = [];
+                selectedRoles = [];
+                populateToolsDropdown();
+                populateRolesDropdown();
+                renderSelectedTools();
+                renderSelectedRoles();
+            } catch (err) {
+                console.error('Failed to load agent:', err);
+            }
+        } else {
+            currentAgentData = null;
+            selectedTools = [];
+            selectedRoles = [];
+            document.getElementById('tools-dropdown').innerHTML = '<option value="">Select an agent first...</option>';
+            document.getElementById('roles-dropdown').innerHTML = '<option value="">Select an agent first...</option>';
+            renderSelectedTools();
+            renderSelectedRoles();
+        }
+    });
+    
+    function createTaskItem(task) {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-800 border border-slate-700 rounded-lg p-4 hover:border-slate-600 transition-colors';
+        
+        const enabledClass = task.enabled ? 'bg-green-500' : 'bg-slate-500';
+        const enabledText = task.enabled ? 'Enabled' : 'Disabled';
+        
+        const nextRun = task.next_run ? new Date(task.next_run).toLocaleString() : 'Not scheduled';
+        const lastRun = task.last_run ? new Date(task.last_run).toLocaleString() : 'Never';
+        
+        item.innerHTML = `
+            <div class="flex items-start justify-between">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-3 mb-2">
+                        <span class="w-2 h-2 rounded-full ${enabledClass}"></span>
+                        <h3 class="font-semibold text-lg truncate">${task.name || 'Unnamed Task'}</h3>
+                        <span class="px-2 py-0.5 text-xs rounded bg-slate-700 text-slate-300">${task.cron_expression}</span>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">${task.description || 'No description'}</p>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <span class="text-slate-500">
+                            <span class="text-slate-400">Agent:</span> ${task.agent}
+                        </span>
+                        <span class="text-slate-500">
+                            <span class="text-slate-400">Next:</span> <span class="text-green-400">${nextRun}</span>
+                        </span>
+                        <span class="text-slate-500">
+                            <span class="text-slate-400">Last:</span> ${lastRun}
+                        </span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 ml-4">
+                    <button onclick="editTask('${task.task_id}')" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Edit">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                    </button>
+                    <button onclick="toggleTaskEnabled('${task.task_id}', ${!task.enabled})" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="${task.enabled ? 'Disable' : 'Enable'}">
+                        <svg class="w-5 h-5 ${task.enabled ? 'text-green-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${task.enabled ? 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z' : 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z'}"/>
+                        </svg>
+                    </button>
+                    <button onclick="showDeleteDialog('${task.task_id}')" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Delete">
+                        <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        return item;
+    }
+    
+    window.showCreateTaskDialog = function() {
+        document.getElementById('dialog-title').textContent = 'New Scheduled Task';
+        document.getElementById('task-form').reset();
+        document.getElementById('task-id').value = '';
+        document.getElementById('task-enabled').checked = true;
+        document.getElementById('task-folder').value = 'scheduled';
+        document.getElementById('task-cron').value = '0 9 * * *';
+        selectedTools = [];
+        selectedRoles = [];
+        selectedSkills = [];
+        currentAgentData = null;
+        document.getElementById('tools-dropdown').innerHTML = '<option value="">Select an agent first...</option>';
+        document.getElementById('roles-dropdown').innerHTML = '<option value="">Select an agent first...</option>';
+        renderSelectedTools();
+        renderSelectedRoles();
+        populateSkillsDropdown();
+        renderSelectedSkills();
+        updateCronDescription();
+        document.getElementById('task-dialog').classList.remove('hidden');
+    };
+    
+    window.editTask = async function(taskId) {
+        try {
+            const data = await getScheduledTask(taskId);
+            const task = data.task;
+            
+            document.getElementById('dialog-title').textContent = 'Edit Scheduled Task';
+            document.getElementById('task-id').value = task.task_id;
+            document.getElementById('task-name').value = task.name || '';
+            document.getElementById('task-description').value = task.description || '';
+            document.getElementById('task-agent').value = task.agent || '';
+            document.getElementById('task-cron').value = task.cron_expression || '';
+            document.getElementById('task-content').value = task.content || '';
+            document.getElementById('task-folder').value = task.folder_name || 'scheduled';
+            document.getElementById('task-model').value = task.model_name || '';
+            document.getElementById('task-temperature').value = task.temperature ?? '';
+            document.getElementById('task-memory').value = task.memory || 0;
+            document.getElementById('task-enabled').checked = task.enabled !== false;
+            
+            selectedTools = task.enabled_tools || [];
+            selectedRoles = task.enabled_roles || [];
+            selectedSkills = task.enabled_skills || [];
+            
+            // Load agent data for roles and tools
+            if (task.agent) {
+                const agentData = await getAgent(task.agent);
+                currentAgentData = agentData.agent;
+                populateToolsDropdown();
+                populateRolesDropdown();
+                renderSelectedTools();
+                renderSelectedRoles();
+            }
+            
+            populateSkillsDropdown();
+            renderSelectedSkills();
+            updateCronDescription();
+            updateBuilderFromCron();
+            
+            document.getElementById('task-dialog').classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load task:', e);
+            showToast('Failed to load task', 'error');
+        }
+    };
+    
+    window.closeTaskDialog = function() {
+        document.getElementById('task-dialog').classList.add('hidden');
+    };
+    
+    window.saveTask = async function(event) {
+        event.preventDefault();
+        
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        const taskId = document.getElementById('task-id').value;
+        const cronExpression = document.getElementById('task-cron').value.trim();
+        const agent = document.getElementById('task-agent').value;
+        
+        if (!cronExpression) {
+            showToast('Cron expression is required', 'error');
+            return;
+        }
+        
+        if (!agent) {
+            showToast('Agent is required', 'error');
+            return;
+        }
+        
+        const data = {
+            name: document.getElementById('task-name').value.trim(),
+            description: document.getElementById('task-description').value.trim(),
+            cron_expression: cronExpression,
+            agent: agent,
+            content: document.getElementById('task-content').value.trim(),
+            folder_name: document.getElementById('task-folder').value.trim() || 'scheduled',
+            enabled: document.getElementById('task-enabled').checked,
+            memory: parseInt(document.getElementById('task-memory').value) || 0
+        };
+        
+        // Only include task_id if editing
+        if (taskId) {
+            data.task_id = taskId;
+        }
+        
+        // Optional fields
+        const modelName = document.getElementById('task-model').value;
+        if (modelName) data.model_name = modelName;
+        
+        const temperature = document.getElementById('task-temperature').value;
+        if (temperature !== '') data.temperature = parseFloat(temperature);
+        
+        if (selectedTools.length > 0) data.enabled_tools = selectedTools;
+        if (selectedRoles.length > 0) data.enabled_roles = selectedRoles;
+        if (selectedSkills.length > 0) data.enabled_skills = selectedSkills;
+        
+        try {
+            const response = await saveScheduledTask(window.currentWif, data);
+            
+            if (response.success) {
+                showToast(taskId ? 'Task updated' : 'Task created', 'success');
+                closeTaskDialog();
+                await loadTasks();
+            } else {
+                showToast(response.error || 'Failed to save task', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to save task:', e);
+            showToast('Failed to save task: ' + e.message, 'error');
+        }
+    };
+    
+    window.toggleTaskEnabled = async function(taskId, enabled) {
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        try {
+            const response = await saveScheduledTask(window.currentWif, {
+                task_id: taskId,
+                enabled: enabled
+            });
+            
+            if (response.success) {
+                showToast(enabled ? 'Task enabled' : 'Task disabled', 'success');
+                await loadTasks();
+            } else {
+                showToast(response.error || 'Failed to update task', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to toggle task:', e);
+            showToast('Failed to update task', 'error');
+        }
+    };
+    
+    window.showDeleteDialog = function(taskId) {
+        deleteTaskId = taskId;
+        document.getElementById('delete-dialog').classList.remove('hidden');
+    };
+    
+    window.closeDeleteDialog = function() {
+        deleteTaskId = null;
+        document.getElementById('delete-dialog').classList.add('hidden');
+    };
+    
+    window.confirmDelete = async function() {
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        if (!deleteTaskId) return;
+        
+        try {
+            const response = await deleteScheduledTask(window.currentWif, {
+                task_id: deleteTaskId
+            });
+            
+            if (response.success) {
+                showToast('Task deleted', 'success');
+                closeDeleteDialog();
+                await loadTasks();
+            } else {
+                showToast(response.error || 'Failed to delete task', 'error');
+            }
+        } catch (e) {
+            console.error('Failed to delete task:', e);
+            showToast('Failed to delete task', 'error');
+        }
+    };
+    
+    // Cron Builder Functions
+    window.setCronPreset = function(expression) {
+        document.getElementById('task-cron').value = expression;
+        updateBuilderFromCron();
+        updateCronDescription();
+    };
+    
+    window.updateCronFromBuilder = function() {
+        const minute = document.getElementById('cron-minute').value;
+        const hour = document.getElementById('cron-hour').value;
+        const dom = document.getElementById('cron-dom').value;
+        const month = document.getElementById('cron-month').value;
+        const dow = document.getElementById('cron-dow').value;
+        
+        const expression = `${minute} ${hour} ${dom} ${month} ${dow}`;
+        document.getElementById('task-cron').value = expression;
+        updateCronDescription();
+    };
+    
+    window.updateBuilderFromCron = function() {
+        const expression = document.getElementById('task-cron').value.trim();
+        const parts = expression.split(/\s+/);
+        
+        if (parts.length !== 5) return;
+        
+        const [minute, hour, dom, month, dow] = parts;
+        
+        // Try to match to dropdown options, fallback to '*' if no match
+        setSelectIfMatch('cron-minute', minute);
+        setSelectIfMatch('cron-hour', hour);
+        setSelectIfMatch('cron-dom', dom);
+        setSelectIfMatch('cron-month', month);
+        setSelectIfMatch('cron-dow', dow);
+        
+        updateCronDescription();
+    };
+    
+    function setSelectIfMatch(selectId, value) {
+        const select = document.getElementById(selectId);
+        const options = Array.from(select.options).map(o => o.value);
+        if (options.includes(value)) {
+            select.value = value;
+        }
+    }
+    
+    function updateCronDescription() {
+        const expression = document.getElementById('task-cron').value.trim();
+        const desc = describeCron(expression);
+        document.getElementById('cron-description').textContent = desc;
+    }
+    
+    function describeCron(expression) {
+        const parts = expression.split(/\s+/);
+        if (parts.length !== 5) return 'Invalid expression';
+        
+        const [minute, hour, dom, month, dow] = parts;
+        
+        // Simple descriptions for common patterns
+        if (expression === '* * * * *') return 'Every minute';
+        if (expression === '*/5 * * * *') return 'Every 5 minutes';
+        if (expression === '*/15 * * * *') return 'Every 15 minutes';
+        if (expression === '*/30 * * * *') return 'Every 30 minutes';
+        if (expression === '0 * * * *') return 'Every hour';
+        if (expression === '0 */2 * * *') return 'Every 2 hours';
+        if (expression === '0 */4 * * *') return 'Every 4 hours';
+        if (expression === '0 */6 * * *') return 'Every 6 hours';
+        if (expression === '0 */12 * * *') return 'Every 12 hours';
+        
+        // Build description
+        let desc = '';
+        
+        // Time
+        if (minute !== '*' && hour !== '*') {
+            const h = parseInt(hour);
+            const m = parseInt(minute);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            desc = `At ${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+        } else if (minute !== '*') {
+            desc = `At minute ${minute}`;
+        } else if (hour !== '*') {
+            desc = `Every minute during hour ${hour}`;
+        } else {
+            desc = 'Every minute';
+        }
+        
+        // Day of week
+        if (dow !== '*') {
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            if (dow === '1-5') desc += ' on weekdays';
+            else if (dow === '0,6') desc += ' on weekends';
+            else if (dow.match(/^\d$/)) desc += ` on ${days[parseInt(dow)]}`;
+            else desc += ` on days ${dow}`;
+        }
+        
+        // Day of month
+        if (dom !== '*') {
+            if (dom === '1') desc += ' on the 1st';
+            else if (dom === '15') desc += ' on the 15th';
+            else desc += ` on day ${dom}`;
+        }
+        
+        // Month
+        if (month !== '*') {
+            const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            if (month.match(/^\d+$/)) desc += ` in ${months[parseInt(month)]}`;
+            else desc += ` in month ${month}`;
+        }
+        
+        return desc;
+    }
+    
+    // Initialize cron description
+    document.getElementById('task-cron')?.addEventListener('input', updateCronDescription);
+</script>
+{% endblock %}

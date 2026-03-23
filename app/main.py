@@ -66,6 +66,11 @@ async def llms(request: Request):
     return templates.TemplateResponse("llms.html", {"request": request})
 
 
+@app.get("/scheduled-tasks", response_class=HTMLResponse)
+async def scheduled_tasks(request: Request):
+    return templates.TemplateResponse("scheduled_tasks.html", {"request": request})
+
+
 @app.get("/agent/{agent_name}/workflows", response_class=HTMLResponse)
 async def workflows(request: Request, agent_name: str, workflow_id: str = "", node_id: str = ""):
     return templates.TemplateResponse("workflows.html", {
