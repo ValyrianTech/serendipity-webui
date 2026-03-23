@@ -125,22 +125,17 @@
             <!-- Tools -->
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Tools</h2>
-                <div id="tools-list" class="flex flex-wrap gap-2 mb-4"></div>
-                <div class="flex gap-2">
-                    <input type="text" id="new-tool" placeholder="Add new tool..."
-                           class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
-                    <button onclick="addTool()" class="btn-secondary">Add</button>
+                <p class="text-xs text-slate-500 mb-4">Configure which tools are available to this agent. Auto-allow skips confirmation, Default enables the tool when starting a new conversation.</p>
+                
+                <div id="tools-list" class="space-y-2 mb-4">
+                    <!-- Tools will be rendered here -->
                 </div>
-            </div>
-            
-            <!-- Auto-Allow Tools -->
-            <div class="bg-slate-800 rounded-lg p-6">
-                <h2 class="text-lg font-semibold mb-4">Auto-Allow Tools</h2>
-                <div id="auto-allow-tools-list" class="flex flex-wrap gap-2 mb-4"></div>
+                
                 <div class="flex gap-2">
-                    <input type="text" id="new-auto-allow-tool" placeholder="Add auto-allow tool..."
-                           class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
-                    <button onclick="addAutoAllowTool()" class="btn-secondary">Add</button>
+                    <select id="new-tool" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        <option value="">-- Select a tool to add --</option>
+                    </select>
+                    <button onclick="addTool()" class="btn-secondary">Add</button>
                 </div>
             </div>
             
@@ -154,8 +149,8 @@
             <!-- Skills -->
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Skills</h2>
-                <p class="text-xs text-slate-500 mb-3">Skills are modular capabilities the agent can load on-demand. <a href="/skills" class="text-indigo-400 hover:text-indigo-300">Manage skills →</a></p>
-                <div id="skills-list" class="flex flex-wrap gap-2 mb-4"></div>
+                <p class="text-xs text-slate-500 mb-3">Skills are modular capabilities the agent can load on-demand. Default enables the skill when starting a new conversation. <a href="/skills" class="text-indigo-400 hover:text-indigo-300">Manage skills →</a></p>
+                <div id="skills-list" class="space-y-2 mb-4"></div>
                 <div class="flex gap-2">
                     <select id="new-skill" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
                         <option value="">-- Select a skill to add --</option>
@@ -202,6 +197,7 @@
             <!-- Roles -->
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Roles</h2>
+                <p class="text-xs text-slate-500 mb-3">Roles define different personas the agent can adopt. Default enables the role when starting a new conversation.</p>
                 <div id="roles-list" class="space-y-3 mb-4"></div>
                 <button onclick="showAddRoleModal()" class="btn-secondary">Add Role</button>
             </div>
@@ -280,17 +276,21 @@
 </div>
 
 <script type="module">
-    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills } from '/static/js/api.js';
+    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills, getCustomTools } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
     let tools = [];
     let autoAllowTools = [];
+    let defaultTools = [];
+    let availableTools = [];
     let participants = [];
     let orderOfSpeakers = [];
     let voices = [];
     let roles = [];
+    let defaultRoles = [];
     let skills = [];
+    let defaultSkills = [];
     let availableSkills = [];
     let editingRoleIndex = -1; // -1 means adding new, >= 0 means editing existing
     let avatarEnabled = false;
@@ -299,13 +299,15 @@
     
     async function loadAgent() {
         try {
-            const [agentResponse, modelsResponse, skillsResponse] = await Promise.all([
+            const [agentResponse, modelsResponse, skillsResponse, toolsResponse] = await Promise.all([
                 getAgent(agentName),
                 getModels(),
-                getSkills()
+                getSkills(),
+                getCustomTools()
             ]);
             
             agentData = agentResponse.agent;
+            availableTools = toolsResponse.tools || [];
             
             // Populate model dropdown
             const modelSelect = document.getElementById('model-name');
@@ -350,15 +352,18 @@
             // Initialize arrays
             tools = agentData.tools || [];
             autoAllowTools = agentData.auto_allow_tools || [];
+            defaultTools = agentData.default_tools || [];
             participants = agentData.participants || [];
             orderOfSpeakers = agentData.order_of_speakers || [];
             voices = Array.isArray(agentData.voices) ? agentData.voices : [];
             roles = agentData.roles || [];
+            defaultRoles = agentData.default_roles || [];
             skills = agentData.skills || [];
+            defaultSkills = agentData.default_skills || [];
             availableSkills = skillsResponse.skills || [];
             
             renderTools();
-            renderAutoAllowTools();
+            populateToolsDropdown();
             renderParticipants();
             renderSpeakers();
             renderVoices();
@@ -376,23 +381,69 @@
     
     function renderTools() {
         const container = document.getElementById('tools-list');
-        container.innerHTML = tools.map((tool, idx) => `
-            <span class="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                ${tool}
-                <button onclick="removeTool(${idx})" class="hover:text-red-300">&times;</button>
-            </span>
-        `).join('');
+        if (tools.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No tools configured</p>';
+            return;
+        }
+        container.innerHTML = tools.map((tool, idx) => {
+            const isAutoAllow = autoAllowTools.includes(tool);
+            const isDefault = defaultTools.includes(tool);
+            return `
+                <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
+                    <span class="font-medium">${tool}</span>
+                    <div class="flex items-center gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer text-sm">
+                            <input type="checkbox" class="w-4 h-4 rounded" 
+                                   ${isAutoAllow ? 'checked' : ''} 
+                                   onchange="toggleToolAutoAllow('${tool}', this.checked)">
+                            <span class="text-slate-300">Auto-allow</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-sm">
+                            <input type="checkbox" class="w-4 h-4 rounded" 
+                                   ${isDefault ? 'checked' : ''} 
+                                   onchange="toggleToolDefault('${tool}', this.checked)">
+                            <span class="text-slate-300">Default</span>
+                        </label>
+                        <button onclick="removeTool(${idx})" class="text-red-400 hover:text-red-300 ml-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
     
-    function renderAutoAllowTools() {
-        const container = document.getElementById('auto-allow-tools-list');
-        container.innerHTML = autoAllowTools.map((tool, idx) => `
-            <span class="bg-emerald-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                ${tool}
-                <button onclick="removeAutoAllowTool(${idx})" class="hover:text-red-300">&times;</button>
-            </span>
-        `).join('');
+    function populateToolsDropdown() {
+        const select = document.getElementById('new-tool');
+        // Filter out already added tools
+        const unassignedTools = availableTools.filter(t => !tools.includes(t.name));
+        select.innerHTML = '<option value="">-- Select a tool to add --</option>' +
+            unassignedTools.map(t => `<option value="${t.name}" title="${t.description || ''}">${t.name}${t.passive ? ' (passive)' : ''}</option>`).join('');
     }
+    
+    window.toggleToolAutoAllow = function(toolName, checked) {
+        if (checked) {
+            if (!autoAllowTools.includes(toolName)) {
+                autoAllowTools.push(toolName);
+            }
+        } else {
+            const idx = autoAllowTools.indexOf(toolName);
+            if (idx > -1) autoAllowTools.splice(idx, 1);
+        }
+    };
+    
+    window.toggleToolDefault = function(toolName, checked) {
+        if (checked) {
+            if (!defaultTools.includes(toolName)) {
+                defaultTools.push(toolName);
+            }
+        } else {
+            const idx = defaultTools.indexOf(toolName);
+            if (idx > -1) defaultTools.splice(idx, 1);
+        }
+    };
     
     function renderParticipants() {
         const container = document.getElementById('participants-list');
@@ -518,11 +569,18 @@
             const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
             const rolePrompt = typeof role === 'object' ? (role.role_prompt || '') : '';
             const escapedPrompt = escapeHtml(rolePrompt);
+            const isDefault = defaultRoles.includes(roleName);
             return `
                 <div class="bg-slate-700 p-4 rounded-lg mb-3">
                     <div class="flex items-start justify-between mb-2">
                         <h3 class="font-semibold">${escapeHtml(roleName)}</h3>
-                        <div class="flex gap-2 flex-shrink-0 ml-4">
+                        <div class="flex items-center gap-4 flex-shrink-0 ml-4">
+                            <label class="flex items-center gap-2 cursor-pointer text-sm">
+                                <input type="checkbox" class="w-4 h-4 rounded" 
+                                       ${isDefault ? 'checked' : ''} 
+                                       onchange="toggleRoleDefault('${roleName}', this.checked)">
+                                <span class="text-slate-300">Default</span>
+                            </label>
                             <button onclick="editRole(${idx})" class="text-indigo-400 hover:text-indigo-300">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -541,19 +599,56 @@
         }).join('');
     }
     
+    window.toggleRoleDefault = function(roleName, checked) {
+        if (checked) {
+            if (!defaultRoles.includes(roleName)) {
+                defaultRoles.push(roleName);
+            }
+        } else {
+            const idx = defaultRoles.indexOf(roleName);
+            if (idx > -1) defaultRoles.splice(idx, 1);
+        }
+    };
+    
     function renderSkills() {
         const container = document.getElementById('skills-list');
         if (skills.length === 0) {
             container.innerHTML = '<p class="text-slate-400">No skills assigned</p>';
             return;
         }
-        container.innerHTML = skills.map((skill, idx) => `
-            <span class="bg-yellow-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                ${skill}
-                <button onclick="removeSkill(${idx})" class="hover:text-red-300">&times;</button>
-            </span>
-        `).join('');
+        container.innerHTML = skills.map((skill, idx) => {
+            const isDefault = defaultSkills.includes(skill);
+            return `
+                <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
+                    <span class="font-medium">${skill}</span>
+                    <div class="flex items-center gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer text-sm">
+                            <input type="checkbox" class="w-4 h-4 rounded" 
+                                   ${isDefault ? 'checked' : ''} 
+                                   onchange="toggleSkillDefault('${skill}', this.checked)">
+                            <span class="text-slate-300">Default</span>
+                        </label>
+                        <button onclick="removeSkill(${idx})" class="text-red-400 hover:text-red-300 ml-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
+    
+    window.toggleSkillDefault = function(skillName, checked) {
+        if (checked) {
+            if (!defaultSkills.includes(skillName)) {
+                defaultSkills.push(skillName);
+            }
+        } else {
+            const idx = defaultSkills.indexOf(skillName);
+            if (idx > -1) defaultSkills.splice(idx, 1);
+        }
+    };
     
     function populateSkillsDropdown() {
         const select = document.getElementById('new-skill');
@@ -573,37 +668,34 @@
     };
     
     window.removeSkill = function(idx) {
+        const skillName = skills[idx];
         skills.splice(idx, 1);
+        // Also remove from defaultSkills if present
+        const defaultIdx = defaultSkills.indexOf(skillName);
+        if (defaultIdx > -1) defaultSkills.splice(defaultIdx, 1);
         renderSkills();
         populateSkillsDropdown();
     };
     
     window.addTool = function() {
-        const input = document.getElementById('new-tool');
-        if (input.value.trim()) {
-            tools.push(input.value.trim());
-            input.value = '';
+        const select = document.getElementById('new-tool');
+        if (select.value) {
+            tools.push(select.value);
             renderTools();
+            populateToolsDropdown();
         }
     };
     
     window.removeTool = function(idx) {
+        const toolName = tools[idx];
         tools.splice(idx, 1);
+        // Also remove from autoAllowTools and defaultTools if present
+        const autoIdx = autoAllowTools.indexOf(toolName);
+        if (autoIdx > -1) autoAllowTools.splice(autoIdx, 1);
+        const defaultIdx = defaultTools.indexOf(toolName);
+        if (defaultIdx > -1) defaultTools.splice(defaultIdx, 1);
         renderTools();
-    };
-    
-    window.addAutoAllowTool = function() {
-        const input = document.getElementById('new-auto-allow-tool');
-        if (input.value.trim()) {
-            autoAllowTools.push(input.value.trim());
-            input.value = '';
-            renderAutoAllowTools();
-        }
-    };
-    
-    window.removeAutoAllowTool = function(idx) {
-        autoAllowTools.splice(idx, 1);
-        renderAutoAllowTools();
+        populateToolsDropdown();
     };
     
     window.addParticipant = function() {
@@ -654,6 +746,9 @@
                 action: 'delete'
             });
             roles.splice(idx, 1);
+            // Also remove from defaultRoles if present
+            const defaultIdx = defaultRoles.indexOf(roleName);
+            if (defaultIdx > -1) defaultRoles.splice(defaultIdx, 1);
             renderRoles();
             showToast('Role deleted', 'success');
         } catch (e) {
@@ -851,12 +946,15 @@
             available: document.getElementById('available-flag').checked,
             tools: tools,
             auto_allow_tools: autoAllowTools,
+            default_tools: defaultTools,
             participants: participants,
             order_of_speakers: orderOfSpeakers,
             voices: voices,
             toolsets: toolsetsList,
             roles: roles,
+            default_roles: defaultRoles,
             skills: skills,
+            default_skills: defaultSkills,
             avatar_enabled: document.getElementById('avatar-enabled').checked,
             avatar_url: document.getElementById('avatar-url').value || 'http://localhost:8000',
             avatar_model: document.getElementById('avatar-model').value || null
