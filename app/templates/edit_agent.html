@@ -142,8 +142,14 @@
             <!-- Toolsets -->
             <div class="bg-slate-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold mb-4">Toolsets</h2>
-                <input type="text" id="toolsets" placeholder="Comma-separated toolset names..."
-                       class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                <p class="text-xs text-slate-500 mb-3">Toolsets are predefined collections of tools, skills, and MCP servers. <a href="/toolsets" class="text-indigo-400 hover:text-indigo-300">Manage toolsets →</a></p>
+                <div id="toolsets-list" class="space-y-2 mb-4"></div>
+                <div class="flex gap-2">
+                    <select id="new-toolset" class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
+                        <option value="">-- Select a toolset to add --</option>
+                    </select>
+                    <button onclick="addToolset()" class="btn-secondary">Add</button>
+                </div>
             </div>
             
             <!-- Skills -->
@@ -276,7 +282,7 @@
 </div>
 
 <script type="module">
-    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills, getCustomTools } from '/static/js/api.js';
+    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills, getCustomTools, getToolsets } from '/static/js/api.js';
     
     const agentName = '{{ agent_name }}';
     let agentData = null;
@@ -292,6 +298,8 @@
     let skills = [];
     let defaultSkills = [];
     let availableSkills = [];
+    let toolsets = [];
+    let availableToolsets = [];
     let editingRoleIndex = -1; // -1 means adding new, >= 0 means editing existing
     let avatarEnabled = false;
     let avatarUrl = 'http://localhost:8000';
@@ -299,15 +307,22 @@
     
     async function loadAgent() {
         try {
-            const [agentResponse, modelsResponse, skillsResponse, toolsResponse] = await Promise.all([
+            const [agentResponse, modelsResponse, skillsResponse, toolsResponse, toolsetsResponse] = await Promise.all([
                 getAgent(agentName),
                 getModels(),
                 getSkills(),
-                getCustomTools()
+                getCustomTools(),
+                getToolsets()
             ]);
             
             agentData = agentResponse.agent;
             availableTools = toolsResponse.tools || [];
+            // Handle both array and object responses for toolsets
+            let toolsetsList = toolsetsResponse.toolsets || [];
+            if (!Array.isArray(toolsetsList)) {
+                toolsetsList = Object.keys(toolsetsList);
+            }
+            availableToolsets = toolsetsList;
             
             // Populate model dropdown
             const modelSelect = document.getElementById('model-name');
@@ -338,7 +353,6 @@
             document.getElementById('serendipity-flag').checked = agentData.SERENDIPITY || false;
             document.getElementById('public-flag').checked = agentData.public || false;
             document.getElementById('available-flag').checked = agentData.available || false;
-            document.getElementById('toolsets').value = (agentData.toolsets || []).join(', ');
             
             // Avatar settings
             avatarEnabled = agentData.avatar_enabled || false;
@@ -361,9 +375,12 @@
             skills = agentData.skills || [];
             defaultSkills = agentData.default_skills || [];
             availableSkills = skillsResponse.skills || [];
+            toolsets = agentData.toolsets || [];
             
             renderTools();
             populateToolsDropdown();
+            renderToolsets();
+            populateToolsetsDropdown();
             renderParticipants();
             renderSpeakers();
             renderVoices();
@@ -443,6 +460,47 @@
             const idx = defaultTools.indexOf(toolName);
             if (idx > -1) defaultTools.splice(idx, 1);
         }
+    };
+    
+    function renderToolsets() {
+        const container = document.getElementById('toolsets-list');
+        if (toolsets.length === 0) {
+            container.innerHTML = '<p class="text-slate-400">No toolsets configured</p>';
+            return;
+        }
+        container.innerHTML = toolsets.map((toolset, idx) => `
+            <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
+                <span class="font-medium">${toolset}</span>
+                <button onclick="removeToolset(${idx})" class="text-red-400 hover:text-red-300 ml-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+    }
+    
+    function populateToolsetsDropdown() {
+        const select = document.getElementById('new-toolset');
+        // Filter out already added toolsets
+        const unassignedToolsets = availableToolsets.filter(t => !toolsets.includes(t));
+        select.innerHTML = '<option value="">-- Select a toolset to add --</option>' +
+            unassignedToolsets.map(t => `<option value="${t}">${t}</option>`).join('');
+    }
+    
+    window.addToolset = function() {
+        const select = document.getElementById('new-toolset');
+        if (select.value) {
+            toolsets.push(select.value);
+            renderToolsets();
+            populateToolsetsDropdown();
+        }
+    };
+    
+    window.removeToolset = function(idx) {
+        toolsets.splice(idx, 1);
+        renderToolsets();
+        populateToolsetsDropdown();
     };
     
     function renderParticipants() {
@@ -927,9 +985,6 @@
     };
     
     window.saveAgent = async function() {
-        const toolsetsStr = document.getElementById('toolsets').value;
-        const toolsetsList = toolsetsStr ? toolsetsStr.split(',').map(t => t.trim()).filter(t => t) : [];
-        
         const data = {
             agent: agentName,
             description: document.getElementById('description').value,
@@ -950,7 +1005,7 @@
             participants: participants,
             order_of_speakers: orderOfSpeakers,
             voices: voices,
-            toolsets: toolsetsList,
+            toolsets: toolsets,
             roles: roles,
             default_roles: defaultRoles,
             skills: skills,
