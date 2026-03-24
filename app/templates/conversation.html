@@ -1250,10 +1250,13 @@
         // Only the current user's messages go on the right, all others on the left
         const senderLower = sender.toLowerCase();
         const isInfo = senderLower === 'info';
+        const isToolRequest = sender === 'TOOLREQUEST';
         const userName = document.getElementById('sender-name')?.value || '';
-        const isCurrentUser = !isInfo && senderLower === userName.toLowerCase();
+        const isCurrentUser = !isInfo && !isToolRequest && senderLower === userName.toLowerCase();
         
-        if (isInfo) {
+        if (isToolRequest) {
+            div.className = 'message-card toolrequest-message';
+        } else if (isInfo) {
             div.className = 'message-card info-message';
         } else if (isCurrentUser) {
             div.className = 'message-card user-message';
@@ -1296,7 +1299,53 @@
         const initials = sender.substring(0, 2).toUpperCase();
         
         // Build chat bubble HTML
-        if (isInfo) {
+        if (isToolRequest) {
+            // Parse the tool request content - it's JSON with tool_name and tool_kwargs
+            let toolRequestData = {};
+            try {
+                toolRequestData = JSON.parse(content);
+            } catch (e) {
+                // If not valid JSON, try to display as-is
+                toolRequestData = { tool_name: 'Unknown', tool_kwargs: content };
+            }
+            
+            const toolName = toolRequestData.tool_name || 'Unknown Tool';
+            const toolKwargs = toolRequestData.tool_kwargs || {};
+            const paramsStr = typeof toolKwargs === 'string' ? toolKwargs : JSON.stringify(toolKwargs, null, 2);
+            
+            div.innerHTML = `
+                <div class="message-avatar">⚡</div>
+                <div class="message-bubble">
+                    <div class="sender">Tool Request</div>
+                    <div class="content">
+                        <div class="toolrequest-content">
+                            <div class="toolrequest-tool-name">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                ${escapeHtml(toolName)}
+                            </div>
+                            <pre class="toolrequest-params">${escapeHtml(paramsStr)}</pre>
+                        </div>
+                        <div class="toolrequest-actions">
+                            <button class="toolrequest-btn toolrequest-btn-reject" onclick="handleToolRequest('${msg.message_id}', 'reject')">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                                Reject
+                            </button>
+                            <button class="toolrequest-btn toolrequest-btn-accept" onclick="handleToolRequest('${msg.message_id}', 'accept')">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Accept
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (isInfo) {
             // Check if this is an IMAGE response from a tool
             const imageMatch = content.match(/```IMAGE\s*(https?:\/\/[^\s`]+)\s*```/i);
             let infoContentHtml = '';
@@ -1504,6 +1553,54 @@
         navigator.clipboard.writeText(codeBlock.textContent);
         btn.textContent = 'Copied!';
         setTimeout(() => btn.textContent = 'Copy', 2000);
+    };
+    
+    // Handle TOOLREQUEST accept/reject
+    window.handleToolRequest = async function(messageId, action) {
+        if (!window.currentWif) {
+            showToast('Please unlock your WIF key first', 'error');
+            return;
+        }
+        
+        const settings = getSettings();
+        const model = document.getElementById('model-select').value;
+        const temperature = parseFloat(document.getElementById('temperature').value);
+        
+        // Build the message data matching Flutter app format
+        const messageData = {
+            conversationId: conversationId,
+            agent: agentName,
+            folderName: currentFolderName,
+            sender: 'TOOLREQUEST',
+            content: `${action}:${messageId}`,
+            run: action === 'accept', // run=true for accept, run=false for reject
+            modelName: model,
+            temperature: temperature
+        };
+        
+        try {
+            // Disable buttons while processing
+            const buttons = document.querySelectorAll(`[data-message-id="${messageId}"] .toolrequest-btn`);
+            buttons.forEach(btn => btn.disabled = true);
+            
+            // Send the message (addMessage handles signing internally)
+            const response = await addMessage(window.currentWif, messageData);
+            
+            if (response.success) {
+                showToast(`Tool request ${action}ed successfully`, 'success');
+                // Refresh the conversation to show updated state
+                await refreshConversation();
+            } else {
+                showToast(`Failed to ${action} tool request: ${response.error || 'Unknown error'}`, 'error');
+                buttons.forEach(btn => btn.disabled = false);
+            }
+        } catch (e) {
+            console.error(`Failed to ${action} tool request:`, e);
+            showToast(`Failed to ${action} tool request: ${e.message}`, 'error');
+            // Re-enable buttons on error
+            const buttons = document.querySelectorAll(`[data-message-id="${messageId}"] .toolrequest-btn`);
+            buttons.forEach(btn => btn.disabled = false);
+        }
     };
     
     function escapeHtml(text) {
