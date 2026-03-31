@@ -544,6 +544,16 @@ export async function deleteScheduledTask(wif, data) {
     return response.json();
 }
 
+export async function runScheduledTaskNow(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/RunScheduledTaskNow/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
 // WebSocket connection for streaming
 export function createStreamingConnection(conversationId, onMessage, onError, onClose) {
     const settings = getSettings();
