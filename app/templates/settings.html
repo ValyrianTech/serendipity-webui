@@ -153,7 +153,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getSettings, saveSettings } from '/static/js/api.js';
+    import { getSettings, saveSettings, saveComfyUIServer } from '/static/js/api.js';
     import { wifToAddress, generateWifKey, encryptWif, saveWif, loadWifStorage, clearWifStorage } from '/static/js/bitcoin.js';
     
     document.addEventListener('DOMContentLoaded', () => {
@@ -210,10 +210,32 @@
         showToast('Voice settings saved', 'success');
     };
     
-    window.saveComfyUISettings = function() {
-        localStorage.setItem('serendipity_comfyui_address', document.getElementById('comfyui-address').value);
-        localStorage.setItem('serendipity_comfyui_port', document.getElementById('comfyui-port').value);
-        showToast('ComfyUI settings saved', 'success');
+    window.saveComfyUISettings = async function() {
+        const comfyuiAddress = document.getElementById('comfyui-address').value;
+        const comfyuiPort = document.getElementById('comfyui-port').value;
+        
+        localStorage.setItem('serendipity_comfyui_address', comfyuiAddress);
+        localStorage.setItem('serendipity_comfyui_port', comfyuiPort);
+        
+        if (!window.currentWif) {
+            showToast('WIF key required to save to server', 'error');
+            return;
+        }
+        
+        try {
+            const response = await saveComfyUIServer(window.currentWif, {
+                comfyui_host: comfyuiAddress,
+                comfyui_port: comfyuiPort
+            });
+            if (response.success) {
+                showToast('ComfyUI settings saved', 'success');
+            } else {
+                showToast('Failed to save ComfyUI settings: ' + (response.error || 'Unknown error'), 'error');
+            }
+        } catch (e) {
+            console.error('Failed to save ComfyUI settings:', e);
+            showToast('Failed to save ComfyUI settings: ' + e.message, 'error');
+        }
     };
     
     window.showChangeWifModal = function() {

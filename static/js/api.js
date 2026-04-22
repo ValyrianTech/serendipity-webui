@@ -554,6 +554,17 @@ export async function runScheduledTaskNow(wif, data) {
     return response.json();
 }
 
+// Save ComfyUI server config
+export async function saveComfyUIServer(wif, data) {
+    const signedData = await signData(data, wif);
+    const response = await fetch(`${getBaseUrl()}/api/SaveComfyUIServer/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signedData)
+    });
+    return response.json();
+}
+
 // WebSocket connection for streaming
 export function createStreamingConnection(conversationId, onMessage, onError, onClose) {
     const settings = getSettings();
