@@ -577,10 +577,10 @@
                 document.getElementById('thinking-level').value = agentData.agent.thinking_level;
             }
             
-            // Initialize tools, roles, and skills lists for new conversations (empty - backend will set defaults)
-            updateToolsList([]);
-            updateRolesList([]);
-            updateSkillsList([]);
+            // Initialize tools, roles, and skills lists from agent defaults
+            updateToolsList(agentData?.agent?.default_tools || []);
+            updateRolesList(agentData?.agent?.default_roles || []);
+            updateSkillsList(agentData?.agent?.default_skills || []);
             
             // Initialize new conversation with info message (like Flutter app does)
             // After this, loadConversation() is called which will update the UI with backend defaults
