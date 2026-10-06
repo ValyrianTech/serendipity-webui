@@ -550,6 +550,18 @@ input[type="range"]::-moz-range-thumb {
     box-shadow: var(--shadow-md);
 }
 
+.btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.btn-secondary:disabled:hover {
+    background: var(--dark-bg-surface);
+    border-color: var(--dark-border-subtle);
+    box-shadow: none;
+}
+
 .btn-danger {
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
     color: white;

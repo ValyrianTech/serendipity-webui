@@ -47,8 +47,14 @@ export async function getFolders(agentName) {
     return response.json();
 }
 
-export async function getConversations(agentName, folderName) {
-    const response = await fetch(`${getBaseUrl()}/api/GetConversations?agent=${encodeURIComponent(agentName)}&folder_name=${encodeURIComponent(folderName)}`);
+export async function getConversations(agentName, folderName, page = 1, perPage = 20) {
+    const params = new URLSearchParams({
+        agent: agentName,
+        folder_name: folderName,
+        page: page,
+        per_page: perPage
+    });
+    const response = await fetch(`${getBaseUrl()}/api/GetConversations?${params.toString()}`);
     return response.json();
 }
 
