@@ -5,7 +5,7 @@ import logging
 import os
 import subprocess
 
-today_tag = datetime.datetime.now(datetime.timezone.utc).strftime("%d%m%Y")
+today_tag = datetime.datetime.now(datetime.UTC).strftime("%d%m%Y")
 
 # Creating argparse parser
 parser = argparse.ArgumentParser(description="Build Dockerfile")
