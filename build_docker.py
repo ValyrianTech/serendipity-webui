@@ -5,7 +5,7 @@ import logging
 import os
 import subprocess
 
-today_tag = datetime.datetime.now().strftime("%d%m%Y")
+today_tag = datetime.datetime.now(datetime.timezone.utc).strftime("%d%m%Y")
 
 # Creating argparse parser
 parser = argparse.ArgumentParser(description="Build Dockerfile")
@@ -30,8 +30,6 @@ def docker_command(command):
     except subprocess.CalledProcessError as e:
         logger.error(f"Got error while executing docker command: {e}")
         raise
-    except Exception as e:
-        raise e
 
 def build(docker_repo, tag, from_docker=None):
     docker_container = f"{username}/{docker_repo}:{tag}"
@@ -66,6 +64,4 @@ try:
 
 except subprocess.CalledProcessError:
     logger.error("Process aborted due to error running Docker commands")
-except Exception as e:
-    raise e
 
