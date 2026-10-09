@@ -1,9 +1,10 @@
+from pathlib import Path
+
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
-import httpx
 
 app = FastAPI(title="Serendipity Web UI")
 

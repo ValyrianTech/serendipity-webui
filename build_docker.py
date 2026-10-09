@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
+import argparse
 import datetime
+import logging
 import os
 import subprocess
-import logging
-import argparse
 
 today_tag = datetime.datetime.now().strftime("%d%m%Y")
 
 # Creating argparse parser
 parser = argparse.ArgumentParser(description="Build Dockerfile")
 parser.add_argument('docker', type=str, help='Name of the Docker image to build')
-parser.add_argument('--username', type=str, default="valyriantech", help=f"Tag to use. Defaults to today's date: valyriantech")
+parser.add_argument('--username', type=str, default="valyriantech", help="Tag to use. Defaults to today's date: valyriantech")
 parser.add_argument('--tag', type=str, default=today_tag, help=f"Tag to use. Defaults to today's date: {today_tag}")
 parser.add_argument('--latest', action="store_true", help='If specified, we will also tag and push :latest')
 args = parser.parse_args()
@@ -64,8 +64,8 @@ try:
         tag(container, latest)
         logger.info(f"Successfully tagged and pushed to {latest}")
 
-except subprocess.CalledProcessError as e:
-    logger.error(f"Process aborted due to error running Docker commands")
+except subprocess.CalledProcessError:
+    logger.error("Process aborted due to error running Docker commands")
 except Exception as e:
     raise e
 
