@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -16,7 +16,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
+async def home(request: Request) -> HTMLResponse:
     """Render the home page listing all agents.
 
     :param request: The incoming HTTP request.
@@ -24,11 +24,11 @@ async def home(request: Request):
     :returns: The rendered ``agents.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("agents.html", {"request": request})
+    return templates.TemplateResponse(request, "agents.html", {})
 
 
 @app.get("/agent/{agent_name}", response_class=HTMLResponse)
-async def agent_home(request: Request, agent_name: str):
+async def agent_home(request: Request, agent_name: str) -> HTMLResponse:
     """Render the home page for a specific agent.
 
     :param request: The incoming HTTP request.
@@ -38,11 +38,11 @@ async def agent_home(request: Request, agent_name: str):
     :returns: The rendered ``agent_home.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("agent_home.html", {"request": request, "agent_name": agent_name})
+    return templates.TemplateResponse(request, "agent_home.html", {"agent_name": agent_name})
 
 
 @app.get("/agent/{agent_name}/conversations", response_class=HTMLResponse)
-async def conversations(request: Request, agent_name: str):
+async def conversations(request: Request, agent_name: str) -> HTMLResponse:
     """Render the conversations list page for an agent.
 
     :param request: The incoming HTTP request.
@@ -52,11 +52,11 @@ async def conversations(request: Request, agent_name: str):
     :returns: The rendered ``conversations.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("conversations.html", {"request": request, "agent_name": agent_name})
+    return templates.TemplateResponse(request, "conversations.html", {"agent_name": agent_name})
 
 
 @app.get("/agent/{agent_name}/conversation", response_class=HTMLResponse)
-async def conversation(request: Request, agent_name: str, conversation_id: str = ""):
+async def conversation(request: Request, agent_name: str, conversation_id: str = "") -> HTMLResponse:
     """Render the conversation page for an agent.
 
     :param request: The incoming HTTP request.
@@ -68,15 +68,14 @@ async def conversation(request: Request, agent_name: str, conversation_id: str =
     :returns: The rendered ``conversation.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("conversation.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "conversation.html", {
         "agent_name": agent_name,
         "conversation_id": conversation_id
     })
 
 
 @app.get("/settings", response_class=HTMLResponse)
-async def settings(request: Request):
+async def settings(request: Request) -> HTMLResponse:
     """Render the application settings page.
 
     :param request: The incoming HTTP request.
@@ -84,11 +83,11 @@ async def settings(request: Request):
     :returns: The rendered ``settings.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("settings.html", {"request": request})
+    return templates.TemplateResponse(request, "settings.html", {})
 
 
 @app.get("/agent/{agent_name}/edit", response_class=HTMLResponse)
-async def edit_agent(request: Request, agent_name: str):
+async def edit_agent(request: Request, agent_name: str) -> HTMLResponse:
     """Render the edit page for an agent.
 
     :param request: The incoming HTTP request.
@@ -98,11 +97,11 @@ async def edit_agent(request: Request, agent_name: str):
     :returns: The rendered ``edit_agent.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("edit_agent.html", {"request": request, "agent_name": agent_name})
+    return templates.TemplateResponse(request, "edit_agent.html", {"agent_name": agent_name})
 
 
 @app.get("/mcps", response_class=HTMLResponse)
-async def mcps(request: Request):
+async def mcps(request: Request) -> HTMLResponse:
     """Render the MCP servers management page.
 
     :param request: The incoming HTTP request.
@@ -110,11 +109,11 @@ async def mcps(request: Request):
     :returns: The rendered ``mcps.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("mcps.html", {"request": request})
+    return templates.TemplateResponse(request, "mcps.html", {})
 
 
 @app.get("/toolsets", response_class=HTMLResponse)
-async def toolsets(request: Request):
+async def toolsets(request: Request) -> HTMLResponse:
     """Render the toolsets management page.
 
     :param request: The incoming HTTP request.
@@ -122,11 +121,11 @@ async def toolsets(request: Request):
     :returns: The rendered ``toolsets.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("toolsets.html", {"request": request})
+    return templates.TemplateResponse(request, "toolsets.html", {})
 
 
 @app.get("/skills", response_class=HTMLResponse)
-async def skills(request: Request):
+async def skills(request: Request) -> HTMLResponse:
     """Render the skills management page.
 
     :param request: The incoming HTTP request.
@@ -134,11 +133,11 @@ async def skills(request: Request):
     :returns: The rendered ``skills.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("skills.html", {"request": request})
+    return templates.TemplateResponse(request, "skills.html", {})
 
 
 @app.get("/llms", response_class=HTMLResponse)
-async def llms(request: Request):
+async def llms(request: Request) -> HTMLResponse:
     """Render the LLM configurations page.
 
     :param request: The incoming HTTP request.
@@ -146,11 +145,11 @@ async def llms(request: Request):
     :returns: The rendered ``llms.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("llms.html", {"request": request})
+    return templates.TemplateResponse(request, "llms.html", {})
 
 
 @app.get("/scheduled-tasks", response_class=HTMLResponse)
-async def scheduled_tasks(request: Request):
+async def scheduled_tasks(request: Request) -> HTMLResponse:
     """Render the scheduled tasks page.
 
     :param request: The incoming HTTP request.
@@ -158,11 +157,11 @@ async def scheduled_tasks(request: Request):
     :returns: The rendered ``scheduled_tasks.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("scheduled_tasks.html", {"request": request})
+    return templates.TemplateResponse(request, "scheduled_tasks.html", {})
 
 
 @app.get("/agent/{agent_name}/workflows", response_class=HTMLResponse)
-async def workflows(request: Request, agent_name: str, workflow_id: str = "", node_id: str = ""):
+async def workflows(request: Request, agent_name: str, workflow_id: str = "", node_id: str = "") -> HTMLResponse:
     """Render the workflows page for an agent.
 
     :param request: The incoming HTTP request.
@@ -176,8 +175,7 @@ async def workflows(request: Request, agent_name: str, workflow_id: str = "", no
     :returns: The rendered ``workflows.html`` template.
     :rtype: TemplateResponse
     """
-    return templates.TemplateResponse("workflows.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "workflows.html", {
         "agent_name": agent_name,
         "workflow_id": workflow_id,
         "node_id": node_id
@@ -185,13 +183,13 @@ async def workflows(request: Request, agent_name: str, workflow_id: str = "", no
 
 
 @app.get("/api/tts-proxy")
-async def tts_proxy(request: Request, server: str, voice: str, text: str, style: str = "default", language: str = "English", speed: float = 1.0):
+async def tts_proxy(request: Request, server: str, voice: str, text: str, style: str = "default", language: str = "English", speed: float = 1.0) -> Response:
     """Proxy TTS requests to avoid browser timeouts on slow generation"""
     from fastapi.responses import JSONResponse
     
     # Build the TTS URL
     server_url = server.rstrip('/')
-    params = {
+    params: dict[str, str | float] = {
         "voice": voice,
         "text": text,
         "style": style,
