@@ -28,6 +28,7 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["app"]
+omit = ["app/vulture_whitelist.py"]
 
 [tool.coverage.report]
 show_missing = true
