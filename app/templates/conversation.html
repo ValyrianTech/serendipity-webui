@@ -1373,7 +1373,7 @@
                     <div class="message-bubble">
                         <div class="flex items-center justify-between">
                             <div class="content flex-1">${infoContentHtml}</div>
-                            <button class="play-audio-btn p-1 text-slate-400 hover:text-indigo-400 transition-colors ml-2" onclick="event.stopPropagation(); playMessageAudio('${escapeHtml(msg.message_id || '')}', 'INFO', \`${escapeHtml(content).replace(/`/g, '\\`')}\`)" title="Play audio">
+                            <button class="play-audio-btn p-1 text-slate-400 hover:text-indigo-400 transition-colors ml-2" data-play-audio="1" data-message-id="${escapeHtml(msg.message_id || '')}" data-sender="INFO" title="Play audio">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -1389,7 +1389,7 @@
                 <div class="message-bubble">
                     <div class="flex items-center justify-between">
                         <div class="sender">${escapeHtml(sender)}</div>
-                        <button class="play-audio-btn p-1 text-slate-400 hover:text-indigo-400 transition-colors" onclick="event.stopPropagation(); playMessageAudio('${escapeHtml(msg.message_id || '')}', '${escapeHtml(sender)}', \`${escapeHtml(content).replace(/`/g, '\\`')}\`)" title="Play audio">
+                        <button class="play-audio-btn p-1 text-slate-400 hover:text-indigo-400 transition-colors" data-play-audio="1" data-message-id="${escapeHtml(msg.message_id || '')}" data-sender="${escapeHtml(sender)}" title="Play audio">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -1446,6 +1446,14 @@
             // Add cursor style to indicate interactivity
             div.style.cursor = 'context-menu';
         }
+        
+        // Audio playback buttons use data-* + addEventListener (no inline handlers).
+        div.querySelectorAll('[data-play-audio]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                playMessageAudio(btn.dataset.messageId, btn.dataset.sender, content);
+            });
+        });
         
         return div;
     }
