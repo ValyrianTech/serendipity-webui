@@ -32,6 +32,32 @@ def _patch_resolve_host(monkeypatch):
     monkeypatch.setattr("app.main._resolve_host", _resolve_to("93.184.216.34"))
 
 
+STREAM_CHUNK_SIZE = 3
+
+
+class MockStreamResponse:
+    """Minimal stand-in for the streaming response returned by ``client.stream``."""
+
+    def __init__(self, response):
+        self._response = response
+        self.headers = response.headers
+        self.status_code = response.status_code
+
+    def raise_for_status(self):
+        self._response.raise_for_status()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc_info):
+        return False
+
+    async def aiter_bytes(self):
+        content = self._response.content
+        for i in range(0, len(content), STREAM_CHUNK_SIZE):
+            yield content[i:i + STREAM_CHUNK_SIZE]
+
+
 class MockAsyncClient:
     """Minimal stand-in for httpx.AsyncClient used by the proxy endpoint."""
 
@@ -46,13 +72,14 @@ class MockAsyncClient:
     async def __aexit__(self, *_exc_info):
         return False
 
-    async def get(self, url, params=None):
+    def stream(self, method, url, params=None, headers=None):
         if self._capture is not None:
             self._capture["url"] = url
             self._capture["params"] = params
+            self._capture["headers"] = headers
         if self._exc is not None:
             raise self._exc
-        return self._response
+        return MockStreamResponse(self._response)
 
 
 @contextmanager
@@ -79,7 +106,8 @@ def test_success_streams_audio(client):
     assert result.content == b"AUDIO"
     assert result.headers["content-type"] == "audio/wav"
     assert result.headers["cache-control"] == "no-cache"
-    assert capture["url"] == "http://tts.local/synthesize_speech/"
+    assert capture["url"] == "http://93.184.216.34/synthesize_speech/"
+    assert capture["headers"] == {"Host": "tts.local"}
     assert capture["params"] == {
         "voice": "voice-1",
         "text": "hello world",
@@ -94,7 +122,7 @@ def test_trailing_slash_in_server_is_stripped(client):
     with mock_async_client(response=response, capture=capture):
         client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://tts.local/"})
 
-    assert capture["url"] == "http://tts.local/synthesize_speech/"
+    assert capture["url"] == "http://93.184.216.34/synthesize_speech/"
 
 
 def test_speed_omitted_when_default(client):
@@ -229,12 +257,15 @@ def test_resolve_failure_rejected(client, monkeypatch):
 def test_allowlist_permits_otherwise_blocked_host(client, monkeypatch):
     monkeypatch.setenv("SERENDIPITY_TTS_ALLOWED_HOSTS", "tts.local")
     monkeypatch.setattr("app.main._resolve_host", _resolve_to("127.0.0.1"))
+    capture = {}
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
-    with mock_async_client(response=response):
+    with mock_async_client(response=response, capture=capture):
         result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
     assert result.status_code == 200
     assert result.content == b"AUDIO"
+    assert capture["url"] == "http://tts.local/synthesize_speech/"
+    assert capture["headers"] == {}
 
 
 def test_allowlist_rejects_unlisted_host(client, monkeypatch):
@@ -252,6 +283,37 @@ def test_oversized_response_returns_502(client, monkeypatch):
 
     assert result.status_code == 502
     assert result.json() == {"error": "TTS response too large"}
+
+
+def test_response_exactly_at_cap_is_allowed(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+    response = make_response(content=b"AUDI", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.content == b"AUDI"
+
+
+def test_public_ip_literal_is_used_directly(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://93.184.216.34"})
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://93.184.216.34/synthesize_speech/"
+    assert capture["headers"] == {"Host": "93.184.216.34"}
+
+
+def test_port_is_preserved_in_pinned_request(client):
+    capture = {}
+    response = make_response(content=b"A", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://tts.local:8080"})
+
+    assert capture["url"] == "http://93.184.216.34:8080/synthesize_speech/"
+    assert capture["headers"] == {"Host": "tts.local:8080"}
 
 
 def test_is_blocked_ip_malformed_input():
