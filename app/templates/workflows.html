@@ -375,8 +375,8 @@
         
         container.innerHTML = nodeIds.map(nodeId => `
             <label class="flex items-center gap-1 cursor-pointer text-sm">
-                <input type="checkbox" value="${nodeId}" class="available-file-checkbox w-4 h-4 rounded">
-                <span>${nodeId}</span>
+                <input type="checkbox" value="${escapeHtml(nodeId)}" class="available-file-checkbox w-4 h-4 rounded">
+                <span>${escapeHtml(nodeId)}</span>
             </label>
         `).join('');
     }
