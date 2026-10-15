@@ -1,6 +1,7 @@
 """FastAPI web UI application for the Serendipity AI agent platform."""
 
 import ipaddress
+import logging
 import os
 import socket
 from pathlib import Path
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Serendipity Web UI")
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -381,8 +383,9 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
             return JSONResponse({"error": "TTS generation timed out"}, status_code=504)
         except httpx.HTTPStatusError as e:
             return JSONResponse({"error": f"TTS server error: {e.response.status_code}"}, status_code=e.response.status_code)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:  # noqa: BLE001
+            logger.exception("TTS proxy request failed")
+            return JSONResponse({"error": "Internal TTS proxy error"}, status_code=500)
 
 
 if __name__ == "__main__":
