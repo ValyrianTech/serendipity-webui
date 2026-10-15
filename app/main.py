@@ -1,10 +1,14 @@
 """FastAPI web UI application for the Serendipity AI agent platform."""
 
+import ipaddress
+import os
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -13,6 +17,96 @@ app = FastAPI(title="Serendipity Web UI")
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
+
+ALLOWED_TTS_SCHEMES = ("http", "https")
+MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
+
+
+def _get_allowed_tts_hosts() -> set[str]:
+    """Return the set of operator-allowlisted TTS host names from the environment.
+
+    Reads ``SERENDIPITY_TTS_ALLOWED_HOSTS`` (a comma-separated list of host
+    names), stripping whitespace, lowercasing, and dropping empty entries.
+
+    :returns: A set of lowercase, allowlisted host names.
+    :rtype: set[str]
+    """
+    raw = os.environ.get("SERENDIPITY_TTS_ALLOWED_HOSTS", "")
+    return {host.strip().lower() for host in raw.split(",") if host.strip()}
+
+
+def _resolve_host(host: str) -> list[str]:
+    """Resolve a host name to the list of IP address strings it maps to.
+
+    :param host: The host name (or IP literal) to resolve.
+    :type host: str
+    :returns: A list of IP address strings the host resolves to.
+    :rtype: list[str]
+    :raises ValueError: If the host cannot be resolved.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (socket.gaierror, OSError) as exc:
+        raise ValueError(f"could not resolve host {host!r}") from exc
+    return [info[4][0] for info in infos]
+
+
+def _is_blocked_ip(ip_str: str) -> bool:
+    """Return True if an IP address should be blocked for TTS proxying.
+
+    :param ip_str: The IP address string to check.
+    :type ip_str: str
+    :returns: True if the address is private, loopback, link-local, reserved,
+        multicast, or unspecified, or if it cannot be parsed.
+    :rtype: bool
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return True
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _validate_tts_server(server: str) -> str:
+    """Validate a TTS server URL to prevent SSRF to internal or non-HTTP resources.
+
+    :param server: The TTS server base URL to validate.
+    :type server: str
+    :returns: The original ``server`` URL when it is allowed.
+    :rtype: str
+    :raises ValueError: If the scheme, host, or resolved IPs are disallowed.
+    """
+    parsed = urlparse(server)
+    if parsed.scheme not in ALLOWED_TTS_SCHEMES:
+        raise ValueError("invalid scheme")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("missing host")
+
+    allowed = _get_allowed_tts_hosts()
+    if allowed and host.lower() not in allowed:
+        raise ValueError("host not allowed")
+
+    if host.lower() not in allowed:
+        try:
+            ipaddress.ip_address(host)
+            host_is_ip_literal = True
+        except ValueError:
+            host_is_ip_literal = False
+        if host_is_ip_literal and _is_blocked_ip(host):
+            raise ValueError("blocked IP")
+        for ip in _resolve_host(host):
+            if _is_blocked_ip(ip):
+                raise ValueError("blocked IP")
+
+    return server
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -184,9 +278,30 @@ async def workflows(request: Request, agent_name: str, workflow_id: str = "", no
 
 @app.get("/api/tts-proxy")
 async def tts_proxy(request: Request, server: str, voice: str, text: str, style: str = "default", language: str = "English", speed: float = 1.0) -> Response:
-    """Proxy TTS requests to avoid browser timeouts on slow generation"""
-    from fastapi.responses import JSONResponse
-    
+    """Proxy TTS requests to avoid browser timeouts on slow generation.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :param server: The TTS server base URL to forward to.
+    :type server: str
+    :param voice: The voice to synthesize with.
+    :type voice: str
+    :param text: The text to synthesize.
+    :type text: str
+    :param style: The speech style.
+    :type style: str
+    :param language: The language of the speech.
+    :type language: str
+    :param speed: The playback speed multiplier.
+    :type speed: float
+    :returns: The synthesized audio, or a JSON error response.
+    :rtype: Response
+    """
+    try:
+        _validate_tts_server(server)
+    except ValueError:
+        return JSONResponse({"error": "Invalid or disallowed TTS server"}, status_code=400)
+
     # Build the TTS URL
     server_url = server.rstrip('/')
     params: dict[str, str | float] = {
@@ -206,9 +321,12 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
             
             # Ensure we return audio content type
             content_type = response.headers.get("content-type", "audio/wav")
-            if "json" in content_type:
-                # TTS server returned an error as JSON
-                return JSONResponse({"error": "TTS server returned error"}, status_code=500)
+            if not content_type.startswith("audio/"):
+                # TTS server returned non-audio content
+                return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
+
+            if len(response.content) > MAX_TTS_RESPONSE_BYTES:
+                return JSONResponse({"error": "TTS response too large"}, status_code=502)
             
             return StreamingResponse(
                 iter([response.content]),
