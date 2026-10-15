@@ -230,9 +230,9 @@
 <script type="module">
     import { getWorkflows, getWorkflow, getModels, getAgent, getSettings, saveSettings, startWorkflow, generateWorkflow, editWorkflowStep } from '/static/js/api.js';
     
-    const agentName = '{{ agent_name }}';
-    const initialWorkflowId = '{{ workflow_id }}';
-    const initialNodeId = '{{ node_id }}';
+    const agentName = {{ agent_name | tojson }};
+    const initialWorkflowId = {{ workflow_id | tojson }};
+    const initialNodeId = {{ node_id | tojson }};
     
     let workflowsData = [];
     let currentWorkflow = null;
