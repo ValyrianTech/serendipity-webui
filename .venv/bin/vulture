@@ -1,6 +1,0 @@
-#!/home/wouter/spellbook_data/Serendipity/swe/workspace/repos/serendipity-webui/.venv/bin/python3.12
-import sys
-from vulture.core import main
-if __name__ == '__main__':
-    sys.argv[0] = sys.argv[0].removesuffix('.exe')
-    sys.exit(main())
