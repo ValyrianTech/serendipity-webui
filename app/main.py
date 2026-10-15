@@ -1,3 +1,5 @@
+"""FastAPI web UI application for the Serendipity AI agent platform."""
+
 from pathlib import Path
 
 import httpx
@@ -15,21 +17,57 @@ templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    """Render the home page listing all agents.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``agents.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("agents.html", {"request": request})
 
 
 @app.get("/agent/{agent_name}", response_class=HTMLResponse)
 async def agent_home(request: Request, agent_name: str):
+    """Render the home page for a specific agent.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :param agent_name: The name of the agent.
+    :type agent_name: str
+    :returns: The rendered ``agent_home.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("agent_home.html", {"request": request, "agent_name": agent_name})
 
 
 @app.get("/agent/{agent_name}/conversations", response_class=HTMLResponse)
 async def conversations(request: Request, agent_name: str):
+    """Render the conversations list page for an agent.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :param agent_name: The name of the agent.
+    :type agent_name: str
+    :returns: The rendered ``conversations.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("conversations.html", {"request": request, "agent_name": agent_name})
 
 
 @app.get("/agent/{agent_name}/conversation", response_class=HTMLResponse)
 async def conversation(request: Request, agent_name: str, conversation_id: str = ""):
+    """Render the conversation page for an agent.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :param agent_name: The name of the agent.
+    :type agent_name: str
+    :param conversation_id: The optional ID of the conversation to load.
+    :type conversation_id: str
+    :returns: The rendered ``conversation.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("conversation.html", {
         "request": request,
         "agent_name": agent_name,
@@ -39,41 +77,105 @@ async def conversation(request: Request, agent_name: str, conversation_id: str =
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings(request: Request):
+    """Render the application settings page.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``settings.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("settings.html", {"request": request})
 
 
 @app.get("/agent/{agent_name}/edit", response_class=HTMLResponse)
 async def edit_agent(request: Request, agent_name: str):
+    """Render the edit page for an agent.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :param agent_name: The name of the agent to edit.
+    :type agent_name: str
+    :returns: The rendered ``edit_agent.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("edit_agent.html", {"request": request, "agent_name": agent_name})
 
 
 @app.get("/mcps", response_class=HTMLResponse)
 async def mcps(request: Request):
+    """Render the MCP servers management page.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``mcps.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("mcps.html", {"request": request})
 
 
 @app.get("/toolsets", response_class=HTMLResponse)
 async def toolsets(request: Request):
+    """Render the toolsets management page.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``toolsets.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("toolsets.html", {"request": request})
 
 
 @app.get("/skills", response_class=HTMLResponse)
 async def skills(request: Request):
+    """Render the skills management page.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``skills.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("skills.html", {"request": request})
 
 
 @app.get("/llms", response_class=HTMLResponse)
 async def llms(request: Request):
+    """Render the LLM configurations page.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``llms.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("llms.html", {"request": request})
 
 
 @app.get("/scheduled-tasks", response_class=HTMLResponse)
 async def scheduled_tasks(request: Request):
+    """Render the scheduled tasks page.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: The rendered ``scheduled_tasks.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("scheduled_tasks.html", {"request": request})
 
 
 @app.get("/agent/{agent_name}/workflows", response_class=HTMLResponse)
 async def workflows(request: Request, agent_name: str, workflow_id: str = "", node_id: str = ""):
+    """Render the workflows page for an agent.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :param agent_name: The name of the agent.
+    :type agent_name: str
+    :param workflow_id: The optional ID of the workflow to load.
+    :type workflow_id: str
+    :param node_id: The optional ID of the workflow node to load.
+    :type node_id: str
+    :returns: The rendered ``workflows.html`` template.
+    :rtype: TemplateResponse
+    """
     return templates.TemplateResponse("workflows.html", {
         "request": request,
         "agent_name": agent_name,
