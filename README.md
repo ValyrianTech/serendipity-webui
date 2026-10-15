@@ -86,6 +86,7 @@ The `/api/tts-proxy` endpoint validates the `server` query parameter before forw
 - **Allowlist entries bypass all IP checks:** when a host matches an entry in `SERENDIPITY_TTS_ALLOWED_HOSTS`, DNS resolution and ALL private/loopback/link-local/reserved/multicast/unspecified IP checks are skipped entirely for that host.
 - Invalid or disallowed servers return HTTP 400 with `{"error": "Invalid or disallowed TTS server"}`.
 - Non-audio (`audio/*`) responses return HTTP 502 (`"TTS server returned non-audio content"`).
+- Unexpected proxy failures return HTTP 500 with a generic `"Internal TTS proxy error"` message; details are logged server-side rather than returned to the client.
 - The 25 MB response-size limit is enforced while streaming: the proxy aborts the transfer with HTTP 502 (`"TTS response too large"`) as soon as the accumulated body exceeds the cap, rather than downloading the full response first.
 - For non-allowlisted hosts, the outbound connection is pinned to the single validated (non-blocked) IP resolved during validation — `httpx` is pointed at that IP (port preserved) while the original hostname and port are sent in the `Host` header — so the hostname is not re-resolved at connect time.
 

@@ -1,5 +1,6 @@
 """Tests for the /api/tts-proxy endpoint defined in app.main."""
 
+import logging
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -197,12 +198,14 @@ def test_http_status_error_is_propagated(client):
     assert result.json() == {"error": "TTS server error: 502"}
 
 
-def test_unexpected_error_returns_500(client):
-    with mock_async_client(exc=RuntimeError("kaboom")):
-        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+def test_unexpected_error_returns_500(client, caplog):
+    with caplog.at_level(logging.ERROR):
+        with mock_async_client(exc=RuntimeError("kaboom")):
+            result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
     assert result.status_code == 500
-    assert result.json() == {"error": "kaboom"}
+    assert result.json() == {"error": "Internal TTS proxy error"}
+    assert any(r.message == "TTS proxy request failed" and r.levelno == logging.ERROR for r in caplog.records)
 
 
 @pytest.mark.parametrize("missing", ["server", "voice", "text"])
