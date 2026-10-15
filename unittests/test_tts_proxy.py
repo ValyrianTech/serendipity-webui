@@ -319,6 +319,29 @@ def test_port_is_preserved_in_pinned_request(client):
     assert capture["headers"] == {"Host": "tts.local:8080"}
 
 
+def test_path_prefix_is_preserved_in_pinned_request(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://tts.local/tts"})
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://93.184.216.34/tts/synthesize_speech/"
+    assert capture["headers"] == {"Host": "tts.local"}
+
+
+def test_path_prefix_is_preserved_in_allowlisted_request(client, monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_TTS_ALLOWED_HOSTS", "tts.local")
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://tts.local/tts"})
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://tts.local/tts/synthesize_speech/"
+    assert capture["headers"] == {}
+
+
 def test_ipv6_ip_literal_is_bracketed(client):
     capture = {}
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
