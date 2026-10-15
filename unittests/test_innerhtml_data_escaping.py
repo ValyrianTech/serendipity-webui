@@ -143,8 +143,11 @@ def test_conversation_message_sinks_are_escaped():
     assert "onclick=\"handleToolRequest('" not in body
     assert "data-tool-request=" in body
     assert "addEventListener('click'" in body
-    # playMessageAudio message ids are escaped inside the inline string.
-    assert "playMessageAudio('${escapeHtml(msg.message_id || '')}'" in body
+    # play-audio buttons use data-* attributes + addEventListener, no inline handlers.
+    assert "onclick=\"event.stopPropagation(); playMessageAudio" not in body
+    assert 'data-play-audio="1"' in body
+    assert "btn.dataset.messageId" in body
+    assert "btn.dataset.sender" in body
 
 
 def test_conversation_staged_and_open_files_escape_file_names():
@@ -216,6 +219,7 @@ _HOSTILE_PAYLOADS = [
     '\" onmouseover=\"alert(1)\" x=\"',
     "');alert(document.cookie)//",
     "</span><script>alert(1)</script>",
+    "${alert(document.cookie)}",
 ]
 
 _BEHAVIORAL_TEMPLATES = (
