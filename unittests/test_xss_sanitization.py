@@ -173,7 +173,7 @@ _BEHAVIORAL_PAYLOADS = [
     "<p>Hello <strong>world</strong></p>",
 ]
 
-_BEHAVIORAL_TEMPLATES = ("conversation.html", "skills.html")
+_BEHAVIORAL_TEMPLATES = ("conversation.html", "skills.html", "workflows.html")
 
 _CHROME = _find_chrome()
 
@@ -236,10 +236,17 @@ def test_no_unwrapped_marked_parse_in_skills():
 
 
 def test_mermaid_render_output_is_sanitized():
-    """Both mermaid.render sites sanitize the SVG before inserting it."""
-    content = _read_template("conversation.html")
-    assert content.count("el.innerHTML = sanitizeHtml(svg);") == 2
-    assert "el.innerHTML = svg;" not in content
+    """Every mermaid render site sanitizes the SVG before inserting it."""
+    for name in _BEHAVIORAL_TEMPLATES:
+        content = _read_template(name)
+        assert content.count("sanitizeHtml(svg)") == content.count("mermaid.render(")
+        assert "innerHTML = svg;" not in content
+
+    conversation = _read_template("conversation.html")
+    assert conversation.count("el.innerHTML = sanitizeHtml(svg);") == 2
+
+    workflows = _read_template("workflows.html")
+    assert "container.innerHTML = sanitizeHtml(svg);" in workflows
 
 
 def test_existing_escape_html_still_present():
@@ -247,6 +254,16 @@ def test_existing_escape_html_still_present():
     content = _read_template("conversation.html")
     assert "function escapeHtml(" in content
     assert len(re.findall(r"function escapeHtml\(", content)) == 1
+
+
+def test_workflows_template_has_sanitize_helper():
+    """workflows.html defines a sanitizeHtml helper backed by DOMPurify."""
+    content = _read_template("workflows.html")
+    assert "function sanitizeHtml(" in content
+    assert "function escapeHtml(" in content
+    assert "DOMPurify.sanitize(" in content
+    assert "return escapeHtml(html);" in content
+    assert "return html;" not in content
 
 
 def test_skills_sanitize_helper_falls_back_to_escaping():
@@ -259,9 +276,16 @@ def test_skills_sanitize_helper_falls_back_to_escaping():
     assert "return html;" not in content
 
 
+def test_workflows_flowchart_error_message_is_escaped():
+    """The workflows.html renderFlowchart catch block escapes the error message."""
+    content = _read_template("workflows.html")
+    assert "escapeHtml(e.message)" in content
+    assert "Flowchart error: ${e.message}" not in content
+
+
 def test_both_templates_sanitizer_fallbacks_are_consistent():
-    """Both conversation.html and skills.html fail closed via escapeHtml."""
-    for name in ("conversation.html", "skills.html"):
+    """conversation.html, skills.html, and workflows.html fail closed via escapeHtml."""
+    for name in ("conversation.html", "skills.html", "workflows.html"):
         content = _read_template(name)
         assert "return escapeHtml(html);" in content
 
