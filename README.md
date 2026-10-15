@@ -83,6 +83,7 @@ serendipity-webui/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI application & routes
+│   ├── vulture_whitelist.py # Vulture false-positive whitelist (excluded from coverage)
 │   └── templates/           # Jinja2 HTML templates
 │       ├── base.html        # Base template with sidebar
 │       ├── agents.html      # Agent selection page
@@ -94,18 +95,26 @@ serendipity-webui/
 │       ├── llms.html        # LLM configuration
 │       ├── mcps.html        # MCP server config
 │       ├── toolsets.html    # Toolset management
+│       ├── skills.html      # Skills management
+│       ├── scheduled_tasks.html # Scheduled tasks
 │       └── workflows.html   # Workflow editor
 ├── static/
 │   ├── css/
 │   │   ├── style.css        # Custom styles
 │   │   ├── tailwind.css     # TailwindCSS source
-│   │   └── tailwind.output.css # Compiled CSS
+│   │   ├── tailwind.output.css # Compiled CSS
+│   │   └── github-dark.min.css
 │   ├── images/
 │   │   └── SERENDIPITY_icon.png
 │   └── js/
 │       ├── api.js           # API client
 │       ├── bitcoin.js       # Bitcoin signing utilities
 │       └── vendor/          # Third-party libraries
+├── unittests/               # Pytest test suite
+│   ├── conftest.py          # Shared fixtures (FastAPI TestClient)
+│   ├── test_pages.py        # Page route tests
+│   ├── test_main_entrypoint.py # __main__ entrypoint test
+│   └── test_tts_proxy.py    # /api/tts-proxy endpoint tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
 ├── requirements.txt        # Python dependencies
@@ -127,6 +136,9 @@ serendipity-webui/
 | `/llms` | LLM configurations |
 | `/mcps` | MCP server configurations |
 | `/toolsets` | Toolset management |
+| `/skills` | Skills management |
+| `/scheduled-tasks` | Scheduled tasks |
+| `/api/tts-proxy` | TTS synthesis proxy endpoint |
 
 ## API Integration
 
@@ -157,6 +169,20 @@ If you modify TailwindCSS classes:
 1. Create a new template in `app/templates/`
 2. Add a route in `app/main.py`
 3. Extend `base.html` for consistent navigation
+
+## Testing
+
+Tests live in `unittests/` and are run with pytest:
+
+```bash
+# Run the test suite
+pytest
+
+# Run with coverage
+pytest --cov=app
+```
+
+The pytest configuration in `pyproject.toml` sets `testpaths = ["unittests"]` and `pythonpath = ["."]`. Coverage is collected from the `app` package (`source = ["app"]`), with `app/vulture_whitelist.py` omitted from coverage as a vulture whitelist file of false positives.
 
 ## Docker Details
 
