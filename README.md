@@ -76,6 +76,24 @@ On first launch, you'll be prompted to configure:
 
 All settings are stored in your browser's localStorage.
 
+### TTS proxy security
+
+The `/api/tts-proxy` endpoint validates the `server` query parameter before forwarding to prevent SSRF to internal or non-HTTP resources:
+
+- Only `http` and `https` schemes are allowed.
+- If the `SERENDIPITY_TTS_ALLOWED_HOSTS` environment variable is set (a comma-separated list of host names), the resolved host must be in that allowlist.
+- When the host is not allowlisted, it is resolved via DNS and any resulting private, loopback, link-local, reserved, multicast, or unspecified IP is blocked (IP literals are checked as well).
+- **Allowlist entries bypass all IP checks:** when a host matches an entry in `SERENDIPITY_TTS_ALLOWED_HOSTS`, DNS resolution and ALL private/loopback/link-local/reserved/multicast/unspecified IP checks are skipped entirely for that host.
+- Invalid or disallowed servers return HTTP 400 with `{"error": "Invalid or disallowed TTS server"}`.
+- Non-audio (`audio/*`) responses return HTTP 502 (`"TTS server returned non-audio content"`).
+- Responses larger than 25 MB return HTTP 502 (`"TTS response too large"`).
+
+When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/reserved/multicast/unspecified addresses are blocked; any public host is permitted.
+
+> **Note:** This validation is best-effort, not a hard guarantee. The host is resolved and validated at request-validation time, but `httpx` re-resolves the hostname when it connects. A hostname whose DNS answer changes between those two lookups (a DNS-rebinding / TOCTOU attack) can therefore still reach an internal address. Setting `SERENDIPITY_TTS_ALLOWED_HOSTS` to a trusted allowlist is the recommended mitigation, since it skips DNS resolution entirely for allowlisted hosts and pins the allowed host set; combine it with network-level egress controls for defense in depth.
+
+> **Warning:** Because an allowlisted host bypasses DNS resolution and the private-IP checks entirely, a misconfigured allowlist entry (for example an internal hostname, `localhost`, or `127.0.0.1`) reopens the SSRF path to that host. Only ever add trusted, public hosts to `SERENDIPITY_TTS_ALLOWED_HOSTS`, and rely on network-level egress controls for defense in depth rather than on the allowlist to block internal destinations.
+
 ## Project Structure
 
 ```
@@ -138,7 +156,7 @@ serendipity-webui/
 | `/toolsets` | Toolset management |
 | `/skills` | Skills management |
 | `/scheduled-tasks` | Scheduled tasks |
-| `/api/tts-proxy` | TTS synthesis proxy endpoint |
+| `/api/tts-proxy` | TTS synthesis proxy endpoint (SSRF-protected; see [Configuration](#configuration)) |
 
 ## API Integration
 

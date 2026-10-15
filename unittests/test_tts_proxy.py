@@ -6,11 +6,30 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from app import main as app_main
+
+_real_resolve_host = app_main._resolve_host
+
 
 def make_response(content=b"", status_code=200, headers=None):
     """Build a real httpx.Response so raise_for_status() behaves normally."""
     request = httpx.Request("GET", "http://tts.local/synthesize_speech/")
     return httpx.Response(status_code, content=content, headers=headers or {}, request=request)
+
+
+def _resolve_to(*ips):
+    """Return a fake ``_resolve_host`` implementation returning the given IPs."""
+
+    def _resolver(host):
+        return list(ips)
+
+    return _resolver
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
+def _patch_resolve_host(monkeypatch):
+    """Patch host resolution so happy-path tests resolve to a public IP."""
+    monkeypatch.setattr("app.main._resolve_host", _resolve_to("93.184.216.34"))
 
 
 class MockAsyncClient:
@@ -124,13 +143,13 @@ def test_missing_content_type_defaults_to_wav(client):
     assert result.headers["content-type"] == "audio/wav"
 
 
-def test_json_error_response_becomes_500(client):
+def test_non_audio_content_returns_502(client):
     response = make_response(content=b'{"error": "boom"}', headers={"content-type": "application/json"})
     with mock_async_client(response=response):
         result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
-    assert result.status_code == 500
-    assert result.json() == {"error": "TTS server returned error"}
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS server returned non-audio content"}
 
 
 def test_timeout_returns_504(client):
@@ -163,3 +182,98 @@ def test_required_params_are_enforced(client, missing):
     params = {key: value for key, value in BASE_PARAMS.items() if key != missing}
     result = client.get("/api/tts-proxy", params=params)
     assert result.status_code == 422
+
+
+@pytest.mark.parametrize("server", ["ftp://tts.local", "file:///etc/passwd"])
+def test_invalid_scheme_rejected(client, server):
+    result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": server})
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_missing_host_rejected(client):
+    result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://"})
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_private_ip_literal_rejected(client):
+    result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://127.0.0.1"})
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_link_local_metadata_ip_rejected(client):
+    result = client.get("/api/tts-proxy", params={**BASE_PARAMS, "server": "http://169.254.169.254"})
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_resolved_private_ip_rejected(client, monkeypatch):
+    monkeypatch.setattr("app.main._resolve_host", _resolve_to("127.0.0.1"))
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_resolve_failure_rejected(client, monkeypatch):
+    def _raise_resolve(host):
+        raise ValueError("no such host")
+
+    monkeypatch.setattr("app.main._resolve_host", _raise_resolve)
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_allowlist_permits_otherwise_blocked_host(client, monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_TTS_ALLOWED_HOSTS", "tts.local")
+    monkeypatch.setattr("app.main._resolve_host", _resolve_to("127.0.0.1"))
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+
+
+def test_allowlist_rejects_unlisted_host(client, monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_TTS_ALLOWED_HOSTS", "other.local")
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_oversized_response_returns_502(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS response too large"}
+
+
+def test_is_blocked_ip_malformed_input():
+    assert app_main._is_blocked_ip("not-an-ip") is True
+
+
+def test_is_blocked_ip_public_address():
+    assert app_main._is_blocked_ip("93.184.216.34") is False
+
+
+def test_resolve_host_returns_ips(monkeypatch):
+    def _fake_getaddrinfo(host, _port):
+        return [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(app_main.socket, "getaddrinfo", _fake_getaddrinfo)
+    assert _real_resolve_host("example.com") == ["93.184.216.34"]
+
+
+def test_resolve_host_raises_on_failure(monkeypatch):
+    def _fail_getaddrinfo(host, _port):
+        raise app_main.socket.gaierror("boom")
+
+    monkeypatch.setattr(app_main.socket, "getaddrinfo", _fail_getaddrinfo)
+    with pytest.raises(ValueError):
+        _real_resolve_host("nope.invalid")
