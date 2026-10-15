@@ -1611,6 +1611,11 @@
     
     // Sanitize HTML produced by markdown/mermaid rendering to prevent stored XSS.
     function sanitizeHtml(html) {
+        // Enable html, svg, and svgFilters profiles together because mermaid renders
+        // diagrams as inline SVG. Mermaid SVG output uses foreignObject elements (which
+        // carry HTML content) and style elements (covered by svgFilters) that must survive
+        // sanitization for diagrams to render. The default html profile alone would strip
+        // the SVG structure and break mermaid diagrams.
         if (typeof DOMPurify !== 'undefined') {
             return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true } });
         }
