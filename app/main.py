@@ -48,7 +48,7 @@ def _resolve_host(host: str) -> list[str]:
         infos = socket.getaddrinfo(host, None)
     except (socket.gaierror, OSError) as exc:
         raise ValueError(f"could not resolve host {host!r}") from exc
-    return [info[4][0] for info in infos]
+    return [str(info[4][0]) for info in infos]
 
 
 def _is_blocked_ip(ip_str: str) -> bool:
