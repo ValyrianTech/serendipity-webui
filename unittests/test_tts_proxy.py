@@ -26,7 +26,7 @@ def _resolve_to(*ips):
     return _resolver
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True)  # noqa: V103
 def _patch_resolve_host(monkeypatch):
     """Patch host resolution so happy-path tests resolve to a public IP."""
     monkeypatch.setattr("app.main._resolve_host", _resolve_to("93.184.216.34"))
@@ -263,7 +263,7 @@ def test_is_blocked_ip_public_address():
 
 
 def test_resolve_host_returns_ips(monkeypatch):
-    def _fake_getaddrinfo(host, port):
+    def _fake_getaddrinfo(host, _port):
         return [(2, 1, 6, "", ("93.184.216.34", 0))]
 
     monkeypatch.setattr(app_main.socket, "getaddrinfo", _fake_getaddrinfo)
@@ -271,7 +271,7 @@ def test_resolve_host_returns_ips(monkeypatch):
 
 
 def test_resolve_host_raises_on_failure(monkeypatch):
-    def _fail_getaddrinfo(host, port):
+    def _fail_getaddrinfo(host, _port):
         raise app_main.socket.gaierror("boom")
 
     monkeypatch.setattr(app_main.socket, "getaddrinfo", _fail_getaddrinfo)
