@@ -331,7 +331,7 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
         if parsed.port is not None:
             netloc = f"{validated_ip}:{parsed.port}"
         request_url = f"{parsed.scheme}://{netloc}{path}"
-        host_header = parsed.hostname
+        host_header = parsed.hostname or ""
         if parsed.port is not None:
             host_header = f"{host_header}:{parsed.port}"
         host_headers["Host"] = host_header
