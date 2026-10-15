@@ -327,7 +327,7 @@
             // Populate model dropdown
             const modelSelect = document.getElementById('model-name');
             modelSelect.innerHTML = modelsResponse.model_names.map(name => 
-                `<option value="${name}" ${name === agentData.model_name ? 'selected' : ''}>${name}</option>`
+                `<option value="${escapeHtml(name)}" ${name === agentData.model_name ? 'selected' : ''}>${escapeHtml(name)}</option>`
             ).join('');
             
             // Populate form fields
@@ -405,20 +405,21 @@
         container.innerHTML = tools.map((tool, idx) => {
             const isAutoAllow = autoAllowTools.includes(tool);
             const isDefault = defaultTools.includes(tool);
+            const safeTool = escapeHtml(tool);
             return `
                 <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
-                    <span class="font-medium">${tool}</span>
+                    <span class="font-medium">${safeTool}</span>
                     <div class="flex items-center gap-6">
                         <label class="flex items-center gap-2 cursor-pointer text-sm">
                             <input type="checkbox" class="w-4 h-4 rounded" 
-                                   ${isAutoAllow ? 'checked' : ''} 
-                                   onchange="toggleToolAutoAllow('${tool}', this.checked)">
+                                   data-tool-auto-allow="${safeTool}"
+                                   ${isAutoAllow ? 'checked' : ''}>
                             <span class="text-slate-300">Auto-allow</span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer text-sm">
                             <input type="checkbox" class="w-4 h-4 rounded" 
-                                   ${isDefault ? 'checked' : ''} 
-                                   onchange="toggleToolDefault('${tool}', this.checked)">
+                                   data-tool-default="${safeTool}"
+                                   ${isDefault ? 'checked' : ''}>
                             <span class="text-slate-300">Default</span>
                         </label>
                         <button onclick="removeTool(${idx})" class="text-red-400 hover:text-red-300 ml-2">
@@ -430,6 +431,13 @@
                 </div>
             `;
         }).join('');
+        
+        container.querySelectorAll('input[data-tool-auto-allow]').forEach(input => {
+            input.addEventListener('change', () => toggleToolAutoAllow(input.dataset.toolAutoAllow, input.checked));
+        });
+        container.querySelectorAll('input[data-tool-default]').forEach(input => {
+            input.addEventListener('change', () => toggleToolDefault(input.dataset.toolDefault, input.checked));
+        });
     }
     
     function populateToolsDropdown() {
@@ -437,7 +445,7 @@
         // Filter out already added tools
         const unassignedTools = availableTools.filter(t => !tools.includes(t.name));
         select.innerHTML = '<option value="">-- Select a tool to add --</option>' +
-            unassignedTools.map(t => `<option value="${t.name}" title="${t.description || ''}">${t.name}${t.passive ? ' (passive)' : ''}</option>`).join('');
+            unassignedTools.map(t => `<option value="${escapeHtml(t.name)}" title="${escapeHtml(t.description || '')}">${escapeHtml(t.name)}${t.passive ? ' (passive)' : ''}</option>`).join('');
     }
     
     window.toggleToolAutoAllow = function(toolName, checked) {
@@ -470,7 +478,7 @@
         }
         container.innerHTML = toolsets.map((toolset, idx) => `
             <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
-                <span class="font-medium">${toolset}</span>
+                <span class="font-medium">${escapeHtml(toolset)}</span>
                 <button onclick="removeToolset(${idx})" class="text-red-400 hover:text-red-300 ml-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -485,7 +493,7 @@
         // Filter out already added toolsets
         const unassignedToolsets = availableToolsets.filter(t => !toolsets.includes(t));
         select.innerHTML = '<option value="">-- Select a toolset to add --</option>' +
-            unassignedToolsets.map(t => `<option value="${t}">${t}</option>`).join('');
+            unassignedToolsets.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
     }
     
     window.addToolset = function() {
@@ -507,7 +515,7 @@
         const container = document.getElementById('participants-list');
         container.innerHTML = participants.map((p, idx) => `
             <span class="bg-slate-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                ${p}
+                ${escapeHtml(p)}
                 <button onclick="removeParticipant(${idx})" class="hover:text-red-300">&times;</button>
             </span>
         `).join('');
@@ -523,7 +531,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
                         </svg>
                     </span>
-                    <span>${idx + 1}. ${s}</span>
+                    <span>${idx + 1}. ${escapeHtml(s)}</span>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="moveSpeakerUp(${idx})" class="text-slate-400 hover:text-white" ${idx === 0 ? 'disabled' : ''}>
@@ -604,16 +612,21 @@
         }
         container.innerHTML = voices.map((v, idx) => `
             <span class="bg-purple-600 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                ${v}
+                ${escapeHtml(v)}
                 <button onclick="removeVoice(${idx})" class="hover:text-red-300">&times;</button>
             </span>
         `).join('');
     }
     
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
     
     function renderRoles() {
@@ -635,8 +648,8 @@
                         <div class="flex items-center gap-4 flex-shrink-0 ml-4">
                             <label class="flex items-center gap-2 cursor-pointer text-sm">
                                 <input type="checkbox" class="w-4 h-4 rounded" 
-                                       ${isDefault ? 'checked' : ''} 
-                                       onchange="toggleRoleDefault('${roleName}', this.checked)">
+                                       data-role-default="${escapeHtml(roleName)}"
+                                       ${isDefault ? 'checked' : ''}>
                                 <span class="text-slate-300">Default</span>
                             </label>
                             <button onclick="editRole(${idx})" class="text-indigo-400 hover:text-indigo-300">
@@ -655,6 +668,10 @@
                 </div>
             `;
         }).join('');
+        
+        container.querySelectorAll('input[data-role-default]').forEach(input => {
+            input.addEventListener('change', () => toggleRoleDefault(input.dataset.roleDefault, input.checked));
+        });
     }
     
     window.toggleRoleDefault = function(roleName, checked) {
@@ -678,12 +695,12 @@
             const isDefault = defaultSkills.includes(skill);
             return `
                 <div class="bg-slate-700 px-4 py-3 rounded-lg flex items-center justify-between">
-                    <span class="font-medium">${skill}</span>
+                    <span class="font-medium">${escapeHtml(skill)}</span>
                     <div class="flex items-center gap-6">
                         <label class="flex items-center gap-2 cursor-pointer text-sm">
                             <input type="checkbox" class="w-4 h-4 rounded" 
-                                   ${isDefault ? 'checked' : ''} 
-                                   onchange="toggleSkillDefault('${skill}', this.checked)">
+                                   data-skill-default="${escapeHtml(skill)}"
+                                   ${isDefault ? 'checked' : ''}>
                             <span class="text-slate-300">Default</span>
                         </label>
                         <button onclick="removeSkill(${idx})" class="text-red-400 hover:text-red-300 ml-2">
@@ -695,6 +712,10 @@
                 </div>
             `;
         }).join('');
+        
+        container.querySelectorAll('input[data-skill-default]').forEach(input => {
+            input.addEventListener('change', () => toggleSkillDefault(input.dataset.skillDefault, input.checked));
+        });
     }
     
     window.toggleSkillDefault = function(skillName, checked) {
@@ -713,7 +734,7 @@
         // Filter out already assigned skills
         const unassignedSkills = availableSkills.filter(s => !skills.includes(s.name));
         select.innerHTML = '<option value="">-- Select a skill to add --</option>' +
-            unassignedSkills.map(s => `<option value="${s.name}" title="${s.description}">${s.name}${s.enabled ? '' : ' (disabled)'}</option>`).join('');
+            unassignedSkills.map(s => `<option value="${escapeHtml(s.name)}" title="${escapeHtml(s.description)}">${escapeHtml(s.name)}${s.enabled ? '' : ' (disabled)'}</option>`).join('');
     }
     
     window.addSkill = function() {

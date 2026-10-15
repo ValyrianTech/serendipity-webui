@@ -123,6 +123,17 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
     
+    function escapeHtml(text) {
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function createConversationItem(conv) {
         const item = document.createElement('div');
         item.className = 'conversation-item bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600';
@@ -131,8 +142,8 @@
         item.innerHTML = `
             <div class="flex items-center justify-between">
                 <div class="flex-1 min-w-0">
-                    <h3 class="font-medium truncate">${conv.title || 'Untitled Conversation'}</h3>
-                    <p class="text-sm text-slate-400">${conv.conversation_id.substring(0, 8)}...</p>
+                    <h3 class="font-medium truncate">${escapeHtml(conv.title || 'Untitled Conversation')}</h3>
+                    <p class="text-sm text-slate-400">${escapeHtml(conv.conversation_id.substring(0, 8))}...</p>
                 </div>
                 <svg class="w-5 h-5 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>

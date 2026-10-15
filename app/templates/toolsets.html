@@ -120,6 +120,17 @@
 <script type="module">
     import { getToolsets, getToolset, getMCPServers, getSkills, getCustomTools, saveToolset as saveToolsetApi, deleteToolset } from '/static/js/api.js';
     
+    function escapeHtml(text) {
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     let isNewToolset = false;
     let currentToolsetName = '';
     let servers = [];
@@ -150,16 +161,16 @@
                 toolsetsList = Object.keys(toolsetsList);
             }
             select.innerHTML = '<option value="">-- Select a toolset --</option>' +
-                toolsetsList.map(t => `<option value="${t}">${t}</option>`).join('');
+                toolsetsList.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
             
             // Populate skill and tool dropdowns
             const skillSelect = document.getElementById('skill-select');
             skillSelect.innerHTML = '<option value="">-- Select a skill --</option>' +
-                availableSkills.map(s => `<option value="${s}">${s}</option>`).join('');
+                availableSkills.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
             
             const toolSelect = document.getElementById('tool-select');
             toolSelect.innerHTML = '<option value="">-- Select a tool --</option>' +
-                availableCustomTools.map(t => `<option value="${t.name}" title="${t.description || ''}">${t.name}${t.passive ? ' (passive)' : ''}</option>`).join('');
+                availableCustomTools.map(t => `<option value="${escapeHtml(t.name)}" title="${escapeHtml(t.description || '')}">${escapeHtml(t.name)}${t.passive ? ' (passive)' : ''}</option>`).join('');
         } catch (e) {
             console.error('Failed to load toolsets:', e);
             showToast('Failed to load toolsets', 'error');
@@ -252,7 +263,7 @@
                                 class="bg-slate-600 border border-slate-500 rounded-lg px-4 py-2.5">
                             <option value="">-- Select server --</option>
                             ${availableMCPServers.map(s => 
-                                `<option value="${s}" ${s === server.serverName ? 'selected' : ''}>${s}</option>`
+                                `<option value="${escapeHtml(s)}" ${s === server.serverName ? 'selected' : ''}>${escapeHtml(s)}</option>`
                             ).join('')}
                         </select>
                     </div>
@@ -315,7 +326,7 @@
         
         container.innerHTML = skills.map((skill, idx) => `
             <div class="flex items-center gap-3 bg-slate-700 px-4 py-3 rounded-lg">
-                <span class="flex-1">${skill}</span>
+                <span class="flex-1">${escapeHtml(skill)}</span>
                 <button onclick="removeSkill(${idx})" class="text-red-400 hover:text-red-300">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -352,9 +363,9 @@
             return `
             <div class="bg-slate-700 p-4 rounded-lg flex items-center gap-4">
                 <div class="flex-1">
-                    <span class="font-medium">${tool.name}</span>
+                    <span class="font-medium">${escapeHtml(tool.name)}</span>
                     ${toolInfo.passive ? '<span class="ml-2 text-xs bg-slate-600 px-2 py-0.5 rounded">passive</span>' : ''}
-                    ${toolInfo.description ? `<p class="text-sm text-slate-400 mt-1">${toolInfo.description}</p>` : ''}
+                    ${toolInfo.description ? `<p class="text-sm text-slate-400 mt-1">${escapeHtml(toolInfo.description)}</p>` : ''}
                 </div>
                 <select onchange="updateToolPermission(${idx}, this.value)"
                         class="bg-slate-600 border border-slate-500 rounded-lg px-3 py-2 text-sm">
