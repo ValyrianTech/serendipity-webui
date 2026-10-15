@@ -204,6 +204,17 @@
 <script type="module">
     import { getMCPServers, getMCPServerConfig, saveMCPServerConfig, deleteMCPServerConfig } from '/static/js/api.js';
     
+    function escapeHtml(text) {
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     let isNewServer = false;
     let currentServerName = '';
     
@@ -213,7 +224,7 @@
             const select = document.getElementById('server-select');
             select.innerHTML = '<option value="">-- Select a server --</option>' +
                 (data.mcp_servers || []).map(s => 
-                    `<option value="${s.name || s}">${s.name || s}</option>`
+                    `<option value="${escapeHtml(s.name || s)}">${escapeHtml(s.name || s)}</option>`
                 ).join('');
         } catch (e) {
             console.error('Failed to load MCP servers:', e);

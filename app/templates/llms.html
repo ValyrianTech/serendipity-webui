@@ -205,9 +205,14 @@
     
     // Helper to escape HTML special characters for safe attribute insertion
     function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
     
     async function loadLLMs() {

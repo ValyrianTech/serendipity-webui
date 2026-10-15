@@ -203,6 +203,17 @@
 <script type="module">
     import { getAgent, getSettings, saveSettings, addMessage, initializeAgentVoices, getWorkflows, startWorkflow, clonePersona } from '/static/js/api.js';
     
+    function escapeHtml(text) {
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    
     const agentName = {{ agent_name | tojson }};
     let agentData = null;
     
@@ -224,8 +235,16 @@
                 const imgUrl = agentData.profile_picture
                     .replace('<serverhost>', settings.serverAddress)
                     .replace('<serverport>', settings.serverPort);
-                document.getElementById('agent-avatar-large').innerHTML = 
-                    `<img src="${imgUrl}" alt="${agentName}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-4xl\\'>${agentName[0]}</span>'">`;
+                const avatarContainer = document.getElementById('agent-avatar-large');
+                avatarContainer.innerHTML = 
+                    `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(agentName)}" class="w-full h-full object-cover">`;
+                const avatarImg = avatarContainer.querySelector('img');
+                avatarImg.addEventListener('error', () => {
+                    const fallback = document.createElement('span');
+                    fallback.className = 'text-4xl';
+                    fallback.textContent = agentName[0];
+                    avatarContainer.replaceChildren(fallback);
+                });
             }
             
             // Update description
@@ -239,7 +258,7 @@
             const toolsContainer = document.getElementById('agent-tools');
             if (agentData.tools && agentData.tools.length > 0) {
                 toolsContainer.innerHTML = agentData.tools.map(tool => 
-                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${tool}</span>`
+                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${escapeHtml(tool)}</span>`
                 ).join('');
             } else {
                 toolsContainer.innerHTML = '<span class="text-slate-500">No tools configured</span>';
@@ -249,7 +268,7 @@
             const participantsContainer = document.getElementById('agent-participants');
             if (agentData.participants && agentData.participants.length > 0) {
                 participantsContainer.innerHTML = agentData.participants.map(p => 
-                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${p}</span>`
+                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${escapeHtml(p)}</span>`
                 ).join('');
             } else {
                 participantsContainer.innerHTML = '<span class="text-slate-500">No participants</span>';
@@ -270,7 +289,7 @@
                 // Populate voices list
                 const voicesList = document.getElementById('voices-list');
                 voicesList.innerHTML = agentData.voices.map(voice => 
-                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${voice}</span>`
+                    `<span class="px-2 py-1 bg-slate-700 rounded text-sm">${escapeHtml(voice)}</span>`
                 ).join('');
             }
             
