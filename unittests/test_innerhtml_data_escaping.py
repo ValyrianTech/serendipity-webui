@@ -19,16 +19,15 @@ import html
 import json
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
-
 from test_xss_sanitization import (
     _CHROME,
     _extract_function,
     _read_template,
     _requires_chrome,
 )
-
 
 # --- Static: every affected template defines the escapeHtml helper ----------
 
@@ -289,3 +288,390 @@ def test_escape_html_neutralizes_hostile_payloads(template, tmp_path):
             assert "&#39;" in escaped, (template, payload, escaped)
         if "&" in payload:
             assert "&amp;" in escaped, (template, payload, escaped)
+
+
+# --- Guardrail: no raw data interpolated into innerHTML template literals -----
+#
+# The static tests above pin down *known* sinks one-by-one, but they are easy to
+# miss when a new sibling sink is added (e.g. a freshly staged list). This
+# guardrail instead scans every template's source and flags ANY ``innerHTML``
+# template-literal block whose ``${...}`` interpolation is not provably safe, so
+# future unescaped sinks are caught automatically without a browser.
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "app" / "templates"
+
+# Identifiers built earlier in the template and already run through
+# ``escapeHtml`` / ``sanitizeHtml`` before interpolation.
+_PRESANITIZED_IDENTIFIERS = frozenset({"infoContentHtml", "contentHtml", "avatarHtml"})
+
+# Numeric/boolean values that can never carry markup (indices, counts, pages).
+# Note: string IDs (``messageId``, ``uniqueId``) are intentionally NOT here; they
+# must be escaped and are only ever interpolated via ``escapeHtml(...)`` or in
+# non-``innerHTML`` template literals (e.g. ``document.querySelector(...)``).
+_NUMERIC_IDENTIFIERS = frozenset({
+    "idx", "index", "i", "j", "k", "n", "length", "chunks", "fetchIndex",
+    "currentPlayIndex", "currentTokenCount", "contextSize", "percentage",
+    "totalCost", "pagination", "page", "total_pages", "total",
+})
+
+# Local class-name/text flags computed from a boolean (e.g.
+# ``task.enabled ? 'bg-green-500' : 'bg-slate-500'``); their values are fixed
+# string literals, never server/user text.
+_CLASS_FLAG_IDENTIFIERS = frozenset({"enabledClass", "enabledText"})
+
+# Method calls tolerated inside a ternary/coalesce interpolation whose branches
+# are otherwise static strings (e.g. ``(server.toolFilter || []).join(', ')``).
+_TINY_SAFE_CALLS = frozenset({
+    "padStart", "parseInt", "toFixed", "substring", "charAt", "startsWith",
+    "join", "finally",
+})
+
+# How far back (chars) before an opening backtick to look for ``innerHTML``.
+_INNERHTML_LOOKBACK = 120
+
+
+def _consume_nested_template(source, start):
+    """Return the index just past the template literal beginning at ``start``.
+
+    ``source[start]`` must be a backtick. Escaped backticks and ``${...}``
+    interpolations (whose expressions may contain further nested template
+    literals) are skipped so the matching closing backtick is found correctly.
+    """
+    i = start + 1
+    n = len(source)
+    while i < n:
+        ch = source[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "`":
+            return i + 1
+        if ch == "$" and i + 1 < n and source[i + 1] == "{":
+            j = i + 2
+            depth = 1
+            while j < n and depth > 0:
+                c = source[j]
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == "`":
+                    j = _consume_nested_template(source, j)
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                j += 1
+            i = j
+            continue
+        i += 1
+    return n
+
+
+def _extract_template_literals(source):
+    """Yield ``(start_offset, literal_text)`` for every backtick template literal.
+
+    Escaped backticks and ``${...}`` interpolations with balanced braces and
+    nested template literals are handled so each literal is extracted verbatim.
+    """
+    literals = []
+    i = 0
+    n = len(source)
+    while i < n:
+        if source[i] != "`":
+            i += 1
+            continue
+        start = i
+        i += 1
+        while i < n:
+            ch = source[i]
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == "`":
+                break
+            if ch == "$" and i + 1 < n and source[i + 1] == "{":
+                j = i + 2
+                depth = 1
+                while j < n and depth > 0:
+                    c = source[j]
+                    if c == "\\":
+                        j += 2
+                        continue
+                    if c == "`":
+                        j = _consume_nested_template(source, j)
+                        continue
+                    if c == "{":
+                        depth += 1
+                    elif c == "}":
+                        depth -= 1
+                    j += 1
+                i = j
+                continue
+            i += 1
+        if i < n and source[i] == "`":
+            literals.append((start, source[start : i + 1]))
+            i += 1
+        else:
+            break
+    return literals
+
+
+def _iter_interpolations(literal_text):
+    """Yield the text of each top-level ``${...}`` expression in ``literal_text``.
+
+    ``literal_text`` includes the surrounding backticks. Interpolations nested
+    inside other interpolations' template literals are skipped, so only the
+    top-level interpolations of this literal are returned.
+    """
+    body = literal_text
+    body = body.removeprefix("`")
+    body = body.removesuffix("`")
+    i = 0
+    n = len(body)
+    while i < n:
+        ch = body[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "$" and i + 1 < n and body[i + 1] == "{":
+            j = i + 2
+            depth = 1
+            start = j
+            while j < n and depth > 0:
+                c = body[j]
+                if c == "\\":
+                    j += 2
+                    continue
+                if c == "`":
+                    j = _consume_nested_template(body, j)
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            yield body[start:j]
+            i = j + 1
+            continue
+        i += 1
+
+
+def _calls_in(text):
+    """Return the identifier names of every call expression in ``text``."""
+    return re.findall(r"([A-Za-z_$][\w$]*)\s*\(", text)
+
+
+def _is_numeric_expression(text):
+    """True if ``text`` is only identifiers/numbers/operators with safe tokens."""
+    if not re.fullmatch(r"[\w$.\s+\-*()]+", text):
+        return False
+    tokens = re.findall(r"[A-Za-z_$][\w$]*", text)
+    return all(token in _NUMERIC_IDENTIFIERS for token in tokens)
+
+
+def _split_ternary(text):
+    """Split ``text`` into ``(condition, true_branch, false_branch)`` at a ternary.
+
+    Returns ``None`` when there is no top-level ternary ``? ... :``. Optional
+    chaining (``?.``) and nullish coalescing (``??``) are never treated as the
+    ternary ``?``. Parenthesized/bracketed/braced sub-expressions, quoted
+    strings, and nested template literals are skipped so the ``?`` and its
+    matching ``:`` are located at the top nesting depth.
+    """
+    q = None
+    depth = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "`":
+            i = _consume_nested_template(text, i)
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            i += 1
+            while i < n:
+                c = text[i]
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0:
+            if ch == "?":
+                nxt = text[i + 1] if i + 1 < n else ""
+                if q is None and nxt not in (".", "?"):
+                    q = i
+            elif ch == ":" and q is not None:
+                return text[:q], text[q + 1 : i], text[i + 1 :]
+        i += 1
+    return None
+
+
+def _is_string_literal(text):
+    """True if ``text`` is a single quoted string literal using one quote char."""
+    return bool(re.fullmatch(r"(['\"]).*\1", text, re.DOTALL))
+
+
+def _is_static_ternary_or_coalesce(text):
+    """True if ``text`` is a ternary/coalesce whose branches are static strings.
+
+    A ternary ``cond ? a : b`` is safe only when *both* branches are single
+    string literals (e.g. ``t.passive ? ' (passive)' : ''``), so a data-carrying
+    branch such as ``flag ? userSuppliedName : ''`` is rejected. A ``||``
+    expression with no ternary is safe only when it is a ``join``-based chain
+    that calls nothing but the tiny safe set (e.g.
+    ``(server.toolFilter || []).join(', ')``); a bare ``x || 'y'`` is rejected.
+    """
+    parts = _split_ternary(text)
+    if parts is not None:
+        _, true_branch, false_branch = parts
+        return _is_string_literal(true_branch.strip()) and _is_string_literal(false_branch.strip())
+    if "||" in text:
+        return ".join(" in text and all(call in _TINY_SAFE_CALLS for call in _calls_in(text))
+    return False
+
+
+def _is_sanitized_map_join(text):
+    """True for a ``.map(...).join('')`` chain that escapes each element."""
+    return ".join(" in text and ("escapeHtml(" in text or "sanitizeHtml(" in text)
+
+
+def _is_safe_interpolation(expr):
+    """Return True if a ``${...}`` interpolation expression is provably safe."""
+    text = expr.strip()
+    if not text:
+        return True
+    # 1. wrapped in the per-template escaping/sanitizing helper.
+    if text.startswith(("escapeHtml(", "sanitizeHtml(")):
+        return True
+    # 2. known pre-sanitized/safe identifier.
+    if text in _PRESANITIZED_IDENTIFIERS:
+        return True
+    # local boolean-derived class/text flags (fixed literal values).
+    if text in _CLASS_FLAG_IDENTIFIERS:
+        return True
+    # 7. base58 address from wifToAddress (safe) and its substring slices.
+    if text == "address" or text.startswith("address.substring("):
+        return True
+    # 6. Date.now().
+    if text == "Date.now()":
+        return True
+    # 4. encodeURIComponent(...) is safe for URL/attribute contexts.
+    if text.startswith("encodeURIComponent("):
+        return True
+    # 3. numeric/index expression built from allowlisted identifiers.
+    if _is_numeric_expression(text):
+        return True
+    # 5. ternary / || expression whose branches are static strings.
+    if _is_static_ternary_or_coalesce(text):
+        return True
+    # .map().join('') chain that escapes/sanitizes each element.
+    return bool(_is_sanitized_map_join(text))
+
+
+def test_no_raw_data_interpolated_into_innerhtml():
+    """Guardrail: no unescaped ``${...}`` inside any ``innerHTML`` template literal.
+
+    Scans every template for backtick template literals assigned (directly or
+    via a map/ternary) to an ``innerHTML`` sink and asserts every top-level
+    interpolation is wrapped in ``escapeHtml``/``sanitizeHtml`` or otherwise
+    provably safe. This catches future sibling sinks automatically and runs
+    statically (no browser required).
+    """
+    violations = []
+    for name in sorted(p.name for p in _TEMPLATES_DIR.glob("*.html")):
+        source = _read_template(name)
+        for start, literal in _extract_template_literals(source):
+            if "innerHTML" not in source[max(0, start - _INNERHTML_LOOKBACK):start]:
+                continue
+            line = source.count("\n", 0, start) + 1
+            for expr in _iter_interpolations(literal):
+                if not _is_safe_interpolation(expr):
+                    violations.append((name, line, expr.strip()))
+
+    if violations:
+        details = "\n".join(
+            f"  {name}:{line}  ${{{expr}}}\n"
+            f"      hint: wrap with escapeHtml(...) or sanitizeHtml(...)"
+            for name, line, expr in violations
+        )
+        raise AssertionError(
+            f"found {len(violations)} unescaped innerHTML interpolation(s):\n{details}"
+        )
+
+
+# --- Guardrail helper behavior pins (no browser required) --------------------
+
+
+def _unsafe_interpolations_in(source):
+    """Return the unsafe ``${...}`` expressions found in ``source`` innerHTML sinks."""
+    found = []
+    for start, literal in _extract_template_literals(source):
+        if "innerHTML" not in source[max(0, start - _INNERHTML_LOOKBACK):start]:
+            continue
+        for expr in _iter_interpolations(literal):
+            if not _is_safe_interpolation(expr):
+                found.append(expr.strip())
+    return found
+
+
+def test_guardrail_helper_rejects_unsafe_interpolations():
+    """The guardrail must classify these interpolation expressions as UNSAFE.
+
+    Pins the negative behavior so a future loosening (e.g. accepting a raw data
+    identifier or a data-carrying ternary/coalesce branch) fails loudly.
+    """
+    for expr in (
+        "resource",
+        "script",
+        "nodeId",
+        "file.name",
+        "task.name",
+        "flag ? data : ''",
+        "x || 'y'",
+        "(a || '')",
+    ):
+        assert not _is_safe_interpolation(expr), f"should be unsafe: {expr!r}"
+
+
+def test_guardrail_helper_accepts_safe_interpolations():
+    """The guardrail must classify these interpolation expressions as SAFE.
+
+    Pins the positive behavior so a future tightening does not break the
+    legitimate static-branch/coalesce/numeric forms used across templates.
+    """
+    for expr in (
+        "escapeHtml(x)",
+        "sanitizeHtml(x)",
+        "idx",
+        "idx + 1",
+        "encodeURIComponent(agentName)",
+        "t.passive ? ' (passive)' : ''",
+        "(server.toolFilter || []).join(', ')",
+        "Date.now()",
+        "address",
+    ):
+        assert _is_safe_interpolation(expr), f"should be safe: {expr!r}"
+
+
+def test_guardrail_flags_synthetic_unescaped_innerhtml_sink():
+    """End-to-end scanner detects a raw ``${data}`` inside an innerHTML literal."""
+    source = "function render() {\n  list.innerHTML = `<li>${data}</li>`;\n}"
+    assert _unsafe_interpolations_in(source) == ["data"]
+
+
+def test_guardrail_ignores_synthetic_escaped_innerhtml_sink():
+    """End-to-end scanner accepts ``${escapeHtml(data)}`` inside an innerHTML literal."""
+    source = "function render() {\n  list.innerHTML = `<li>${escapeHtml(data)}</li>`;\n}"
+    assert _unsafe_interpolations_in(source) == []
