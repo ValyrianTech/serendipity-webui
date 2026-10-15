@@ -316,6 +316,54 @@ def test_port_is_preserved_in_pinned_request(client):
     assert capture["headers"] == {"Host": "tts.local:8080"}
 
 
+def test_ipv6_ip_literal_is_bracketed(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get(
+            "/api/tts-proxy",
+            params={**BASE_PARAMS, "server": "http://[2606:4700:4700::1111]"},
+        )
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://[2606:4700:4700::1111]/synthesize_speech/"
+    assert capture["headers"] == {"Host": "2606:4700:4700::1111"}
+
+
+def test_aaaa_resolving_hostname_bracketed(client, monkeypatch):
+    monkeypatch.setattr("app.main._resolve_host", _resolve_to("2606:4700:4700::1111"))
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get(
+            "/api/tts-proxy",
+            params={**BASE_PARAMS, "server": "http://tts6.local"},
+        )
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://[2606:4700:4700::1111]/synthesize_speech/"
+    assert capture["headers"] == {"Host": "tts6.local"}
+
+
+def test_ipv6_ip_literal_with_port_is_bracketed(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get(
+            "/api/tts-proxy",
+            params={**BASE_PARAMS, "server": "http://[2606:4700:4700::1111]:8080"},
+        )
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://[2606:4700:4700::1111]:8080/synthesize_speech/"
+    assert capture["headers"] == {"Host": "2606:4700:4700::1111:8080"}
+
+
+def test_format_netloc_ip_brackets_v6_and_not_v4():
+    assert app_main._format_netloc_ip("2606:4700:4700::1111") == "[2606:4700:4700::1111]"
+    assert app_main._format_netloc_ip("93.184.216.34") == "93.184.216.34"
+
+
 def test_is_blocked_ip_malformed_input():
     assert app_main._is_blocked_ip("not-an-ip") is True
 

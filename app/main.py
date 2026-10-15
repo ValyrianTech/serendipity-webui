@@ -74,6 +74,20 @@ def _is_blocked_ip(ip_str: str) -> bool:
     )
 
 
+def _format_netloc_ip(ip: str) -> str:
+    """Render an IP address for use in a URL netloc, bracketing IPv6 literals.
+
+    :param ip: The IP address string (IPv4 or IPv6).
+    :type ip: str
+    :returns: The IP, wrapped in square brackets for IPv6 (e.g. ``[::1]``),
+        or unchanged for IPv4.
+    :rtype: str
+    """
+    if ipaddress.ip_address(ip).version == 6:
+        return f"[{ip}]"
+    return ip
+
+
 def _validate_tts_server(server: str) -> tuple[str, str | None]:
     """Validate a TTS server URL to prevent SSRF to internal or non-HTTP resources.
 
@@ -327,9 +341,9 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
     host_headers: dict[str, str] = {}
     if validated_ip is not None:
         parsed = urlparse(server_url)
-        netloc = validated_ip
+        netloc = _format_netloc_ip(validated_ip)
         if parsed.port is not None:
-            netloc = f"{validated_ip}:{parsed.port}"
+            netloc = f"{netloc}:{parsed.port}"
         request_url = f"{parsed.scheme}://{netloc}{path}"
         host_header = parsed.hostname or ""
         if parsed.port is not None:
