@@ -76,6 +76,19 @@ On first launch, you'll be prompted to configure:
 
 All settings are stored in your browser's localStorage.
 
+### TTS proxy security
+
+The `/api/tts-proxy` endpoint validates the `server` query parameter before forwarding to prevent SSRF to internal or non-HTTP resources:
+
+- Only `http` and `https` schemes are allowed.
+- If the `SERENDIPITY_TTS_ALLOWED_HOSTS` environment variable is set (a comma-separated list of host names), the resolved host must be in that allowlist.
+- When the host is not allowlisted, it is resolved via DNS and any resulting private, loopback, link-local, reserved, multicast, or unspecified IP is blocked (IP literals are checked as well).
+- Invalid or disallowed servers return HTTP 400 with `{"error": "Invalid or disallowed TTS server"}`.
+- Non-audio (`audio/*`) responses return HTTP 502 (`"TTS server returned non-audio content"`).
+- Responses larger than 25 MB return HTTP 502 (`"TTS response too large"`).
+
+When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/reserved/multicast/unspecified addresses are blocked; any public host is permitted.
+
 ## Project Structure
 
 ```
@@ -138,7 +151,7 @@ serendipity-webui/
 | `/toolsets` | Toolset management |
 | `/skills` | Skills management |
 | `/scheduled-tasks` | Scheduled tasks |
-| `/api/tts-proxy` | TTS synthesis proxy endpoint |
+| `/api/tts-proxy` | TTS synthesis proxy endpoint (SSRF-protected; see [Configuration](#configuration)) |
 
 ## API Integration
 
