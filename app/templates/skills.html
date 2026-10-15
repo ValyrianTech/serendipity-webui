@@ -263,11 +263,19 @@ if __name__ == '__main__':
     let resourceContents = {};
     let scriptContents = {};
 
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Sanitize HTML produced by markdown rendering to prevent stored XSS.
     function sanitizeHtml(html) {
         if (typeof DOMPurify !== 'undefined') {
             return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true } });
         }
-        return html;
+        // Fall back to escaping so the sanitizer never becomes a silent no-op.
+        return escapeHtml(html);
     }
     
     async function loadSkills() {
