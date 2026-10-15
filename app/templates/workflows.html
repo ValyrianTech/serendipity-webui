@@ -458,6 +458,25 @@
         }
     };
     
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Sanitize HTML produced by markdown/mermaid rendering to prevent stored XSS.
+    function sanitizeHtml(html) {
+        // Enable html, svg, and svgFilters profiles together because mermaid renders
+        // diagrams as inline SVG. Mermaid SVG output uses foreignObject elements (which
+        // carry HTML content) and style elements (covered by svgFilters) that must survive
+        // sanitization for diagrams to render. The default html profile alone would strip
+        // the SVG structure and break mermaid diagrams.
+        if (typeof DOMPurify !== 'undefined') {
+            return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true } });
+        }
+        return escapeHtml(html);
+    }
+    
     async function renderFlowchart(code) {
         const container = document.getElementById('flowchart-preview');
         const loading = document.getElementById('flowchart-loading');
@@ -468,10 +487,10 @@
             
             const id = `flowchart-${Date.now()}`;
             const { svg } = await mermaid.render(id, code);
-            container.innerHTML = svg;
+            container.innerHTML = sanitizeHtml(svg);
         } catch (e) {
             console.error('Mermaid render error:', e);
-            container.innerHTML = `<pre class="text-red-400 text-sm">Flowchart error: ${e.message}</pre>`;
+            container.innerHTML = `<pre class="text-red-400 text-sm">Flowchart error: ${escapeHtml(e.message)}</pre>`;
         }
     }
     

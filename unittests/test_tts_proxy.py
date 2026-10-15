@@ -24,7 +24,7 @@ class MockAsyncClient:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, *exc_info):
+    async def __aexit__(self, *_exc_info):
         return False
 
     async def get(self, url, params=None):

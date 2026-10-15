@@ -262,6 +262,26 @@ if __name__ == '__main__':
     // Local storage for resources/scripts content (not yet saved to backend)
     let resourceContents = {};
     let scriptContents = {};
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Sanitize HTML produced by markdown rendering to prevent stored XSS.
+    function sanitizeHtml(html) {
+        // Enable html, svg, and svgFilters profiles together because mermaid renders
+        // diagrams as inline SVG. Mermaid SVG output uses foreignObject elements (which
+        // carry HTML content) and style elements (covered by svgFilters) that must survive
+        // sanitization for diagrams to render. The default html profile alone would strip
+        // the SVG structure and break mermaid diagrams.
+        if (typeof DOMPurify !== 'undefined') {
+            return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true } });
+        }
+        // Fall back to escaping so the sanitizer never becomes a silent no-op.
+        return escapeHtml(html);
+    }
     
     async function loadSkills() {
         try {
@@ -450,7 +470,7 @@ if __name__ == '__main__':
         const content = document.getElementById('skill-instructions').value;
         const preview = document.getElementById('instructions-preview');
         if (typeof marked !== 'undefined') {
-            preview.innerHTML = marked.parse(content || '*No instructions*');
+            preview.innerHTML = sanitizeHtml(marked.parse(content || '*No instructions*'));
             // Highlight code blocks
             preview.querySelectorAll('pre code').forEach((block) => {
                 if (typeof hljs !== 'undefined') {
@@ -560,7 +580,7 @@ if __name__ == '__main__':
             const content = document.getElementById('resource-content').value;
             const preview = document.getElementById('resource-preview');
             if (typeof marked !== 'undefined') {
-                preview.innerHTML = marked.parse(content || '*No content*');
+                preview.innerHTML = sanitizeHtml(marked.parse(content || '*No content*'));
                 preview.querySelectorAll('pre code').forEach((block) => {
                     if (typeof hljs !== 'undefined') {
                         hljs.highlightElement(block);

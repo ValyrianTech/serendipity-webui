@@ -1279,10 +1279,10 @@
                     if (p.startsWith('<div class="thinking-block')) {
                         return p;
                     }
-                    return marked.parse(p);
+                    return sanitizeHtml(marked.parse(p));
                 }).join('')}</div>`;
             } else {
-                contentHtml = `<div class="markdown-content">${marked.parse(content)}</div>`;
+                contentHtml = `<div class="markdown-content">${sanitizeHtml(marked.parse(content))}</div>`;
             }
         }
         
@@ -1411,9 +1411,9 @@
             const id = `mermaid-${Date.now()}-${idx}`;
             try {
                 const { svg } = await mermaid.render(id, code);
-                el.innerHTML = svg;
+                el.innerHTML = sanitizeHtml(svg);
             } catch (e) {
-                el.innerHTML = `<pre class="text-red-400">Mermaid error: ${e.message}</pre>`;
+                el.innerHTML = `<pre class="text-red-400">Mermaid error: ${escapeHtml(e.message)}</pre>`;
             }
         });
         
@@ -1491,10 +1491,10 @@
                         if (p.startsWith('<div class="thinking-block')) {
                             return p; // Keep thinking blocks as-is
                         }
-                        return marked.parse(p);
+                        return sanitizeHtml(marked.parse(p));
                     }).join('')}</div>`;
                 }
-                return `<div class="markdown-content">${marked.parse(content)}</div>`;
+                return `<div class="markdown-content">${sanitizeHtml(marked.parse(content))}</div>`;
             
             case 'code':
                 const lang = part.language || 'plaintext';
@@ -1544,7 +1544,7 @@
                     </div>`;
             
             default:
-                return `<div class="markdown-content">${marked.parse(content)}</div>`;
+                return `<div class="markdown-content">${sanitizeHtml(marked.parse(content))}</div>`;
         }
     }
     
@@ -1607,6 +1607,19 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    // Sanitize HTML produced by markdown/mermaid rendering to prevent stored XSS.
+    function sanitizeHtml(html) {
+        // Enable html, svg, and svgFilters profiles together because mermaid renders
+        // diagrams as inline SVG. Mermaid SVG output uses foreignObject elements (which
+        // carry HTML content) and style elements (covered by svgFilters) that must survive
+        // sanitization for diagrams to render. The default html profile alone would strip
+        // the SVG structure and break mermaid diagrams.
+        if (typeof DOMPurify !== 'undefined') {
+            return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true } });
+        }
+        return escapeHtml(html);
     }
     
     // Track if user has manually scrolled up
@@ -2493,9 +2506,9 @@
                 const id = `stream-mermaid-${Date.now()}-${idx}`;
                 try {
                     const { svg } = await mermaid.render(id, code);
-                    el.innerHTML = svg;
+                    el.innerHTML = sanitizeHtml(svg);
                 } catch (e) {
-                    el.innerHTML = `<pre class="text-red-400">Mermaid error: ${e.message}</pre>`;
+                    el.innerHTML = `<pre class="text-red-400">Mermaid error: ${escapeHtml(e.message)}</pre>`;
                 }
             });
         } else if (data.message && data.message.trim().length > 0) {
@@ -2508,10 +2521,10 @@
                     if (p.startsWith('<div class="thinking-block')) {
                         return p;
                     }
-                    return marked.parse(p);
+                    return sanitizeHtml(marked.parse(p));
                 }).join('')}</div>`;
             } else {
-                contentEl.innerHTML = `<div class="markdown-content">${marked.parse(data.message)}</div>`;
+                contentEl.innerHTML = `<div class="markdown-content">${sanitizeHtml(marked.parse(data.message))}</div>`;
             }
         }
         
