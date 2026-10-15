@@ -264,9 +264,14 @@ if __name__ == '__main__':
     let scriptContents = {};
 
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     // Sanitize HTML produced by markdown rendering to prevent stored XSS.
@@ -290,7 +295,7 @@ if __name__ == '__main__':
             const skillsList = data.skills || [];
             
             select.innerHTML = '<option value="">-- Select a skill --</option>' +
-                skillsList.map(s => `<option value="${s.name}">${s.name}${s.enabled ? '' : ' (disabled)'}</option>`).join('');
+                skillsList.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}${s.enabled ? '' : ' (disabled)'}</option>`).join('');
         } catch (e) {
             console.error('Failed to load skills:', e);
             showToast('Failed to load skills', 'error');
@@ -392,7 +397,7 @@ if __name__ == '__main__':
                     <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
-                    <span class="font-mono text-sm">${resource}</span>
+                    <span class="font-mono text-sm">${escapeHtml(resource)}</span>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="editResource(${idx})" class="text-indigo-400 hover:text-indigo-300 p-1">
@@ -423,7 +428,7 @@ if __name__ == '__main__':
                     <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
                     </svg>
-                    <span class="font-mono text-sm">${script}</span>
+                    <span class="font-mono text-sm">${escapeHtml(script)}</span>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="editScript(${idx})" class="text-indigo-400 hover:text-indigo-300 p-1">

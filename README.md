@@ -98,6 +98,10 @@ When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/
 
 Server-side values interpolated into JavaScript in Jinja2 templates (e.g. `agent_name`, `workflow_id`, `node_id`) are rendered using Jinja2's `tojson` filter so they are safely encoded as JSON, preventing a crafted value from breaking out of a JavaScript string literal (JS injection / XSS).
 
+### HTML escaping in templates
+
+Dynamic values (e.g. agent names, descriptions, image URLs, message ids, sender names, tool/role/skill names) inserted into template `innerHTML` via JavaScript string interpolation are escaped with a shared `escapeHtml` helper covering `&`, `<`, `>`, `\"` and `'`, so values are safe in both element-text and quoted-attribute/inline-handler contexts. Inline `onclick` handlers that previously embedded untrusted values now use `data-*` attributes with `addEventListener` bindings.
+
 ## Project Structure
 
 ```
@@ -138,7 +142,8 @@ serendipity-webui/
 │   ├── test_main_entrypoint.py # __main__ entrypoint test
 │   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
 │   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
-│   └── test_xss_sanitization.py # XSS sanitization tests
+│   ├── test_xss_sanitization.py # XSS sanitization tests
+│   └── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
 ├── requirements.txt        # Python dependencies

@@ -331,6 +331,17 @@
 <script type="module">
     import { getScheduledTasks, getScheduledTask, saveScheduledTask, deleteScheduledTask, runScheduledTaskNow, getAgents, getAgent, getModels, getSkills, getCustomTools } from '/static/js/api.js';
     
+    function escapeHtml(text) {
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     let tasksData = [];
     let agentsData = [];
     let modelsData = [];
@@ -458,10 +469,14 @@
         
         container.innerHTML = selectedTools.map(toolName => 
             `<span class="selected-chip">
-                ${toolName}
-                <button type="button" onclick="removeTool('${toolName}')" class="ml-1 hover:text-red-400">&times;</button>
+                ${escapeHtml(toolName)}
+                <button type="button" data-tool-name="${escapeHtml(toolName)}" class="ml-1 hover:text-red-400">&times;</button>
             </span>`
         ).join('');
+        
+        container.querySelectorAll('button[data-tool-name]').forEach(btn => {
+            btn.addEventListener('click', () => removeTool(btn.dataset.toolName));
+        });
     }
     
     window.addSelectedTool = function() {
@@ -514,10 +529,14 @@
         
         container.innerHTML = selectedRoles.map(roleName => 
             `<span class="selected-chip">
-                ${roleName}
-                <button type="button" onclick="removeRole('${roleName}')" class="ml-1 hover:text-red-400">&times;</button>
+                ${escapeHtml(roleName)}
+                <button type="button" data-role-name="${escapeHtml(roleName)}" class="ml-1 hover:text-red-400">&times;</button>
             </span>`
         ).join('');
+        
+        container.querySelectorAll('button[data-role-name]').forEach(btn => {
+            btn.addEventListener('click', () => removeRole(btn.dataset.roleName));
+        });
     }
     
     window.addSelectedRole = function() {
@@ -568,10 +587,14 @@
         
         container.innerHTML = selectedSkills.map(skillName => 
             `<span class="selected-chip">
-                ${skillName}
-                <button type="button" onclick="removeSkill('${skillName}')" class="ml-1 hover:text-red-400">&times;</button>
+                ${escapeHtml(skillName)}
+                <button type="button" data-skill-name="${escapeHtml(skillName)}" class="ml-1 hover:text-red-400">&times;</button>
             </span>`
         ).join('');
+        
+        container.querySelectorAll('button[data-skill-name]').forEach(btn => {
+            btn.addEventListener('click', () => removeSkill(btn.dataset.skillName));
+        });
     }
     
     window.addSelectedSkill = function() {
@@ -636,40 +659,40 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-3 mb-2">
                         <span class="w-2 h-2 rounded-full ${enabledClass}"></span>
-                        <h3 class="font-semibold text-lg truncate">${task.name || 'Unnamed Task'}</h3>
-                        <span class="px-2 py-0.5 text-xs rounded bg-slate-700 text-slate-300">${task.cron_expression}</span>
+                        <h3 class="font-semibold text-lg truncate">${escapeHtml(task.name || 'Unnamed Task')}</h3>
+                        <span class="px-2 py-0.5 text-xs rounded bg-slate-700 text-slate-300">${escapeHtml(task.cron_expression)}</span>
                     </div>
-                    <p class="text-slate-400 text-sm mb-3">${task.description || 'No description'}</p>
+                    <p class="text-slate-400 text-sm mb-3">${escapeHtml(task.description || 'No description')}</p>
                     <div class="flex flex-wrap gap-4 text-sm">
                         <span class="text-slate-500">
-                            <span class="text-slate-400">Agent:</span> ${task.agent}
+                            <span class="text-slate-400">Agent:</span> ${escapeHtml(task.agent)}
                         </span>
                         <span class="text-slate-500">
-                            <span class="text-slate-400">Next:</span> <span class="text-green-400">${nextRun}</span>
+                            <span class="text-slate-400">Next:</span> <span class="text-green-400">${escapeHtml(nextRun)}</span>
                         </span>
                         <span class="text-slate-500">
-                            <span class="text-slate-400">Last:</span> ${lastRun}
+                            <span class="text-slate-400">Last:</span> ${escapeHtml(lastRun)}
                         </span>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 ml-4">
-                    <button onclick="runTaskNow('${task.task_id}')" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Run Now">
+                    <button data-action="run" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Run Now">
                         <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                     </button>
-                    <button onclick="editTask('${task.task_id}')" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Edit">
+                    <button data-action="edit" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Edit">
                         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                         </svg>
                     </button>
-                    <button onclick="toggleTaskEnabled('${task.task_id}', ${!task.enabled})" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="${task.enabled ? 'Disable' : 'Enable'}">
+                    <button data-action="toggle" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="${task.enabled ? 'Disable' : 'Enable'}">
                         <svg class="w-5 h-5 ${task.enabled ? 'text-green-400' : 'text-slate-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${task.enabled ? 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z' : 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z'}"/>
                         </svg>
                     </button>
-                    <button onclick="showDeleteDialog('${task.task_id}')" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Delete">
+                    <button data-action="delete" class="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Delete">
                         <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                         </svg>
@@ -677,6 +700,11 @@
                 </div>
             </div>
         `;
+        
+        item.querySelector('[data-action="run"]').addEventListener('click', () => runTaskNow(task.task_id));
+        item.querySelector('[data-action="edit"]').addEventListener('click', () => editTask(task.task_id));
+        item.querySelector('[data-action="toggle"]').addEventListener('click', () => toggleTaskEnabled(task.task_id, !task.enabled));
+        item.querySelector('[data-action="delete"]').addEventListener('click', () => showDeleteDialog(task.task_id));
         
         return item;
     }

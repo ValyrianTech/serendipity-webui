@@ -337,8 +337,8 @@
                 const roleName = typeof role === 'string' ? role : (role.role_name || role.name || 'Unknown');
                 return `
                     <label class="flex items-center gap-1 cursor-pointer text-sm">
-                        <input type="checkbox" value="${roleName}" class="w-4 h-4 rounded">
-                        <span>${roleName}</span>
+                        <input type="checkbox" value="${escapeHtml(roleName)}" class="w-4 h-4 rounded">
+                        <span>${escapeHtml(roleName)}</span>
                     </label>
                 `;
             }).join('');
@@ -351,8 +351,8 @@
         if (tools.length > 0) {
             enabledToolsContainer.innerHTML = tools.map(tool => `
                 <label class="flex items-center gap-1 cursor-pointer text-sm">
-                    <input type="checkbox" value="${tool}" class="w-4 h-4 rounded">
-                    <span>${tool}</span>
+                    <input type="checkbox" value="${escapeHtml(tool)}" class="w-4 h-4 rounded">
+                    <span>${escapeHtml(tool)}</span>
                 </label>
             `).join('');
         } else {
@@ -375,8 +375,8 @@
         
         container.innerHTML = nodeIds.map(nodeId => `
             <label class="flex items-center gap-1 cursor-pointer text-sm">
-                <input type="checkbox" value="${nodeId}" class="available-file-checkbox w-4 h-4 rounded">
-                <span>${nodeId}</span>
+                <input type="checkbox" value="${escapeHtml(nodeId)}" class="available-file-checkbox w-4 h-4 rounded">
+                <span>${escapeHtml(nodeId)}</span>
             </label>
         `).join('');
     }
@@ -459,9 +459,14 @@
     };
     
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
     
     // Sanitize HTML produced by markdown/mermaid rendering to prevent stored XSS.

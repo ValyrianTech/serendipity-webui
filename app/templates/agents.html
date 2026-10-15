@@ -90,6 +90,17 @@
         }
     };
     
+    function escapeHtml(text) {
+        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
+        // and quoted-attribute / inline-handler-string contexts.
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function createAgentCard(agent) {
         const settings = getSettings();
         const baseUrl = `http://${settings.serverAddress}:${settings.serverPort}`;
@@ -103,20 +114,33 @@
             ? agent.profile_image.replace('<serverhost>', settings.serverAddress).replace('<serverport>', settings.serverPort)
             : '';
         
+        const avatarHtml = profileImage 
+            ? `<img src="${escapeHtml(profileImage)}" alt="${escapeHtml(agent.name)}" class="w-full h-full object-cover">`
+            : `<span class="text-2xl">${escapeHtml(agent.name.charAt(0))}</span>`;
+        
         card.innerHTML = `
             <div class="flex items-center gap-4 mb-4">
                 <div class="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
-                    ${profileImage 
-                        ? `<img src="${profileImage}" alt="${agent.name}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl\\'>${agent.name.charAt(0)}</span>'">`
-                        : `<span class="text-2xl">${agent.name.charAt(0)}</span>`
-                    }
+                    ${avatarHtml}
                 </div>
                 <div>
-                    <h3 class="text-xl font-semibold">${agent.name}</h3>
+                    <h3 class="text-xl font-semibold">${escapeHtml(agent.name)}</h3>
                 </div>
             </div>
-            <p class="text-slate-400 text-sm">${agent.description || 'No description'}</p>
+            <p class="text-slate-400 text-sm">${escapeHtml(agent.description || 'No description')}</p>
         `;
+        
+        if (profileImage) {
+            const img = card.querySelector('img');
+            if (img) {
+                const fallback = document.createElement('span');
+                fallback.className = 'text-2xl';
+                fallback.textContent = agent.name.charAt(0);
+                img.addEventListener('error', () => {
+                    img.replaceWith(fallback);
+                });
+            }
+        }
         
         return card;
     }
