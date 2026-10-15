@@ -328,6 +328,7 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
 
     # Build the TTS URL
     server_url = server_url.rstrip('/')
+    parsed = urlparse(server_url)
     params: dict[str, str | float] = {
         "voice": voice,
         "text": text,
@@ -338,11 +339,11 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
         params["speed"] = speed
 
     # Pin httpx to the exact vetted IP to avoid a second (TOCTOU) DNS resolution,
-    # while preserving the original hostname in the Host header.
-    path = "/synthesize_speech/"
+    # while preserving the original hostname in the Host header. The server URL's
+    # path prefix (e.g. ``/tts``) must be preserved in front of ``/synthesize_speech/``.
+    path = f"{parsed.path}/synthesize_speech/"
     host_headers: dict[str, str] = {}
     if validated_ip is not None:
-        parsed = urlparse(server_url)
         netloc = _format_netloc_ip(validated_ip)
         if parsed.port is not None:
             netloc = f"{netloc}:{parsed.port}"
@@ -352,7 +353,7 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
             host_header = f"{host_header}:{parsed.port}"
         host_headers["Host"] = host_header
     else:
-        request_url = f"{server_url}{path}"
+        request_url = f"{server_url}/synthesize_speech/"
 
     # Use a long timeout for slow TTS generation (5 minutes)
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
