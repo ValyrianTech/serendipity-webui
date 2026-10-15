@@ -89,6 +89,8 @@ The `/api/tts-proxy` endpoint validates the `server` query parameter before forw
 
 When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/reserved/multicast/unspecified addresses are blocked; any public host is permitted.
 
+> **Note:** This validation is best-effort, not a hard guarantee. The host is resolved and validated at request-validation time, but `httpx` re-resolves the hostname when it connects. A hostname whose DNS answer changes between those two lookups (a DNS-rebinding / TOCTOU attack) can therefore still reach an internal address. Setting `SERENDIPITY_TTS_ALLOWED_HOSTS` to a trusted allowlist is the recommended mitigation, since it skips DNS resolution entirely for allowlisted hosts and pins the allowed host set; combine it with network-level egress controls for defense in depth.
+
 ## Project Structure
 
 ```
