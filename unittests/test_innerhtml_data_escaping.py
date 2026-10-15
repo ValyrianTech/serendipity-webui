@@ -147,6 +147,16 @@ def test_conversation_message_sinks_are_escaped():
     assert "playMessageAudio('${escapeHtml(msg.message_id || '')}'" in body
 
 
+def test_conversation_staged_and_open_files_escape_file_names():
+    """conversation.html escapes file names in staged and open file lists."""
+    staged_body = _func_body("conversation.html", "updateStagedFilesDisplay")
+    assert "escapeHtml(file.fileName || file)" in staged_body
+    assert "${file.fileName || file}" not in staged_body
+
+    open_body = _func_body("conversation.html", "updateOpenFilesList")
+    assert "escapeHtml(file.name || file.filename" in open_body
+
+
 def test_agent_home_escapes_tools_participants_voices():
     """agent_home.html escapes tools/participants/voices and drops raw onerror."""
     content = _read_template("agent_home.html")
