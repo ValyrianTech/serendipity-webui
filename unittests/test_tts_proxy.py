@@ -72,7 +72,7 @@ class MockAsyncClient:
     async def __aexit__(self, *_exc_info):
         return False
 
-    def stream(self, method, url, params=None, headers=None):
+    def stream(self, method, url, params=None, headers=None):  # noqa: V107
         if self._capture is not None:
             self._capture["url"] = url
             self._capture["params"] = params
