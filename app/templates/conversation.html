@@ -485,7 +485,7 @@
     import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills } from '/static/js/api.js';
     import { signData } from '/static/js/bitcoin.js';
     
-    const agentName = '{{ agent_name }}';
+    const agentName = {{ agent_name | tojson }};
     const urlParams = new URLSearchParams(window.location.search);
     let conversationId = urlParams.get('conversation_id') || '';
     let conversationData = null;

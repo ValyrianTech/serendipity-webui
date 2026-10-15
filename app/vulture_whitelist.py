@@ -6,16 +6,16 @@ and exercised by the test suite in ``unittests/``. Each bare-name expression
 statement below marks the name as used so vulture does not report it.
 """
 
-home
-agent_home
-conversations
-conversation
-settings
-edit_agent
-mcps
-toolsets
-skills
-llms
-scheduled_tasks
-workflows
-tts_proxy
+home  # type: ignore[name-defined]
+agent_home  # type: ignore[name-defined]
+conversations  # type: ignore[name-defined]
+conversation  # type: ignore[name-defined]
+settings  # type: ignore[name-defined]
+edit_agent  # type: ignore[name-defined]
+mcps  # type: ignore[name-defined]
+toolsets  # type: ignore[name-defined]
+skills  # type: ignore[name-defined]
+llms  # type: ignore[name-defined]
+scheduled_tasks  # type: ignore[name-defined]
+workflows  # type: ignore[name-defined]
+tts_proxy  # type: ignore[name-defined]

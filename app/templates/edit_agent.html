@@ -284,7 +284,7 @@
 <script type="module">
     import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills, getCustomTools, getToolsets } from '/static/js/api.js';
     
-    const agentName = '{{ agent_name }}';
+    const agentName = {{ agent_name | tojson }};
     let agentData = null;
     let tools = [];
     let autoAllowTools = [];
