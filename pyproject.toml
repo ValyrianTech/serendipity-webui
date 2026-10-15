@@ -19,6 +19,9 @@ dev = [
     "pytest-cov==7.1.0",
 ]
 
+[tool.setuptools]
+packages = ["app"]
+
 [tool.pytest.ini_options]
 testpaths = ["unittests"]
 pythonpath = ["."]
