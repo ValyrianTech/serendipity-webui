@@ -71,3 +71,20 @@ def test_existing_escape_html_still_present():
     content = _read_template("conversation.html")
     assert "function escapeHtml(" in content
     assert len(re.findall(r"function escapeHtml\(", content)) == 1
+
+
+def test_skills_sanitize_helper_falls_back_to_escaping():
+    """skills.html's sanitizeHtml falls back to escaping, never returning raw HTML."""
+    content = _read_template("skills.html")
+    assert "function escapeHtml(" in content
+    assert "function sanitizeHtml(" in content
+    assert "DOMPurify.sanitize(" in content
+    assert "return escapeHtml(html);" in content
+    assert "return html;" not in content
+
+
+def test_both_templates_sanitizer_fallbacks_are_consistent():
+    """Both conversation.html and skills.html fail closed via escapeHtml."""
+    for name in ("conversation.html", "skills.html"):
+        content = _read_template(name)
+        assert "return escapeHtml(html);" in content
