@@ -94,6 +94,10 @@ When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/
 
 > **Warning:** Because an allowlisted host bypasses DNS resolution and the private-IP checks entirely, a misconfigured allowlist entry (for example an internal hostname, `localhost`, or `127.0.0.1`) reopens the SSRF path to that host. Only ever add trusted, public hosts to `SERENDIPITY_TTS_ALLOWED_HOSTS`, and rely on network-level egress controls for defense in depth rather than on the allowlist to block internal destinations.
 
+### Template-to-JavaScript interpolation
+
+Server-side values interpolated into JavaScript in Jinja2 templates (e.g. `agent_name`, `workflow_id`, `node_id`) are rendered using Jinja2's `tojson` filter so they are safely encoded as JSON, preventing a crafted value from breaking out of a JavaScript string literal (JS injection / XSS).
+
 ## Project Structure
 
 ```
@@ -132,7 +136,9 @@ serendipity-webui/
 │   ├── conftest.py          # Shared fixtures (FastAPI TestClient)
 │   ├── test_pages.py        # Page route tests
 │   ├── test_main_entrypoint.py # __main__ entrypoint test
-│   └── test_tts_proxy.py    # /api/tts-proxy endpoint tests
+│   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
+│   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
+│   └── test_xss_sanitization.py # XSS sanitization tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
 ├── requirements.txt        # Python dependencies
