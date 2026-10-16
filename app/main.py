@@ -387,7 +387,7 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
             return JSONResponse({"error": "TTS generation timed out"}, status_code=504)
         except httpx.HTTPStatusError as e:
             return JSONResponse({"error": f"TTS server error: {e.response.status_code}"}, status_code=e.response.status_code)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("TTS proxy request failed")
             return JSONResponse({"error": "Internal TTS proxy error"}, status_code=500)
 
