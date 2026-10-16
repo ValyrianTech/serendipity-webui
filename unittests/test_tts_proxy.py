@@ -199,9 +199,8 @@ def test_http_status_error_is_propagated(client):
 
 
 def test_unexpected_error_returns_500(client, caplog):
-    with caplog.at_level(logging.ERROR):
-        with mock_async_client(exc=RuntimeError("kaboom")):
-            result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+    with caplog.at_level(logging.ERROR), mock_async_client(exc=RuntimeError("kaboom")):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
     assert result.status_code == 500
     assert result.json() == {"error": "Internal TTS proxy error"}

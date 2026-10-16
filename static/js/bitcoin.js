@@ -317,9 +317,12 @@ export async function decryptWif(encryptedBase64, password) {
 }
 
 export function saveWif(wif, encrypted, encryptedData = null) {
+    if (!encrypted || !encryptedData) {
+        throw new Error('Refusing to store an unencrypted WIF');
+    }
     const storageData = {
-        encrypted: encrypted,
-        data: encryptedData || wif,
+        encrypted: true,
+        data: encryptedData,
         timestamp: new Date().toISOString()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
@@ -333,4 +336,10 @@ export function loadWifStorage() {
 
 export function clearWifStorage() {
     localStorage.removeItem(STORAGE_KEY);
+}
+
+export function isLegacyPlaintextWif(storage) {
+    // Legacy shape stored the raw WIF in `data` with `encrypted` falsy/absent.
+    // New shape always has encrypted === true and an AES-GCM base64 blob in data.
+    return Boolean(storage && storage.data && storage.encrypted !== true);
 }
