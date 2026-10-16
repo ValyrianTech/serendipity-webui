@@ -656,9 +656,11 @@
     
     // TTS playback functions
     function getTextOnlyContent(content) {
-        // Strip HTML tags and get plain text for TTS
+        // Strip HTML tags and get plain text for TTS. Run the content through the
+        // sanitizer first so no active markup (event handlers, javascript: URIs,
+        // resource-loading tags) survives the innerHTML parse on a detached node.
         const div = document.createElement('div');
-        div.innerHTML = content;
+        div.innerHTML = sanitizeHtml(content);
         // Remove thinking blocks
         div.querySelectorAll('.thinking-block').forEach(el => el.remove());
         return div.textContent || div.innerText || '';
