@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Template values interpolated into JavaScript string literals in several Jinja2 templates (`agent_home.html`, `conversation.html`, `conversations.html`, `edit_agent.html`, `workflows.html`) are now rendered via Jinja2's `tojson` filter, preventing JS injection/XSS from crafted template values.
+- Hardened WIF private-key parsing in `static/js/bitcoin.js`: `wifToPrivateKey(wif)` previously had a dead ternary and did not validate the decoded WIF structure, so it could return a wrong/truncated key for malformed input. It now rejects any decoded payload whose length is not exactly 37 or 38 bytes (`Invalid WIF: bad length`), verifies the 4-byte Base58Check checksum via double-SHA256 (`Invalid WIF: bad checksum`), requires the mainnet version byte `0x80` (`Invalid WIF: unsupported version byte`), and for compressed WIF requires the trailing flag byte to be `0x01` (`Invalid WIF: bad compression flag`), returning exactly the 32-byte private key following the version byte. The setup UI (`app/templates/base.html`) now calls `wifToAddress(wif)` before saving settings and refuses to save an invalid WIF with the toast `Invalid WIF key: please check for typos`; the `wifToAddress` catch block now logs `Invalid WIF:` plus the error message. Regression tests were added in `unittests/test_wif_validation.py`.
 
 ### Changed
 
