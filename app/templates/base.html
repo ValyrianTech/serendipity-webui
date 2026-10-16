@@ -488,6 +488,11 @@
                 return;
             }
             
+            if (!wifToAddress(wif)) {
+                showToast('Invalid WIF key: please check for typos', 'error');
+                return;
+            }
+            
             try {
                 // Save server settings
                 saveSettings({

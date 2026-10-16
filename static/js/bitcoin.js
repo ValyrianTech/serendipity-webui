@@ -114,11 +114,31 @@ export function base58Encode(bytes) {
 
 export function wifToPrivateKey(wif) {
     const decoded = base58Decode(wif);
-    const privateKey = decoded.slice(1, decoded[0] === 0x80 ? (decoded.length > 37 ? 33 : 33) : 33);
-    if (privateKey.length === 33) {
-        return privateKey.slice(0, 32);
+    // A valid WIF decodes to exactly 37 bytes (uncompressed: 1 version byte +
+    // 32 key bytes + 4 checksum bytes) or 38 bytes (compressed: an extra
+    // trailing 0x01 flag byte). Anything else is malformed.
+    if (decoded.length !== 37 && decoded.length !== 38) {
+        throw new Error('Invalid WIF: bad length');
     }
-    return privateKey.slice(0, 32);
+    // Verify the 4-byte Base58Check checksum (last 4 bytes of the payload).
+    const payload = decoded.slice(0, decoded.length - 4);
+    const checksum = decoded.slice(decoded.length - 4);
+    const expected = sha256(sha256(payload)).slice(0, 4);
+    for (let i = 0; i < 4; i++) {
+        if (checksum[i] !== expected[i]) {
+            throw new Error('Invalid WIF: bad checksum');
+        }
+    }
+    // WIF for mainnet uses version byte 0x80.
+    if (payload[0] !== 0x80) {
+        throw new Error('Invalid WIF: unsupported version byte');
+    }
+    // A compressed WIF carries a trailing 0x01 flag byte after the 32 key bytes.
+    if (payload.length === 34 && payload[33] !== 0x01) {
+        throw new Error('Invalid WIF: bad compression flag');
+    }
+    // The 32-byte private key follows the version byte.
+    return payload.slice(1, 33);
 }
 
 export function getPublicKey(privateKey, compressed = true) {
@@ -148,7 +168,7 @@ export function wifToAddress(wif) {
         const publicKey = getPublicKey(privateKey, true);
         return publicKeyToAddress(publicKey);
     } catch (e) {
-        console.error('Error deriving address:', e);
+        console.error('Invalid WIF:', e.message);
         return null;
     }
 }
