@@ -218,7 +218,17 @@ def test_base_html_exposes_session_helpers_and_calls_save_session_wif():
     assert "window.loadSessionWif = loadSessionWif;" in content
     assert "window.clearSessionWif = clearSessionWif;" in content
 
-    assert content.count("saveSessionWif(wif);") == 2
+    assert content.count("saveSessionWif(wif);") >= 2
+
+    unlock_fn_idx = content.index("window.unlockWif = async function() {")
+    unlock_save_idx = content.index("saveSessionWif(wif);", unlock_fn_idx)
+    close_unlock_modal_idx = content.index("window.closeUnlockModal = function() {", unlock_fn_idx)
+    assert unlock_fn_idx < unlock_save_idx < close_unlock_modal_idx
+
+    setup_fn_idx = content.index("window.saveSetupWif = async function() {")
+    setup_save_idx = content.index("saveSessionWif(wif);", setup_fn_idx)
+    show_toast_fn_idx = content.index("window.showToast = function(message, type = 'info') {", setup_fn_idx)
+    assert setup_fn_idx < setup_save_idx < show_toast_fn_idx
 
 
 def test_base_html_lock_button_hidden_and_toggled_in_update_wif_status():
