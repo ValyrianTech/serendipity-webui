@@ -306,11 +306,20 @@
             const lockButton = document.getElementById('lock-button');
             if (loaded && window.currentWif) {
                 const address = wifToAddress(window.currentWif);
-                status.innerHTML = `
-                    <span class="status-dot online"></span>
-                    <span class="text-slate-400 truncate" title="${address}">${address.substring(0, 12)}...</span>
-                `;
-                lockButton?.classList.remove('hidden');
+                if (address) {
+                    status.innerHTML = `
+                        <span class="status-dot online"></span>
+                        <span class="text-slate-400 truncate" title="${address}">${address.substring(0, 12)}...</span>
+                    `;
+                    lockButton?.classList.remove('hidden');
+                } else {
+                    status.innerHTML = `
+                        <span class="status-dot offline"></span>
+                        <span class="text-slate-400">Invalid key</span>
+                    `;
+                    lockButton?.classList.add('hidden');
+                    return;
+                }
             } else {
                 status.innerHTML = `
                     <span class="status-dot offline"></span>
