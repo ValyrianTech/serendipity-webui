@@ -170,12 +170,14 @@ def test_decrypted_wif_never_lands_in_localstorage():
 def test_base_html_bootstrap_uses_session_wif_before_unlock_branch():
     content = BASE_HTML_PATH.read_text(encoding="utf-8")
     assert "const sessionWif = loadSessionWif();" in content
-    assert "if (sessionWif) {" in content
+    assert "if (sessionWif && wifToAddress(sessionWif)) {" in content
     assert "window.currentWif = sessionWif;" in content
     assert "updateWifStatus(true);" in content
-    assert "} else if (storage && storage.data) {" in content
+    assert "if (storage && storage.data) {" in content
 
-    assert content.index("if (sessionWif) {") < content.index("} else if (storage && storage.data) {")
+    assert content.index("if (sessionWif && wifToAddress(sessionWif)) {") < content.index(
+        "if (storage && storage.data) {"
+    )
 
 
 def test_base_html_lock_session_clears_session_wif_and_shows_unlock_modal():
@@ -185,7 +187,7 @@ def test_base_html_lock_session_clears_session_wif_and_shows_unlock_modal():
     assert 'onclick="lockSession()"' in content
 
     lock_idx = content.index("window.lockSession = function() {")
-    clear_idx = content.index("clearSessionWif();")
+    clear_idx = content.index("clearSessionWif();", lock_idx)
     unlock_modal_idx = content.index(
         "document.getElementById('unlock-modal').classList.remove('hidden');",
         lock_idx,
