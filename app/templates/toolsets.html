@@ -119,18 +119,8 @@
 
 <script type="module">
     import { getToolsets, getToolset, getMCPServers, getSkills, getCustomTools, saveToolset as saveToolsetApi, deleteToolset } from '/static/js/api.js';
+    import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
-    function escapeHtml(text) {
-        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
-        // and quoted-attribute / inline-handler-string contexts.
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
     let isNewToolset = false;
     let currentToolsetName = '';
     let servers = [];

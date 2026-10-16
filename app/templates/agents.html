@@ -26,6 +26,7 @@
 {% block scripts %}
 <script type="module">
     import { getAgents, getAgent, saveSettings, getSettings } from '/static/js/api.js';
+    import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     window.getAgents = getAgents;
     window.getAgent = getAgent;
@@ -90,17 +91,6 @@
         }
     };
     
-    function escapeHtml(text) {
-        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
-        // and quoted-attribute / inline-handler-string contexts.
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
     function createAgentCard(agent) {
         const settings = getSettings();
         const baseUrl = `http://${settings.serverAddress}:${settings.serverPort}`;

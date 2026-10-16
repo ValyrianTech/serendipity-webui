@@ -198,22 +198,11 @@
 
 <script type="module">
     import { getLLMs, getLLMConfig, getModels, saveLLMConfig, deleteLLMConfig, saveDefaultLLM as saveDefaultLLMApi } from '/static/js/api.js';
+    import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     let isNewLLM = false;
     let currentLLMName = '';
     let defaultModel = '';
-    
-    // Helper to escape HTML special characters for safe attribute insertion
-    function escapeHtml(str) {
-        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
-        // and quoted-attribute / inline-handler-string contexts.
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
     
     async function loadLLMs() {
         try {
