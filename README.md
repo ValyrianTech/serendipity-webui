@@ -18,6 +18,7 @@ A standalone web interface for the Serendipity AI agent platform. This applicati
 - **Toolsets** - Create collections of tools from MCP servers
 - **Dark/Light Mode** - Toggle between themes
 - **Bitcoin Authentication** - Secure API requests with Bitcoin message signing
+- **Session Unlock** - Decrypted WIF is held in per-tab sessionStorage with a Lock button, avoiding repeated password prompts within a tab
 
 ## Tech Stack
 
@@ -72,8 +73,9 @@ On first launch, you'll be prompted to configure:
 
 2. **WIF Key**
    - Enter an existing WIF key or generate a new one
-   - A password is required; the WIF key is always stored encrypted (never in plaintext)
-   - Enter the password each session to unlock the key
+   - A password is required; the WIF key is always stored encrypted in localStorage (never in plaintext)
+   - The decrypted key is held in per-tab sessionStorage, so you unlock once per tab session and page navigations within that tab no longer re-prompt for the password
+   - The decrypted key is cleared when the tab closes and is never written to disk; use the sidebar **Lock** button to forget the unlocked key for the current session
 
 All settings are stored in your browser's localStorage.
 
@@ -159,6 +161,7 @@ serendipity-webui/
 │   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
 │   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
 │   ├── test_xss_sanitization.py # XSS sanitization tests
+│   ├── test_session_wif.py  # Session WIF unlock tests (QuickJS)
 │   └── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint

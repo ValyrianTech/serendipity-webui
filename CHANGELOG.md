@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added a regression test (`unittests/test_save_wif.py`) that runs the real `static/js/bitcoin.js` `saveWif()` through QuickJS to verify it refuses to persist an unencrypted WIF and leaves `localStorage` untouched; `quickjs` was added as a dev/test dependency.
+- Added sessionStorage-based session WIF unlock: the decrypted WIF is held in per-tab `sessionStorage` (under `wif_session_key`) so it is restored on page navigation without re-prompting for the password, cleared automatically when the tab closes, and never written to disk or shared across tabs. The encrypted WIF continues to live in `localStorage`. New `saveSessionWif`/`loadSessionWif`/`clearSessionWif` helpers were added to `static/js/bitcoin.js`.
+- Added a new **Lock** button in the sidebar (and `lockSession()` function) that clears the session key and returns to the unlock (or setup) modal.
+- Added regression tests (`unittests/test_session_wif.py`) that run the real `static/js/bitcoin.js` session helpers via QuickJS.
 
 ### Security
 
