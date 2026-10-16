@@ -26,6 +26,24 @@ templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 ALLOWED_TTS_SCHEMES = ("http", "https")
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 
+WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
+WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
+
+
+def _env_flag(name: str) -> bool:
+    """Return True when an environment variable holds a truthy value.
+
+    The values ``1``, ``true``, ``yes``, and ``on`` are treated as truthy
+    (case-insensitively). Any other value, including an unset variable, is
+    treated as falsey.
+
+    :param name: The name of the environment variable to inspect.
+    :type name: str
+    :returns: True when the variable holds a truthy value, False otherwise.
+    :rtype: bool
+    """
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 def _get_allowed_tts_hosts() -> set[str]:
     """Return the set of operator-allowlisted TTS host names from the environment.
@@ -113,11 +131,12 @@ def _validate_tts_server(server: str) -> tuple[str, str | None]:
         raise ValueError("missing host")
 
     allowed = _get_allowed_tts_hosts()
-    if allowed and host.lower() not in allowed:
-        raise ValueError("host not allowed")
-
     if host.lower() in allowed:
         return server, None
+    if allowed:
+        raise ValueError("host not allowed")
+    if not _env_flag("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST"):
+        raise ValueError("host not allowed")
 
     try:
         ipaddress.ip_address(host)
@@ -134,6 +153,31 @@ def _validate_tts_server(server: str) -> tuple[str, str | None]:
         if _is_blocked_ip(ip):
             raise ValueError("blocked IP")
     return server, resolved[0]
+
+
+def _origin_allowed(request: Request) -> bool:
+    """Return True when the request is permitted to drive the TTS proxy.
+
+    The ``Origin`` header is inspected first; when absent, the ``Referer``
+    header is used instead. If neither header is present the request is treated
+    as same-origin (non-browser clients, same-origin navigation, curl, and
+    tests without those headers must still work). Otherwise the header's netloc
+    is compared (case-insensitively) against the request's ``Host`` header,
+    which may include a port.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: True when the request is same-origin, False otherwise.
+    :rtype: bool
+    """
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    if origin is None:
+        return True
+    origin_netloc = urlparse(origin).netloc
+    if not origin_netloc:
+        return False
+    host = request.headers.get("host", "")
+    return origin_netloc.lower() == host.lower()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -324,6 +368,9 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
     :returns: The synthesized audio, or a JSON error response.
     :rtype: Response
     """
+    if not _origin_allowed(request):
+        return JSONResponse({"error": "Cross-origin TTS proxy request rejected"}, status_code=403)
+
     try:
         server_url, validated_ip = _validate_tts_server(server)
     except ValueError:
@@ -394,4 +441,4 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host=WEBUI_HOST, port=WEBUI_PORT)

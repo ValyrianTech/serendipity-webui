@@ -10,6 +10,7 @@ from app.main import app
 def _isolate_env(monkeypatch):
     """Keep tests independent of any local .env / environment configuration."""
     monkeypatch.delenv("SERENDIPITY_TTS_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST", raising=False)
 
 
 @pytest.fixture

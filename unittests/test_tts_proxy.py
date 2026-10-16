@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from fastapi import Request
 
 from app import main as app_main
 
@@ -31,6 +32,12 @@ def _resolve_to(*ips):
 def _patch_resolve_host(monkeypatch):
     """Patch host resolution so happy-path tests resolve to a public IP."""
     monkeypatch.setattr("app.main._resolve_host", _resolve_to("93.184.216.34"))
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
+def _opt_in_public_hosts(monkeypatch):
+    """Opt in to public-host TTS proxying so happy-path tests keep working."""
+    monkeypatch.setenv("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST", "1")
 
 
 STREAM_CHUNK_SIZE = 3
@@ -412,3 +419,164 @@ def test_resolve_host_raises_on_failure(monkeypatch):
     monkeypatch.setattr(app_main.socket, "getaddrinfo", _fail_getaddrinfo)
     with pytest.raises(ValueError):
         _real_resolve_host("nope.invalid")
+
+
+def test_empty_allowlist_no_opt_in_rejected(client, monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST", raising=False)
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+@pytest.mark.parametrize("flag", ["1", "true", "yes", "on"])
+def test_public_host_allowed_with_truthy_opt_in(client, monkeypatch, flag):
+    monkeypatch.setenv("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST", flag)
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+
+
+@pytest.mark.parametrize("flag", ["0", "false", "no", "off", ""])
+def test_public_host_rejected_with_falsey_opt_in(client, monkeypatch, flag):
+    monkeypatch.setenv("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST", flag)
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+    assert result.status_code == 400
+    assert result.json() == {"error": "Invalid or disallowed TTS server"}
+
+
+def test_same_origin_allowed(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "http://testserver"})
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+
+
+def test_cross_origin_rejected(client):
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "http://evil.example.com"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+
+
+def test_cross_origin_referer_rejected_when_origin_absent(client):
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Referer": "http://evil.example.com/page"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+
+
+def test_same_origin_referer_allowed_when_origin_absent(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Referer": "http://testserver/page"})
+
+    assert result.status_code == 200
+
+
+def test_absent_origin_and_referer_allowed(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+
+
+def test_unparseable_origin_rejected(client):
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "not a url"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+
+
+def test_empty_origin_host_rejected(client):
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "http://"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+
+
+def test_origin_with_port_matching_host_port_allowed(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get(
+            "http://testserver:8080/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "http://testserver:8080"},
+        )
+
+    assert result.status_code == 200
+    assert capture["url"] == "http://93.184.216.34/synthesize_speech/"
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on", "TRUE", "Yes", "ON"])
+def test_env_flag_truthy(monkeypatch, value):
+    monkeypatch.setenv("SOME_FLAG", value)
+    assert app_main._env_flag("SOME_FLAG") is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "", "banana"])
+def test_env_flag_falsey(monkeypatch, value):
+    monkeypatch.setenv("SOME_FLAG", value)
+    assert app_main._env_flag("SOME_FLAG") is False
+
+
+def test_env_flag_unset(monkeypatch):
+    monkeypatch.delenv("SOME_FLAG", raising=False)
+    assert app_main._env_flag("SOME_FLAG") is False
+
+
+def _make_request(headers):
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/tts-proxy",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers],
+        "query_string": b"",
+    }
+    return Request(scope)
+
+
+def test_origin_allowed_without_origin_or_referer():
+    request = _make_request([("host", "testserver")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_same_origin():
+    request = _make_request([("host", "testserver"), ("origin", "http://testserver")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_same_origin_case_insensitive():
+    request = _make_request([("host", "TESTSERVER"), ("origin", "http://testserver")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_cross_origin():
+    request = _make_request([("host", "testserver"), ("origin", "http://evil.example.com")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_uses_referer_when_origin_absent():
+    request = _make_request([("host", "testserver"), ("referer", "http://testserver/page")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_cross_origin_referer():
+    request = _make_request([("host", "testserver"), ("referer", "http://evil.example.com/page")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_unparseable_origin():
+    request = _make_request([("host", "testserver"), ("origin", "not a url")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_origin_with_port_matches_host_port():
+    request = _make_request([("host", "testserver:8080"), ("origin", "http://testserver:8080")])
+    assert app_main._origin_allowed(request) is True
