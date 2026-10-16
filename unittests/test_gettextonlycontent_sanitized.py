@@ -12,17 +12,16 @@ call is present in the served template, and a behavioral check runs the real
 ``getTextOnlyContent`` (backed by the vendored DOMPurify) in headless Chromium.
 """
 
+import html as html_module
 import json
 import re
 import subprocess
-import html as html_module
 from pathlib import Path
 
-import pytest
 from test_xss_sanitization import (
+    _CHROME,
     _extract_function,
     _read_template,
-    _CHROME,
     _requires_chrome,
 )
 
