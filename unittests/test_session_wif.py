@@ -193,6 +193,24 @@ def test_base_html_lock_session_clears_session_wif_and_shows_unlock_modal():
     assert lock_idx < clear_idx < unlock_modal_idx
 
 
+def test_base_html_clear_and_setup_new_key_clears_session_wif():
+    content = BASE_HTML_PATH.read_text(encoding="utf-8")
+    assert "window.clearAndSetupNewKey = function() {" in content
+
+    setup_fn_idx = content.index("window.clearAndSetupNewKey = function() {")
+    clear_session_idx = content.index("clearSessionWif();", setup_fn_idx)
+    null_wif_idx = content.index("window.currentWif = null;", setup_fn_idx)
+    update_status_idx = content.index("updateWifStatus(false);", setup_fn_idx)
+    setup_modal_idx = content.index(
+        "document.getElementById('setup-wif-modal').classList.remove('hidden');",
+        setup_fn_idx,
+    )
+
+    assert setup_fn_idx < clear_session_idx < setup_modal_idx
+    assert setup_fn_idx < null_wif_idx < setup_modal_idx
+    assert setup_fn_idx < update_status_idx < setup_modal_idx
+
+
 def test_base_html_exposes_session_helpers_and_calls_save_session_wif():
     content = BASE_HTML_PATH.read_text(encoding="utf-8")
     assert "saveSessionWif, loadSessionWif, clearSessionWif" in content
