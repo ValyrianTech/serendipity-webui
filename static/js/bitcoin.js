@@ -337,3 +337,9 @@ export function loadWifStorage() {
 export function clearWifStorage() {
     localStorage.removeItem(STORAGE_KEY);
 }
+
+export function isLegacyPlaintextWif(storage) {
+    // Legacy shape stored the raw WIF in `data` with `encrypted` falsy/absent.
+    // New shape always has encrypted === true and an AES-GCM base64 blob in data.
+    return Boolean(storage && storage.data && storage.encrypted !== true);
+}

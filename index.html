@@ -574,6 +574,17 @@
             return new TextDecoder().decode(decrypted);
         }
 
+        function isLegacyPlaintextWif(stored) {
+            if (typeof stored === 'string') {
+                try {
+                    stored = JSON.parse(stored);
+                } catch (err) {
+                    stored = null;
+                }
+            }
+            return Boolean(stored && stored.data && stored.encrypted !== true);
+        }
+
         // Storage functions
         async function saveKey() {
             const wifKey = document.getElementById('wifKey').value.trim();
@@ -607,7 +618,18 @@
 
         async function unlockKey() {
             const password = document.getElementById('unlockPassword').value;
-            const stored = JSON.parse(localStorage.getItem('serendipity_wif'));
+            const rawStored = localStorage.getItem('serendipity_wif');
+            
+            if (isLegacyPlaintextWif(rawStored)) {
+                localStorage.removeItem('serendipity_wif');
+                document.getElementById('unlockSection').classList.add('hidden');
+                document.getElementById('setupSection').classList.remove('hidden');
+                showStatus('Your previously stored key was in plaintext and has been removed for security. Please re-enter your WIF key and set a password.', 'error');
+                updateDebugOutput();
+                return;
+            }
+            
+            const stored = JSON.parse(rawStored);
             
             try {
                 const decrypted = await decryptData(stored.data, password);
@@ -678,6 +700,14 @@
             const stored = localStorage.getItem('serendipity_wif');
             
             if (stored) {
+                if (isLegacyPlaintextWif(stored)) {
+                    localStorage.removeItem('serendipity_wif');
+                    document.getElementById('unlockSection').classList.add('hidden');
+                    document.getElementById('setupSection').classList.remove('hidden');
+                    showStatus('Your previously stored key was in plaintext and has been removed for security. Please re-enter your WIF key and set a password.', 'error');
+                    updateDebugOutput();
+                    return;
+                }
                 // Show unlock section
                 document.getElementById('unlockSection').classList.remove('hidden');
                 document.getElementById('setupSection').classList.add('hidden');

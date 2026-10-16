@@ -223,7 +223,7 @@
     <script type="module">
         import { 
             wifToAddress, generateWifKey, encryptWif, decryptWif, 
-            saveWif, loadWifStorage, clearWifStorage 
+            saveWif, loadWifStorage, clearWifStorage, isLegacyPlaintextWif 
         } from '/static/js/bitcoin.js';
         import { getSettings, saveSettings, getFolders } from '/static/js/api.js';
         
@@ -235,6 +235,7 @@
         window.saveWif = saveWif;
         window.loadWifStorage = loadWifStorage;
         window.clearWifStorage = clearWifStorage;
+        window.isLegacyPlaintextWif = isLegacyPlaintextWif;
         window.getSettings = getSettings;
         window.saveSettings = saveSettings;
         window.getFolders = getFolders;
@@ -256,10 +257,18 @@
             document.getElementById('setup-wif-modal').classList.add('hidden');
             
             if (storage && storage.data) {
-                console.log('Storage encrypted flag:', storage.encrypted);
-                // Show unlock modal
-                console.log('Showing unlock modal');
-                document.getElementById('unlock-modal').classList.remove('hidden');
+                if (isLegacyPlaintextWif(storage)) {
+                    console.log('Legacy plaintext WIF detected, clearing storage');
+                    clearWifStorage();
+                    console.log('Showing setup modal');
+                    document.getElementById('setup-wif-modal').classList.remove('hidden');
+                    showToast('Your previously stored key was in plaintext and has been removed for security. Please re-enter your WIF key and set a password.', 'error');
+                } else {
+                    console.log('Storage encrypted flag:', storage.encrypted);
+                    // Show unlock modal
+                    console.log('Showing unlock modal');
+                    document.getElementById('unlock-modal').classList.remove('hidden');
+                }
             } else {
                 // Show setup modal
                 console.log('No storage, showing setup modal');
@@ -367,6 +376,15 @@
         window.unlockWif = async function() {
             const password = document.getElementById('unlock-password').value;
             const storage = loadWifStorage();
+            
+            if (isLegacyPlaintextWif(storage)) {
+                console.log('Legacy plaintext WIF encountered in unlock flow, clearing storage');
+                clearWifStorage();
+                document.getElementById('unlock-modal').classList.add('hidden');
+                document.getElementById('setup-wif-modal').classList.remove('hidden');
+                showToast('Your previously stored key was in plaintext and has been removed for security. Please re-enter your WIF key and set a password.', 'error');
+                return;
+            }
             
             try {
                 const wif = await decryptWif(storage.data, password);
