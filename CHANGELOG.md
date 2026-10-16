@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Legacy plaintext WIF entries in `localStorage` (the pre-encryption shape `{encrypted: false, data: "<raw WIF>", timestamp}`) are now detected on startup via a new `isLegacyPlaintextWif()` helper in `static/js/bitcoin.js`, cleared from `localStorage`, and the user is routed to the setup modal with an explicit message telling them their previously-stored plaintext key was removed for security and must be re-entered. Rationale: a plaintext WIF cannot be encrypted without a password and must never remain at rest, and `decryptWif()` can never succeed against a plaintext entry, so the old behaviour left such users permanently stuck on the unlock modal with no explanation.
 - Changed `unittests/vulture_whitelist.py` to use a bare-name expression statement (matching `app/vulture_whitelist.py`) and wired both whitelist files into vulture via the `[tool.vulture]` `paths` list in `pyproject.toml` (no user-visible behavior change).
 - Added type annotations and docstrings in `app/main.py` and refactored `app/vulture_whitelist.py` to use a string-literal list (no user-visible behavior change).
 - Added type annotations and fixed mypy errors in `app/main.py`, and resolved a vulture dead-code false positive in the TTS proxy test (no user-visible behavior change).
