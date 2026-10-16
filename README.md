@@ -162,6 +162,7 @@ serendipity-webui/
 │   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
 │   ├── test_xss_sanitization.py # XSS sanitization tests
 │   ├── test_session_wif.py  # Session WIF unlock tests (QuickJS)
+│   ├── test_wif_validation.py # WIF parse/validation tests
 │   └── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
