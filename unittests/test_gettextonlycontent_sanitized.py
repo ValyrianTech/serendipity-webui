@@ -12,17 +12,17 @@ call is present in the served template, and a behavioral check runs the real
 ``getTextOnlyContent`` (backed by the vendored DOMPurify) in headless Chromium.
 """
 
+import html as html_module
 import json
 import re
 import subprocess
-import html as html_module
 from pathlib import Path
 
-import pytest
 from test_xss_sanitization import (
+    _CHROME,
+    _extract_from_sanitize_module,
     _extract_function,
     _read_template,
-    _CHROME,
     _requires_chrome,
 )
 
@@ -47,8 +47,8 @@ def test_gettextonlycontent_uses_sanitize_html():
 def test_gettextonlycontent_strips_active_markup(tmp_path):
     """The real getTextOnlyContent returns plain text with active markup neutered."""
     content = _read_template("conversation.html")
-    escape_html_src = _extract_function(content, "escapeHtml")
-    sanitize_html_src = _extract_function(content, "sanitizeHtml")
+    escape_html_src = _extract_from_sanitize_module("escapeHtml")
+    sanitize_html_src = _extract_from_sanitize_module("sanitizeHtml")
     get_text_only_src = _extract_function(content, "getTextOnlyContent")
 
     purify_path = Path(__file__).resolve().parent.parent / "static" / "js" / "vendor" / "purify.min.js"

@@ -21,10 +21,17 @@ import pytest
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "app" / "templates"
 
+SANITIZE_JS = Path(__file__).resolve().parent.parent / "static" / "js" / "sanitize.js"
+
 
 def _read_template(name):
     """Return the raw text of a template file under ``app/templates``."""
     return (TEMPLATES_DIR / name).read_text(encoding="utf-8")
+
+
+def _read_sanitize_module():
+    """Return the raw text of the shared sanitizer module ``static/js/sanitize.js``."""
+    return SANITIZE_JS.read_text(encoding="utf-8")
 
 
 def _find_chrome():
@@ -114,17 +121,28 @@ def _extract_function(source, name):
     raise AssertionError(f"could not find closing brace for function {name}")
 
 
-def _sanitize_with_template(template_name, payloads, tmp_path):
-    """Run the template's real ``sanitizeHtml`` in headless Chromium.
+def _extract_from_sanitize_module(name):
+    """Extract ``name`` from the shared sanitizer module ``static/js/sanitize.js``.
 
-    Extracts ``escapeHtml``/``sanitizeHtml`` from ``template_name``, injects
-    them alongside the vendored DOMPurify into a generated HTML page, drives
-    Chromium to ``--dump-dom`` the page, and returns the JSON payload of
-    ``{payload: cleaned}`` produced by the driver script.
+    The module declares the helpers as ``export function name(...) {``; the
+    extraction regex anchors on the ``function name(`` substring, so the leading
+    ``export`` keyword is naturally excluded and the result is a plain function
+    declaration that can be injected into a non-module ``<script>`` block.
     """
-    template = _read_template(template_name)
-    escape_html_src = _extract_function(template, "escapeHtml")
-    sanitize_html_src = _extract_function(template, "sanitizeHtml")
+    return _extract_function(_read_sanitize_module(), name)
+
+
+def _sanitize_with_template(template_name, payloads, tmp_path):
+    """Run the shared ``sanitizeHtml`` module's real function in headless Chromium.
+
+    Extracts ``escapeHtml``/``sanitizeHtml`` from the shared sanitizer module,
+    injects them alongside the vendored DOMPurify into a generated HTML page,
+    drives Chromium to ``--dump-dom`` the page, and returns the JSON payload of
+    ``{payload: cleaned}`` produced by the driver script. ``template_name`` is
+    retained purely as a label for the generated harness file name.
+    """
+    escape_html_src = _extract_from_sanitize_module("escapeHtml")
+    sanitize_html_src = _extract_from_sanitize_module("sanitizeHtml")
 
     purify_path = Path(__file__).resolve().parent.parent / "static" / "js" / "vendor" / "purify.min.js"
     purify_url = purify_path.as_uri()
@@ -210,10 +228,12 @@ def test_base_template_loads_dompurify(client):
     assert '<script src="/static/js/vendor/purify.min.js"></script>' in response.text
 
 
-def test_conversation_template_has_sanitize_helper():
-    """conversation.html defines a sanitizeHtml helper backed by DOMPurify."""
-    content = _read_template("conversation.html")
-    assert "function sanitizeHtml(" in content
+def test_shared_sanitize_module_exports_helpers():
+    """static/js/sanitize.js defines the shared escapeHtml/sanitizeHtml helpers."""
+    assert SANITIZE_JS.exists(), "static/js/sanitize.js is missing"
+    content = _read_sanitize_module()
+    assert "export function escapeHtml(" in content
+    assert "export function sanitizeHtml(" in content
     assert "DOMPurify.sanitize(" in content
 
 
@@ -249,29 +269,16 @@ def test_mermaid_render_output_is_sanitized():
     assert "container.innerHTML = sanitizeHtml(svg);" in workflows
 
 
-def test_existing_escape_html_still_present():
-    """The escapeHtml helper remains as a regression guard."""
+def test_conversation_imports_escape_html_from_shared_module():
+    """conversation.html no longer defines escapeHtml inline; it imports it."""
     content = _read_template("conversation.html")
-    assert "function escapeHtml(" in content
-    assert len(re.findall(r"function escapeHtml\(", content)) == 1
+    assert "function escapeHtml(" not in content
+    assert "import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';" in content
 
 
-def test_workflows_template_has_sanitize_helper():
-    """workflows.html defines a sanitizeHtml helper backed by DOMPurify."""
-    content = _read_template("workflows.html")
-    assert "function sanitizeHtml(" in content
-    assert "function escapeHtml(" in content
-    assert "DOMPurify.sanitize(" in content
-    assert "return escapeHtml(html);" in content
-    assert "return html;" not in content
-
-
-def test_skills_sanitize_helper_falls_back_to_escaping():
-    """skills.html's sanitizeHtml falls back to escaping, never returning raw HTML."""
-    content = _read_template("skills.html")
-    assert "function escapeHtml(" in content
-    assert "function sanitizeHtml(" in content
-    assert "DOMPurify.sanitize(" in content
+def test_shared_sanitize_html_falls_back_to_escaping():
+    """The shared sanitizeHtml falls back to escaping, never returning raw HTML."""
+    content = _read_sanitize_module()
     assert "return escapeHtml(html);" in content
     assert "return html;" not in content
 
@@ -283,11 +290,48 @@ def test_workflows_flowchart_error_message_is_escaped():
     assert "Flowchart error: ${e.message}" not in content
 
 
-def test_both_templates_sanitizer_fallbacks_are_consistent():
-    """conversation.html, skills.html, and workflows.html fail closed via escapeHtml."""
-    for name in ("conversation.html", "skills.html", "workflows.html"):
+def test_single_shared_sanitize_html_definition():
+    """Exactly one sanitizeHtml definition exists: in the shared module."""
+    module_content = _read_sanitize_module()
+    assert len(re.findall(r"function sanitizeHtml\(", module_content)) == 1
+    assert "return escapeHtml(html);" in module_content
+    for name in sorted(p.name for p in TEMPLATES_DIR.glob("*.html")):
+        assert "function sanitizeHtml(" not in _read_template(name), name
+
+
+def test_no_template_defines_inline_sanitizers():
+    """No template defines escapeHtml/sanitizeHtml inline; they live in the shared module."""
+    patterns = (
+        r"function escapeHtml\b",
+        r"function sanitizeHtml\b",
+        r"const escapeHtml\b",
+        r"const sanitizeHtml\b",
+        r"escapeHtml\s*=\s*function",
+        r"sanitizeHtml\s*=\s*function",
+    )
+    for name in sorted(p.name for p in TEMPLATES_DIR.glob("*.html")):
         content = _read_template(name)
-        assert "return escapeHtml(html);" in content
+        for pattern in patterns:
+            assert not re.search(pattern, content), (name, pattern)
+
+
+def test_all_affected_templates_import_shared_sanitizer():
+    """Each of the 11 affected templates imports the shared sanitizer module."""
+    for name in (
+        "agent_home.html",
+        "agents.html",
+        "conversation.html",
+        "conversations.html",
+        "edit_agent.html",
+        "llms.html",
+        "mcps.html",
+        "scheduled_tasks.html",
+        "skills.html",
+        "toolsets.html",
+        "workflows.html",
+    ):
+        content = _read_template(name)
+        assert "import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';" in content, name
 
 
 @_requires_chrome
