@@ -202,17 +202,7 @@
 {% block scripts %}
 <script type="module">
     import { getAgent, getSettings, saveSettings, addMessage, initializeAgentVoices, getWorkflows, startWorkflow, clonePersona } from '/static/js/api.js';
-    
-    function escapeHtml(text) {
-        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
-        // and quoted-attribute / inline-handler-string contexts.
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
+    import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     const agentName = {{ agent_name | tojson }};
     let agentData = null;

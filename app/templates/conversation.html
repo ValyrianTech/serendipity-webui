@@ -483,6 +483,7 @@
 {% block scripts %}
 <script type="module">
     import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills } from '/static/js/api.js';
+    import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     import { signData } from '/static/js/bitcoin.js';
     
     const agentName = {{ agent_name | tojson }};
@@ -1616,30 +1617,6 @@
             buttons.forEach(btn => btn.disabled = false);
         }
     };
-    
-    function escapeHtml(text) {
-        // Escape &, <, >, " and ' so the result is safe in BOTH element-text
-        // and quoted-attribute / inline-handler-string contexts.
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-    
-    // Sanitize HTML produced by markdown/mermaid rendering to prevent stored XSS.
-    function sanitizeHtml(html) {
-        // Enable html, svg, and svgFilters profiles together because mermaid renders
-        // diagrams as inline SVG. Mermaid SVG output uses foreignObject elements (which
-        // carry HTML content) and style elements (covered by svgFilters) that must survive
-        // sanitization for diagrams to render. The default html profile alone would strip
-        // the SVG structure and break mermaid diagrams.
-        if (typeof DOMPurify !== 'undefined') {
-            return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true } });
-        }
-        return escapeHtml(html);
-    }
     
     // Track if user has manually scrolled up
     let userHasScrolledUp = false;

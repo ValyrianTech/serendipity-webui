@@ -24,12 +24,13 @@ from pathlib import Path
 import pytest
 from test_xss_sanitization import (
     _CHROME,
+    _extract_from_sanitize_module,
     _extract_function,
     _read_template,
     _requires_chrome,
 )
 
-# --- Static: every affected template defines the escapeHtml helper ----------
+# --- Static: affected templates import the shared escapeHtml helper ---------
 
 _TEMPLATES_WITH_HELPER = (
     "agents.html",
@@ -47,13 +48,11 @@ _TEMPLATES_WITH_HELPER = (
 
 
 @pytest.mark.parametrize("template", _TEMPLATES_WITH_HELPER)
-def test_template_defines_single_escape_html(template):
-    """Each affected template defines exactly one escapeHtml helper."""
+def test_template_has_no_inline_escape_html(template):
+    """Each affected template defines no inline escapeHtml and imports the shared module."""
     content = _read_template(template)
-    assert len(re.findall(r"function escapeHtml\(", content)) == 1, template
-    # The helper must escape quotes so attribute contexts are safe too.
-    assert "&quot;" in content
-    assert "&#39;" in content
+    assert len(re.findall(r"function escapeHtml\(", content)) == 0, template
+    assert "import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';" in content, template
 
 
 # --- Static: specific sites escape their data -------------------------------
@@ -268,7 +267,7 @@ def _run_escape_html(escape_src, payloads, tmp_path):
 @pytest.mark.parametrize("template", _BEHAVIORAL_TEMPLATES)
 def test_escape_html_neutralizes_hostile_payloads(template, tmp_path):
     """The real escapeHtml turns angle brackets and quotes into entities."""
-    escape_src = _extract_function(_read_template(template), "escapeHtml")
+    escape_src = _extract_from_sanitize_module("escapeHtml")
     results = _run_escape_html(escape_src, _HOSTILE_PAYLOADS, tmp_path)
     for payload in _HOSTILE_PAYLOADS:
         escaped = results[payload]
