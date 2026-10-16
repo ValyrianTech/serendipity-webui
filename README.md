@@ -86,11 +86,13 @@ The `/api/tts-proxy` endpoint validates the `server` query parameter before forw
 - **Allowlist entries bypass all IP checks:** when a host matches an entry in `SERENDIPITY_TTS_ALLOWED_HOSTS`, DNS resolution and ALL private/loopback/link-local/reserved/multicast/unspecified IP checks are skipped entirely for that host.
 - Invalid or disallowed servers return HTTP 400 with `{"error": "Invalid or disallowed TTS server"}`.
 - Non-audio (`audio/*`) responses return HTTP 502 (`"TTS server returned non-audio content"`).
-- Responses larger than 25 MB return HTTP 502 (`"TTS response too large"`).
+- Unexpected proxy failures return HTTP 500 with a generic `"Internal TTS proxy error"` message; details are logged server-side rather than returned to the client.
+- The 25 MB response-size limit is enforced while streaming: the proxy aborts the transfer with HTTP 502 (`"TTS response too large"`) as soon as the accumulated body exceeds the cap, rather than downloading the full response first.
+- For non-allowlisted hosts, the outbound connection is pinned to the single validated (non-blocked) IP resolved during validation — `httpx` is pointed at that IP (port preserved) while the original hostname and port are sent in the `Host` header — so the hostname is not re-resolved at connect time.
 
 When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/reserved/multicast/unspecified addresses are blocked; any public host is permitted.
 
-> **Note:** This validation is best-effort, not a hard guarantee. The host is resolved and validated at request-validation time, but `httpx` re-resolves the hostname when it connects. A hostname whose DNS answer changes between those two lookups (a DNS-rebinding / TOCTOU attack) can therefore still reach an internal address. Setting `SERENDIPITY_TTS_ALLOWED_HOSTS` to a trusted allowlist is the recommended mitigation, since it skips DNS resolution entirely for allowlisted hosts and pins the allowed host set; combine it with network-level egress controls for defense in depth.
+> **Note:** For non-allowlisted hosts, the outbound connection is pinned to the single IP that was resolved and validated, so a hostname whose DNS answer changes between validation and connection (a DNS-rebinding / TOCTOU attack) can no longer reach a different (internal) address — the previously open TOCTOU window is closed. Allowlisted hosts bypass DNS resolution and the IP checks entirely (see the warning below), so combine the allowlist with network-level egress controls for defense in depth.
 
 > **Warning:** Because an allowlisted host bypasses DNS resolution and the private-IP checks entirely, a misconfigured allowlist entry (for example an internal hostname, `localhost`, or `127.0.0.1`) reopens the SSRF path to that host. Only ever add trusted, public hosts to `SERENDIPITY_TTS_ALLOWED_HOSTS`, and rely on network-level egress controls for defense in depth rather than on the allowlist to block internal destinations.
 

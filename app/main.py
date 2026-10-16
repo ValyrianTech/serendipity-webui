@@ -1,6 +1,7 @@
 """FastAPI web UI application for the Serendipity AI agent platform."""
 
 import ipaddress
+import logging
 import os
 import socket
 from pathlib import Path
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Serendipity Web UI")
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -74,13 +76,30 @@ def _is_blocked_ip(ip_str: str) -> bool:
     )
 
 
-def _validate_tts_server(server: str) -> str:
+def _format_netloc_ip(ip: str) -> str:
+    """Render an IP address for use in a URL netloc, bracketing IPv6 literals.
+
+    :param ip: The IP address string (IPv4 or IPv6).
+    :type ip: str
+    :returns: The IP, wrapped in square brackets for IPv6 (e.g. ``[::1]``),
+        or unchanged for IPv4.
+    :rtype: str
+    """
+    if ipaddress.ip_address(ip).version == 6:
+        return f"[{ip}]"
+    return ip
+
+
+def _validate_tts_server(server: str) -> tuple[str, str | None]:
     """Validate a TTS server URL to prevent SSRF to internal or non-HTTP resources.
 
     :param server: The TTS server base URL to validate.
     :type server: str
-    :returns: The original ``server`` URL when it is allowed.
-    :rtype: str
+    :returns: A tuple of ``(server_url, validated_ip)``. ``server_url`` is the
+        original ``server`` URL, and ``validated_ip`` is the single resolved and
+        vetted IP address to connect to, or ``None`` when the host is
+        operator-allowlisted (in which case the hostname is used directly).
+    :rtype: tuple[str, str | None]
     :raises ValueError: If the scheme, host, or resolved IPs are disallowed.
     """
     parsed = urlparse(server)
@@ -94,19 +113,24 @@ def _validate_tts_server(server: str) -> str:
     if allowed and host.lower() not in allowed:
         raise ValueError("host not allowed")
 
-    if host.lower() not in allowed:
-        try:
-            ipaddress.ip_address(host)
-            host_is_ip_literal = True
-        except ValueError:
-            host_is_ip_literal = False
-        if host_is_ip_literal and _is_blocked_ip(host):
-            raise ValueError("blocked IP")
-        for ip in _resolve_host(host):
-            if _is_blocked_ip(ip):
-                raise ValueError("blocked IP")
+    if host.lower() in allowed:
+        return server, None
 
-    return server
+    try:
+        ipaddress.ip_address(host)
+        host_is_ip_literal = True
+    except ValueError:
+        host_is_ip_literal = False
+    if host_is_ip_literal:
+        if _is_blocked_ip(host):
+            raise ValueError("blocked IP")
+        return server, host
+
+    resolved = _resolve_host(host)
+    for ip in resolved:
+        if _is_blocked_ip(ip):
+            raise ValueError("blocked IP")
+    return server, resolved[0]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -298,12 +322,13 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
     :rtype: Response
     """
     try:
-        _validate_tts_server(server)
+        server_url, validated_ip = _validate_tts_server(server)
     except ValueError:
         return JSONResponse({"error": "Invalid or disallowed TTS server"}, status_code=400)
 
     # Build the TTS URL
-    server_url = server.rstrip('/')
+    server_url = server_url.rstrip('/')
+    parsed = urlparse(server_url)
     params: dict[str, str | float] = {
         "voice": voice,
         "text": text,
@@ -312,33 +337,56 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
     }
     if speed != 1.0:
         params["speed"] = speed
-    
+
+    # Pin httpx to the exact vetted IP to avoid a second (TOCTOU) DNS resolution,
+    # while preserving the original hostname in the Host header. The server URL's
+    # path prefix (e.g. ``/tts``) must be preserved in front of ``/synthesize_speech/``.
+    path = f"{parsed.path}/synthesize_speech/"
+    host_headers: dict[str, str] = {}
+    if validated_ip is not None:
+        netloc = _format_netloc_ip(validated_ip)
+        if parsed.port is not None:
+            netloc = f"{netloc}:{parsed.port}"
+        request_url = f"{parsed.scheme}://{netloc}{path}"
+        host_header = parsed.hostname or ""
+        if parsed.port is not None:
+            host_header = f"{host_header}:{parsed.port}"
+        host_headers["Host"] = host_header
+    else:
+        request_url = f"{server_url}/synthesize_speech/"
+
     # Use a long timeout for slow TTS generation (5 minutes)
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
         try:
-            response = await client.get(f"{server_url}/synthesize_speech/", params=params)
-            response.raise_for_status()
-            
-            # Ensure we return audio content type
-            content_type = response.headers.get("content-type", "audio/wav")
-            if not content_type.startswith("audio/"):
-                # TTS server returned non-audio content
-                return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
+            async with client.stream("GET", request_url, params=params, headers=host_headers) as response:
+                response.raise_for_status()
 
-            if len(response.content) > MAX_TTS_RESPONSE_BYTES:
-                return JSONResponse({"error": "TTS response too large"}, status_code=502)
-            
-            return StreamingResponse(
-                iter([response.content]),
-                media_type=content_type,
-                headers={"Cache-Control": "no-cache"}
-            )
+                # Ensure we return audio content type
+                content_type = response.headers.get("content-type", "audio/wav")
+                if not content_type.startswith("audio/"):
+                    # TTS server returned non-audio content
+                    return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
+
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > MAX_TTS_RESPONSE_BYTES:
+                        return JSONResponse({"error": "TTS response too large"}, status_code=502)
+                    chunks.append(chunk)
+
+                return StreamingResponse(
+                    iter(chunks),
+                    media_type=content_type,
+                    headers={"Cache-Control": "no-cache"}
+                )
         except httpx.TimeoutException:
             return JSONResponse({"error": "TTS generation timed out"}, status_code=504)
         except httpx.HTTPStatusError as e:
             return JSONResponse({"error": f"TTS server error: {e.response.status_code}"}, status_code=e.response.status_code)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"error": str(e)}, status_code=500)
+        except Exception:  # noqa: BLE001
+            logger.exception("TTS proxy request failed")
+            return JSONResponse({"error": "Internal TTS proxy error"}, status_code=500)
 
 
 if __name__ == "__main__":
