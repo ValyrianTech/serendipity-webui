@@ -48,6 +48,12 @@ docker run -p 8080:8080 serendipity-webui
 
 Access the application at `http://localhost:8080`
 
+> **Note:** The server binds to loopback (`127.0.0.1`) by default, so in Docker you must set `SERENDIPITY_WEBUI_HOST=0.0.0.0` (and publish the port) to reach the UI from outside the container:
+>
+> ```bash
+> docker run -e SERENDIPITY_WEBUI_HOST=0.0.0.0 -p 8080:8080 serendipity-webui
+> ```
+
 ### Local Development
 
 ```bash
@@ -87,7 +93,10 @@ Server-side settings are read from environment variables. These can be provided 
 cp .env.example .env
 ```
 
+- `SERENDIPITY_WEBUI_HOST` — host address the web UI binds to (default `127.0.0.1`; set to `0.0.0.0` to expose the UI on all interfaces).
+- `SERENDIPITY_WEBUI_PORT` — port the web UI listens on (default `8080`).
 - `SERENDIPITY_TTS_ALLOWED_HOSTS` — comma-separated allowlist of TTS proxy host names (see [TTS proxy security](#tts-proxy-security)).
+- `SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST` — opt-in flag (truthy: `1`/`true`/`yes`/`on`, case-insensitive) that permits arbitrary public hosts when `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset (see [TTS proxy security](#tts-proxy-security)).
 
 `.env` is gitignored; commit only `.env.example`.
 
@@ -95,6 +104,7 @@ cp .env.example .env
 
 The `/api/tts-proxy` endpoint validates the `server` query parameter before forwarding to prevent SSRF to internal or non-HTTP resources:
 
+- Cross-origin browser requests are rejected with HTTP 403 (`{"error": "Cross-origin TTS proxy request rejected"}`): the `Origin` header (falling back to `Referer`) is compared against the request `Host` header, and requests that do not match are refused. When neither header is present the request is treated as same-origin.
 - Only `http` and `https` schemes are allowed.
 - If the `SERENDIPITY_TTS_ALLOWED_HOSTS` environment variable is set (a comma-separated list of host names), the resolved host must be in that allowlist.
 - When the host is not allowlisted, it is resolved via DNS and any resulting private, loopback, link-local, reserved, multicast, or unspecified IP is blocked (IP literals are checked as well).
@@ -105,7 +115,7 @@ The `/api/tts-proxy` endpoint validates the `server` query parameter before forw
 - The 25 MB response-size limit is enforced while streaming: the proxy aborts the transfer with HTTP 502 (`"TTS response too large"`) as soon as the accumulated body exceeds the cap, rather than downloading the full response first.
 - For non-allowlisted hosts, the outbound connection is pinned to the single validated (non-blocked) IP resolved during validation — `httpx` is pointed at that IP (port preserved) while the original hostname and port are sent in the `Host` header — so the hostname is not re-resolved at connect time.
 
-When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, only loopback/private/link-local/reserved/multicast/unspecified addresses are blocked; any public host is permitted.
+When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, the proxy is **disabled by default**: a host is only permitted if the opt-in `SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST` flag is set to a truthy value (`1`/`true`/`yes`/`on`, case-insensitive). Otherwise the request is rejected with HTTP 400 (`"host not allowed"`), and no public host is permitted.
 
 > **Note:** For non-allowlisted hosts, the outbound connection is pinned to the single IP that was resolved and validated, so a hostname whose DNS answer changes between validation and connection (a DNS-rebinding / TOCTOU attack) can no longer reach a different (internal) address — the previously open TOCTOU window is closed. Allowlisted hosts bypass DNS resolution and the IP checks entirely (see the warning below), so combine the allowlist with network-level egress controls for defense in depth.
 
