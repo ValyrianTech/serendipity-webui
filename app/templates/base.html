@@ -128,9 +128,12 @@
             
             <!-- WIF Key Status -->
             <div class="p-4 border-t border-slate-700">
-                <div id="wif-status" class="flex items-center gap-2 text-sm">
-                    <span class="status-dot offline"></span>
-                    <span class="text-slate-400">No key loaded</span>
+                <div class="flex items-center justify-between gap-2">
+                    <div id="wif-status" class="flex items-center gap-2 text-sm">
+                        <span class="status-dot offline"></span>
+                        <span class="text-slate-400">No key loaded</span>
+                    </div>
+                    <button id="lock-button" onclick="lockSession()" class="hidden text-xs text-slate-500 hover:text-slate-300 px-2 py-1 rounded transition-colors" title="Forget the unlocked key for this session">Lock</button>
                 </div>
             </div>
         </aside>
@@ -223,7 +226,8 @@
     <script type="module">
         import { 
             wifToAddress, generateWifKey, encryptWif, decryptWif, 
-            saveWif, loadWifStorage, clearWifStorage, isLegacyPlaintextWif 
+            saveWif, loadWifStorage, clearWifStorage, isLegacyPlaintextWif,
+            saveSessionWif, loadSessionWif, clearSessionWif
         } from '/static/js/bitcoin.js';
         import { getSettings, saveSettings, getFolders } from '/static/js/api.js';
         
@@ -236,6 +240,9 @@
         window.loadWifStorage = loadWifStorage;
         window.clearWifStorage = clearWifStorage;
         window.isLegacyPlaintextWif = isLegacyPlaintextWif;
+        window.saveSessionWif = saveSessionWif;
+        window.loadSessionWif = loadSessionWif;
+        window.clearSessionWif = clearSessionWif;
         window.getSettings = getSettings;
         window.saveSettings = saveSettings;
         window.getFolders = getFolders;
@@ -256,7 +263,14 @@
             document.getElementById('unlock-modal').classList.add('hidden');
             document.getElementById('setup-wif-modal').classList.add('hidden');
             
-            if (storage && storage.data) {
+            const sessionWif = loadSessionWif();
+            if (sessionWif) {
+                // A decrypted WIF is already available for this tab session, so
+                // skip the unlock prompt and restore it directly.
+                console.log('Session WIF found, restoring without unlock prompt');
+                window.currentWif = sessionWif;
+                updateWifStatus(true);
+            } else if (storage && storage.data) {
                 if (isLegacyPlaintextWif(storage)) {
                     console.log('Legacy plaintext WIF detected, clearing storage');
                     clearWifStorage();
@@ -289,21 +303,42 @@
         
         function updateWifStatus(loaded) {
             const status = document.getElementById('wif-status');
+            const lockButton = document.getElementById('lock-button');
             if (loaded && window.currentWif) {
                 const address = wifToAddress(window.currentWif);
                 status.innerHTML = `
                     <span class="status-dot online"></span>
                     <span class="text-slate-400 truncate" title="${address}">${address.substring(0, 12)}...</span>
                 `;
+                lockButton?.classList.remove('hidden');
             } else {
                 status.innerHTML = `
                     <span class="status-dot offline"></span>
                     <span class="text-slate-400">No key loaded</span>
                 `;
+                lockButton?.classList.add('hidden');
             }
         }
         
         window.updateWifStatus = updateWifStatus;
+        
+        // Lock / forget the current session: clear the decrypted WIF from
+        // sessionStorage and return the user to the unlock prompt (or setup
+        // if no encrypted key remains).
+        window.lockSession = function() {
+            clearSessionWif();
+            window.currentWif = null;
+            updateWifStatus(false);
+            
+            const storage = loadWifStorage();
+            if (storage && storage.data) {
+                document.getElementById('setup-wif-modal').classList.add('hidden');
+                document.getElementById('unlock-modal').classList.remove('hidden');
+            } else {
+                document.getElementById('unlock-modal').classList.add('hidden');
+                document.getElementById('setup-wif-modal').classList.remove('hidden');
+            }
+        };
         
         function updateNavigation() {
             const settings = getSettings();
@@ -389,6 +424,7 @@
             try {
                 const wif = await decryptWif(storage.data, password);
                 window.currentWif = wif;
+                saveSessionWif(wif);
                 document.getElementById('unlock-modal').classList.add('hidden');
                 updateWifStatus(true);
                 showToast('Key unlocked successfully', 'success');
@@ -408,6 +444,9 @@
             console.log('Clearing WIF storage...');
             localStorage.removeItem('serendipity_wif');
             console.log('Storage after clear:', localStorage.getItem('serendipity_wif'));
+            clearSessionWif();
+            window.currentWif = null;
+            updateWifStatus(false);
             document.getElementById('unlock-modal').classList.add('hidden');
             document.getElementById('setup-wif-modal').classList.remove('hidden');
             showToast('Previous key cleared', 'info');
@@ -461,6 +500,7 @@
                 saveWif(null, true, encrypted);
                 
                 window.currentWif = wif;
+                saveSessionWif(wif);
                 const modal = document.getElementById('setup-wif-modal');
                 if (modal) {
                     modal.style.display = 'none';
