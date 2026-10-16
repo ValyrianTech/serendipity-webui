@@ -72,7 +72,8 @@ On first launch, you'll be prompted to configure:
 
 2. **WIF Key**
    - Enter an existing WIF key or generate a new one
-   - Optionally encrypt with a password for secure storage
+   - A password is required; the WIF key is always stored encrypted (never in plaintext)
+   - Enter the password each session to unlock the key
 
 All settings are stored in your browser's localStorage.
 
