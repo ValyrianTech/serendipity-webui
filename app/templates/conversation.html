@@ -1516,10 +1516,10 @@
                 return `
                     <div class="code-block-wrapper mb-3">
                         <div class="flex items-center justify-between bg-slate-700 px-3 py-1 rounded-t-md text-xs text-slate-400">
-                            <span>${lang}</span>
+                            <span>${escapeHtml(lang)}</span>
                             <button onclick="copyCode(this)" class="hover:text-white">Copy</button>
                         </div>
-                        <pre class="code-block !mt-0 !rounded-t-none"><code class="language-${lang}">${escapeHtml(content)}</code></pre>
+                        <pre class="code-block !mt-0 !rounded-t-none"><code class="language-${escapeHtml(lang)}">${escapeHtml(content)}</code></pre>
                     </div>`;
             
             case 'mermaid':

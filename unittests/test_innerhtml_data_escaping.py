@@ -148,6 +148,20 @@ def test_conversation_message_sinks_are_escaped():
     assert "btn.dataset.sender" in body
 
 
+def test_conversation_code_part_escapes_language():
+    """renderMessagePart escapes a code part's ``language`` (label and class).
+
+    The ``language`` field is model/agent-provided and can carry markup (e.g. a
+    corrupted part whose ``language`` holds ``<img src=x onerror=alert(1)>``),
+    which previously executed when the code block was rendered.
+    """
+    body = _func_body("conversation.html", "renderMessagePart")
+    assert "escapeHtml(lang)" in body
+    # The raw (unescaped) language interpolations must be gone.
+    assert "<span>${lang}</span>" not in body
+    assert 'class="language-${lang}"' not in body
+
+
 def test_conversation_staged_and_open_files_escape_file_names():
     """conversation.html escapes file names in staged and open file lists."""
     staged_body = _func_body("conversation.html", "updateStagedFilesDisplay")
