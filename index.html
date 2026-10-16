@@ -158,8 +158,8 @@
             </div>
             
             <div class="form-group">
-                <label>Password (optional)</label>
-                <input type="password" id="password" placeholder="Leave empty for no encryption">
+                <label>Password (required)</label>
+                <input type="password" id="password" placeholder="Required to encrypt your key">
                 <p class="hint">If set, you'll need this password to access your key</p>
             </div>
             
@@ -584,21 +584,21 @@
                 return;
             }
             
+            if (!password) {
+                showStatus('A password is required to store your WIF key securely', 'error');
+                return;
+            }
+            
             try {
                 const storageData = {
-                    encrypted: !!password,
+                    encrypted: true,
+                    data: await encryptData(wifKey, password),
                     timestamp: new Date().toISOString()
                 };
                 
-                if (password) {
-                    storageData.data = await encryptData(wifKey, password);
-                } else {
-                    storageData.data = wifKey;
-                }
-                
                 localStorage.setItem('serendipity_wif', JSON.stringify(storageData));
                 
-                showStatus(`Key saved successfully (${password ? 'encrypted' : 'unencrypted'})`, 'success');
+                showStatus('Key saved successfully (encrypted)', 'success');
                 updateDebugOutput();
             } catch (err) {
                 showStatus('Error saving key: ' + err.message, 'error');
@@ -678,21 +678,9 @@
             const stored = localStorage.getItem('serendipity_wif');
             
             if (stored) {
-                const data = JSON.parse(stored);
-                
-                if (data.encrypted) {
-                    // Show unlock section
-                    document.getElementById('unlockSection').classList.remove('hidden');
-                    document.getElementById('setupSection').classList.add('hidden');
-                } else {
-                    // Show setup section with existing key
-                    document.getElementById('unlockSection').classList.add('hidden');
-                    document.getElementById('setupSection').classList.remove('hidden');
-                    document.getElementById('wifKey').value = data.data;
-                    showStatus('Unencrypted key loaded from storage', 'success');
-                    updateDebugOutput();
-                    updateAddressDisplay();
-                }
+                // Show unlock section
+                document.getElementById('unlockSection').classList.remove('hidden');
+                document.getElementById('setupSection').classList.add('hidden');
             } else {
                 // No key, show setup section
                 document.getElementById('unlockSection').classList.add('hidden');

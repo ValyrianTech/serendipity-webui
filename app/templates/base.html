@@ -208,8 +208,8 @@
             </div>
             
             <div class="mb-4">
-                <label class="text-sm text-slate-400 block mb-2">Password (optional)</label>
-                <input type="password" id="setup-password" placeholder="Leave empty for no encryption"
+                <label class="text-sm text-slate-400 block mb-2">Password (required)</label>
+                <input type="password" id="setup-password" placeholder="Required to encrypt your key"
                        class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
             </div>
             
@@ -257,16 +257,9 @@
             
             if (storage && storage.data) {
                 console.log('Storage encrypted flag:', storage.encrypted);
-                if (storage.encrypted === true) {
-                    // Show unlock modal
-                    console.log('Showing unlock modal');
-                    document.getElementById('unlock-modal').classList.remove('hidden');
-                } else {
-                    // Load unencrypted key
-                    console.log('Loading unencrypted key');
-                    window.currentWif = storage.data;
-                    updateWifStatus(true);
-                }
+                // Show unlock modal
+                console.log('Showing unlock modal');
+                document.getElementById('unlock-modal').classList.remove('hidden');
             } else {
                 // Show setup modal
                 console.log('No storage, showing setup modal');
@@ -433,6 +426,11 @@
                 return;
             }
             
+            if (!password) {
+                showToast('A password is required to store your WIF key securely', 'error');
+                return;
+            }
+            
             try {
                 // Save server settings
                 saveSettings({
@@ -441,12 +439,8 @@
                     websocketPort: websocketPort
                 });
                 
-                if (password) {
-                    const encrypted = await encryptWif(wif, password);
-                    saveWif(null, true, encrypted);
-                } else {
-                    saveWif(wif, false);
-                }
+                const encrypted = await encryptWif(wif, password);
+                saveWif(null, true, encrypted);
                 
                 window.currentWif = wif;
                 const modal = document.getElementById('setup-wif-modal');

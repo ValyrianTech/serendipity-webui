@@ -137,8 +137,8 @@
         </div>
         
         <div class="mb-4">
-            <label class="text-sm text-slate-400 block mb-2">Password (optional)</label>
-            <input type="password" id="new-password" placeholder="Leave empty for no encryption"
+            <label class="text-sm text-slate-400 block mb-2">Password (required)</label>
+            <input type="password" id="new-password" placeholder="Required to encrypt your key"
                    class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
         </div>
         
@@ -186,8 +186,8 @@
             document.getElementById('current-address').value = address || 'Invalid key';
             document.getElementById('wif-key-display').value = window.currentWif.substring(0, 10) + '...' + window.currentWif.substring(window.currentWif.length - 10);
         } else if (storage) {
-            document.getElementById('current-address').value = storage.encrypted ? '(encrypted - unlock to view)' : wifToAddress(storage.data) || '';
-            document.getElementById('wif-key-display').value = storage.encrypted ? '(encrypted)' : storage.data.substring(0, 10) + '...';
+            document.getElementById('current-address').value = '(encrypted - unlock to view)';
+            document.getElementById('wif-key-display').value = '(encrypted)';
         } else {
             document.getElementById('current-address').value = 'No key configured';
             document.getElementById('wif-key-display').value = '';
@@ -274,13 +274,14 @@
             return;
         }
         
+        if (!password) {
+            showToast('A password is required to store your WIF key securely', 'error');
+            return;
+        }
+        
         try {
-            if (password) {
-                const encrypted = await encryptWif(wif, password);
-                saveWif(null, true, encrypted);
-            } else {
-                saveWif(wif, false);
-            }
+            const encrypted = await encryptWif(wif, password);
+            saveWif(null, true, encrypted);
             
             window.currentWif = wif;
             closeChangeWifModal();

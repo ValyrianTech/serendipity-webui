@@ -317,9 +317,12 @@ export async function decryptWif(encryptedBase64, password) {
 }
 
 export function saveWif(wif, encrypted, encryptedData = null) {
+    if (!encrypted || !encryptedData) {
+        throw new Error('Refusing to store an unencrypted WIF');
+    }
     const storageData = {
-        encrypted: encrypted,
-        data: encryptedData || wif,
+        encrypted: true,
+        data: encryptedData,
         timestamp: new Date().toISOString()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
