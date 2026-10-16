@@ -343,3 +343,25 @@ export function isLegacyPlaintextWif(storage) {
     // New shape always has encrypted === true and an AES-GCM base64 blob in data.
     return Boolean(storage && storage.data && storage.encrypted !== true);
 }
+
+// Session storage for the decrypted WIF key.
+//
+// The encrypted WIF lives in localStorage (persists across sessions, at rest).
+// The decrypted WIF lives in sessionStorage, which is per-origin and per-tab,
+// cleared automatically when the tab/window closes, and not shared with other
+// tabs. This is an intentional middle ground: it avoids re-prompting for the
+// password on every page navigation while never writing the decrypted key to
+// disk or leaking it across tabs.
+const SESSION_STORAGE_KEY = 'wif_session_key';
+
+export function saveSessionWif(wif) {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, wif);
+}
+
+export function loadSessionWif() {
+    return sessionStorage.getItem(SESSION_STORAGE_KEY);
+}
+
+export function clearSessionWif() {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+}
