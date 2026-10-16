@@ -28,7 +28,7 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["app"]
-omit = ["app/vulture_whitelist.py"]
+omit = ["app/vulture_whitelist.py", "unittests/vulture_whitelist.py"]
 
 [tool.coverage.report]
 show_missing = true
@@ -39,3 +39,7 @@ line-length = 120
 
 [tool.ruff.lint.per-file-ignores]
 "app/vulture_whitelist.py" = ["B018", "F821"]
+"unittests/vulture_whitelist.py" = ["B018", "F821"]
+
+[tool.vulture]
+paths = ["app/", "unittests/", "app/vulture_whitelist.py", "unittests/vulture_whitelist.py"]
