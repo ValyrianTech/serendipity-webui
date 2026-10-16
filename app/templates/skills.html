@@ -459,7 +459,7 @@ if __name__ == '__main__':
                 }
             });
         } else {
-            preview.innerHTML = '<pre>' + (content || 'No instructions') + '</pre>';
+            preview.innerHTML = '<pre>' + escapeHtml(content || 'No instructions') + '</pre>';
         }
     }
     
@@ -567,6 +567,8 @@ if __name__ == '__main__':
                         hljs.highlightElement(block);
                     }
                 });
+            } else {
+                preview.innerHTML = '<pre>' + escapeHtml(content || 'No content') + '</pre>';
             }
         }
     };
