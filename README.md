@@ -252,6 +252,8 @@ The Dockerfile uses a multi-stage build for minimal image size:
 
 The container runs as a non-root user for security.
 
+- **ENTRYPOINT**: Runs `uvicorn` in the foreground as PID 1 via `exec` in `entrypoint.sh`, so the server receives `SIGTERM`/`SIGINT` for graceful shutdown and the container exits with the application's status code (allowing restart policies to detect crashes).
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
