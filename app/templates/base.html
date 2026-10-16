@@ -133,7 +133,7 @@
                         <span class="status-dot offline"></span>
                         <span class="text-slate-400">No key loaded</span>
                     </div>
-                    <button onclick="lockSession()" class="text-xs text-slate-500 hover:text-slate-300 px-2 py-1 rounded transition-colors" title="Forget the unlocked key for this session">Lock</button>
+                    <button id="lock-button" onclick="lockSession()" class="hidden text-xs text-slate-500 hover:text-slate-300 px-2 py-1 rounded transition-colors" title="Forget the unlocked key for this session">Lock</button>
                 </div>
             </div>
         </aside>
@@ -303,17 +303,20 @@
         
         function updateWifStatus(loaded) {
             const status = document.getElementById('wif-status');
+            const lockButton = document.getElementById('lock-button');
             if (loaded && window.currentWif) {
                 const address = wifToAddress(window.currentWif);
                 status.innerHTML = `
                     <span class="status-dot online"></span>
                     <span class="text-slate-400 truncate" title="${address}">${address.substring(0, 12)}...</span>
                 `;
+                lockButton?.classList.remove('hidden');
             } else {
                 status.innerHTML = `
                     <span class="status-dot offline"></span>
                     <span class="text-slate-400">No key loaded</span>
                 `;
+                lockButton?.classList.add('hidden');
             }
         }
         

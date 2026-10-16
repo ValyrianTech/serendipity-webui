@@ -219,3 +219,33 @@ def test_base_html_exposes_session_helpers_and_calls_save_session_wif():
     assert "window.clearSessionWif = clearSessionWif;" in content
 
     assert content.count("saveSessionWif(wif);") == 2
+
+
+def test_base_html_lock_button_hidden_and_toggled_in_update_wif_status():
+    content = BASE_HTML_PATH.read_text(encoding="utf-8")
+
+    # (a) the Lock button has a stable id and keeps its onclick handler
+    assert 'id="lock-button"' in content
+    assert 'onclick="lockSession()"' in content
+
+    # (b) the Lock button is hidden by default (its class list includes `hidden`)
+    lock_button_idx = content.index('id="lock-button"')
+    button_tag_end = content.index(">", lock_button_idx)
+    button_tag = content[lock_button_idx:button_tag_end]
+    assert 'class="' in button_tag
+    class_attr = button_tag.split('class="', 1)[1].split('"', 1)[0]
+    assert "hidden" in class_attr.split()
+
+    # (c) updateWifStatus toggles the Lock button based on window.currentWif
+    update_fn_idx = content.index("function updateWifStatus(loaded) {")
+    update_assign_idx = content.index("window.updateWifStatus = updateWifStatus;", update_fn_idx)
+
+    lock_ref_idx = content.index("document.getElementById('lock-button')", update_fn_idx)
+    cond_idx = content.index("loaded && window.currentWif", update_fn_idx)
+    remove_idx = content.index("classList.remove('hidden')", update_fn_idx)
+    add_idx = content.index("classList.add('hidden')", update_fn_idx)
+
+    assert update_fn_idx < lock_ref_idx < update_assign_idx
+    assert update_fn_idx < cond_idx < remove_idx
+    assert update_fn_idx < cond_idx < add_idx
+    assert update_fn_idx < remove_idx < add_idx < update_assign_idx
