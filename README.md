@@ -76,6 +76,18 @@ On first launch, you'll be prompted to configure:
 
 All settings are stored in your browser's localStorage.
 
+### Environment configuration
+
+Server-side settings are read from environment variables. These can be provided via a `.env` file in the project root, which is loaded automatically at startup (`python-dotenv`). Copy the template and adjust the values:
+
+```bash
+cp .env.example .env
+```
+
+- `SERENDIPITY_TTS_ALLOWED_HOSTS` — comma-separated allowlist of TTS proxy host names (see [TTS proxy security](#tts-proxy-security)).
+
+`.env` is gitignored; commit only `.env.example`.
+
 ### TTS proxy security
 
 The `/api/tts-proxy` endpoint validates the `server` query parameter before forwarding to prevent SSRF to internal or non-HTTP resources:
