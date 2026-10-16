@@ -264,29 +264,40 @@
             document.getElementById('setup-wif-modal').classList.add('hidden');
             
             const sessionWif = loadSessionWif();
-            if (sessionWif) {
+            if (sessionWif && wifToAddress(sessionWif)) {
                 // A decrypted WIF is already available for this tab session, so
                 // skip the unlock prompt and restore it directly.
                 console.log('Session WIF found, restoring without unlock prompt');
                 window.currentWif = sessionWif;
                 updateWifStatus(true);
-            } else if (storage && storage.data) {
-                if (isLegacyPlaintextWif(storage)) {
-                    console.log('Legacy plaintext WIF detected, clearing storage');
-                    clearWifStorage();
-                    console.log('Showing setup modal');
-                    document.getElementById('setup-wif-modal').classList.remove('hidden');
-                    showToast('Your previously stored key was in plaintext and has been removed for security. Please re-enter your WIF key and set a password.', 'error');
-                } else {
-                    console.log('Storage encrypted flag:', storage.encrypted);
-                    // Show unlock modal
-                    console.log('Showing unlock modal');
-                    document.getElementById('unlock-modal').classList.remove('hidden');
-                }
             } else {
-                // Show setup modal
-                console.log('No storage, showing setup modal');
-                document.getElementById('setup-wif-modal').classList.remove('hidden');
+                // No valid decrypted session WIF: if a malformed/tampered one was
+                // present, discard it so it cannot be left in memory or storage, and
+                // fall through to the same unlock/setup decision as when no session
+                // WIF exists.
+                if (sessionWif) {
+                    console.log('Invalid session WIF found, discarding it');
+                    clearSessionWif();
+                    showToast('Your stored session key was invalid and has been cleared. Please unlock or re-enter your WIF key.', 'error');
+                }
+                if (storage && storage.data) {
+                    if (isLegacyPlaintextWif(storage)) {
+                        console.log('Legacy plaintext WIF detected, clearing storage');
+                        clearWifStorage();
+                        console.log('Showing setup modal');
+                        document.getElementById('setup-wif-modal').classList.remove('hidden');
+                        showToast('Your previously stored key was in plaintext and has been removed for security. Please re-enter your WIF key and set a password.', 'error');
+                    } else {
+                        console.log('Storage encrypted flag:', storage.encrypted);
+                        // Show unlock modal
+                        console.log('Showing unlock modal');
+                        document.getElementById('unlock-modal').classList.remove('hidden');
+                    }
+                } else {
+                    // Show setup modal
+                    console.log('No storage, showing setup modal');
+                    document.getElementById('setup-wif-modal').classList.remove('hidden');
+                }
             }
             
             // Update navigation based on current agent
