@@ -124,7 +124,7 @@ serendipity-webui/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI application & routes
-│   ├── vulture_whitelist.py # Vulture false-positive whitelist (excluded from coverage)
+│   ├── vulture_whitelist.py # Vulture false-positive whitelist (wired via [tool.vulture]; excluded from coverage)
 │   └── templates/           # Jinja2 HTML templates
 │       ├── base.html        # Base template with sidebar
 │       ├── agents.html      # Agent selection page
@@ -153,6 +153,7 @@ serendipity-webui/
 │       └── vendor/          # Third-party libraries
 ├── unittests/               # Pytest test suite
 │   ├── conftest.py          # Shared fixtures (FastAPI TestClient)
+│   ├── vulture_whitelist.py # Vulture false-positive whitelist (wired via [tool.vulture]; excluded from coverage)
 │   ├── test_pages.py        # Page route tests
 │   ├── test_main_entrypoint.py # __main__ entrypoint test
 │   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
@@ -226,7 +227,7 @@ pytest
 pytest --cov=app
 ```
 
-The pytest configuration in `pyproject.toml` sets `testpaths = ["unittests"]` and `pythonpath = ["."]`. Coverage is collected from the `app` package (`source = ["app"]`), with `app/vulture_whitelist.py` omitted from coverage as a vulture whitelist file of false positives.
+The pytest configuration in `pyproject.toml` sets `testpaths = ["unittests"]` and `pythonpath = ["."]`. Coverage is collected from the `app` package (`source = ["app"]`), with `app/vulture_whitelist.py` and `unittests/vulture_whitelist.py` omitted from coverage as vulture whitelist files of false positives, wired into vulture via the `[tool.vulture]` `paths` list in `pyproject.toml`.
 
 ## Docker Details
 
