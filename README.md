@@ -117,7 +117,7 @@ Server-side values interpolated into JavaScript in Jinja2 templates (e.g. `agent
 
 ### HTML escaping in templates
 
-Dynamic values (e.g. agent names, descriptions, image URLs, message ids, sender names, tool/role/skill names) inserted into template `innerHTML` via JavaScript string interpolation are escaped with a shared `escapeHtml` helper covering `&`, `<`, `>`, `\"` and `'`, so values are safe in both element-text and quoted-attribute/inline-handler contexts. Inline `onclick` handlers that previously embedded untrusted values now use `data-*` attributes with `addEventListener` bindings.
+Dynamic values (e.g. agent names, descriptions, image URLs, message ids, sender names, tool/role/skill names) inserted into template `innerHTML` via JavaScript string interpolation are escaped with a shared `escapeHtml` helper covering `&`, `<`, `>`, `\"` and `'`, so values are safe in both element-text and quoted-attribute/inline-handler contexts. Inline `onclick` handlers that previously embedded untrusted values now use `data-*` attributes with `addEventListener` bindings. The TTS text-extraction helper (`getTextOnlyContent` in `conversation.html`) likewise sanitizes message content through `sanitizeHtml` (DOMPurify) before parsing it via `innerHTML`, so active markup is stripped as well as escaped.
 
 ## Project Structure
 
