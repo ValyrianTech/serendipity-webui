@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stopped leaking raw exception text from the `/api/tts-proxy` catch-all handler. Unexpected failures now log details server-side (via `logger.exception`) and return a generic `{"error": "Internal TTS proxy error"}` with HTTP 500.
 - Fixed a stored DOM XSS vulnerability: server/agent-supplied values interpolated into template `innerHTML` (including `src`/`alt`/`title`/`value` attributes and inline `onclick` handlers) are now escaped via a shared `escapeHtml` helper that encodes `&`, `<`, `>`, `\"` and `'`. Inline `onclick` handlers that embedded untrusted values were replaced with `data-*` attributes and `addEventListener` bindings. New regression tests were added in `unittests/test_innerhtml_data_escaping.py`.
 - The WIF private key is no longer persisted to localStorage in plaintext: a password is now required and the key is always stored encrypted. `saveWif()` now refuses to store an unencrypted WIF, and the unlock modal is always shown when a stored key exists.
+- Sanitized the TTS text-extraction path: `getTextOnlyContent()` in `conversation.html` now routes its input through the shared `sanitizeHtml` (DOMPurify) helper before assigning to `innerHTML`, so resource-loading tags and inline event handlers (e.g. `<img onerror=...>`) in message content can no longer fire on the detached parse node used for TTS playback. Regression tests added in `unittests/test_gettextonlycontent_sanitized.py`.
 
 ### Fixed
 
