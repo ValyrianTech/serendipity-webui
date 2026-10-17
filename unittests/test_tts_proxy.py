@@ -289,6 +289,42 @@ def test_declared_content_length_over_cap_rejected(client, monkeypatch):
     assert result.json() == {"error": "TTS response too large"}
 
 
+def test_non_integer_content_length_is_ignored(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+
+    class StubResponse:
+        headers = {"content-type": "audio/wav", "content-length": "unknown"}
+        content = b"AUDI"
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+    with mock_async_client(response=StubResponse()):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.content == b"AUDI"
+
+
+def test_undeclared_oversized_body_rejected_by_backstop(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+
+    class StubResponse:
+        headers = {"content-type": "audio/wav"}
+        content = b"AUDIO"
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+    with mock_async_client(response=StubResponse()):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS response too large"}
+
+
 def test_get_configured_tts_servers_parses_json(monkeypatch):
     monkeypatch.setenv("SERENDIPITY_TTS_SERVERS", '{"primary": "http://a", "b": "http://b"}')
     assert app_main.get_configured_tts_servers() == {"primary": "http://a", "b": "http://b"}
