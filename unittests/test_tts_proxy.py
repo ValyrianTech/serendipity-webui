@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import contextmanager
+from typing import ClassVar
 from unittest.mock import patch
 
 import httpx
@@ -245,6 +246,30 @@ def test_tts_server_returns_null_when_unconfigured(client, monkeypatch):
     assert result.json() == {"url": None}
 
 
+def test_tts_server_cross_origin_rejected(client):
+    result = client.get("/api/tts-server", headers={"Origin": "http://evil.example.com"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
+
+
+def test_tts_server_cross_origin_referer_rejected(client):
+    result = client.get("/api/tts-server", headers={"Referer": "http://evil.example.com/page"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
+
+
+def test_tts_server_same_origin_allowed(client):
+    result = client.get("/api/tts-server", headers={"Origin": "http://testserver"})
+    assert result.status_code == 200
+    assert result.json() == {"url": "http://tts.local"}
+
+
+def test_tts_server_same_origin_referer_allowed(client):
+    result = client.get("/api/tts-server", headers={"Referer": "http://testserver/page"})
+    assert result.status_code == 200
+    assert result.json() == {"url": "http://tts.local"}
+
+
 def test_oversized_response_returns_502(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
@@ -283,6 +308,42 @@ def test_declared_content_length_over_cap_rejected(client, monkeypatch):
         headers={"content-type": "audio/wav", "content-length": "9999999"},
     )
     with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS response too large"}
+
+
+def test_non_integer_content_length_is_ignored(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+
+    class StubResponse:
+        headers: ClassVar[dict] = {"content-type": "audio/wav", "content-length": "unknown"}
+        content = b"AUDI"
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+    with mock_async_client(response=StubResponse()):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.content == b"AUDI"
+
+
+def test_undeclared_oversized_body_rejected_by_backstop(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+
+    class StubResponse:
+        headers: ClassVar[dict] = {"content-type": "audio/wav"}
+        content = b"AUDIO"
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+    with mock_async_client(response=StubResponse()):
         result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
     assert result.status_code == 502
