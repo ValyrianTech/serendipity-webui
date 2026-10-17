@@ -31,20 +31,38 @@ export function getBaseUrl() {
     return `http://${settings.serverAddress}:${settings.serverPort}`;
 }
 
+async function parseJsonResponse(response, context) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok) {
+        let detail = `${response.status} ${response.statusText}`;
+        if (contentType.includes('application/json')) {
+            try {
+                const body = await response.json();
+                detail = body.error || body.detail || detail;
+            } catch { /* keep status text */ }
+        }
+        throw new Error(`${context} failed: ${detail}`);
+    }
+    if (!contentType.includes('application/json')) {
+        throw new Error(`${context} returned non-JSON response (${contentType || 'unknown'})`);
+    }
+    return response.json();
+}
+
 // GET requests (no auth needed)
 export async function getAgents() {
     const response = await fetch(`${getBaseUrl()}/api/GetAgents`);
-    return response.json();
+    return parseJsonResponse(response, 'GetAgents');
 }
 
 export async function getAgent(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetAgent?agent_name=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetAgent');
 }
 
 export async function getFolders(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetFolders?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetFolders');
 }
 
 export async function getConversations(agentName, folderName, page = 1, perPage = 20) {
@@ -55,84 +73,84 @@ export async function getConversations(agentName, folderName, page = 1, perPage 
         per_page: perPage
     });
     const response = await fetch(`${getBaseUrl()}/api/GetConversations?${params.toString()}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetConversations');
 }
 
 export async function getConversation(agentName, folderName, conversationId) {
     const response = await fetch(`${getBaseUrl()}/api/GetConversation?agent=${encodeURIComponent(agentName)}&folder_name=${encodeURIComponent(folderName)}&conversation_id=${encodeURIComponent(conversationId)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetConversation');
 }
 
 export async function getModels() {
     const response = await fetch(`${getBaseUrl()}/api/GetModels`);
-    return response.json();
+    return parseJsonResponse(response, 'GetModels');
 }
 
 export async function getWorkflows(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetWorkflows?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetWorkflows');
 }
 
 export async function getWorkflow(agentName, workflowId) {
     const response = await fetch(`${getBaseUrl()}/api/GetWorkflow?agent=${encodeURIComponent(agentName)}&workflow_id=${encodeURIComponent(workflowId)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetWorkflow');
 }
 
 export async function getAvailableVoices(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetAvailableVoices?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetAvailableVoices');
 }
 
 export async function getMCPServers() {
     const response = await fetch(`${getBaseUrl()}/api/GetMCPServers`);
-    return response.json();
+    return parseJsonResponse(response, 'GetMCPServers');
 }
 
 export async function getMCPServerConfig(serverName) {
     const response = await fetch(`${getBaseUrl()}/api/GetMCPServerConfig?server_name=${encodeURIComponent(serverName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetMCPServerConfig');
 }
 
 export async function getToolsets() {
     const response = await fetch(`${getBaseUrl()}/api/GetToolsets`);
-    return response.json();
+    return parseJsonResponse(response, 'GetToolsets');
 }
 
 export async function getToolset(toolsetName) {
     const response = await fetch(`${getBaseUrl()}/api/GetToolset?toolset_name=${encodeURIComponent(toolsetName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetToolset');
 }
 
 export async function getCustomTools() {
     const response = await fetch(`${getBaseUrl()}/api/GetCustomTools`);
-    return response.json();
+    return parseJsonResponse(response, 'GetCustomTools');
 }
 
 export async function getTodo(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetTodo?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetTodo');
 }
 
 export async function getWishlist(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetWishlist?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetWishlist');
 }
 
 export async function getVariables(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetVariables?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetVariables');
 }
 
 export async function getWorkspace(agentName) {
     const response = await fetch(`${getBaseUrl()}/api/GetWorkspace?agent=${encodeURIComponent(agentName)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetWorkspace');
 }
 
 // Skills API
 export async function getSkills(enabledOnly = false) {
     const params = enabledOnly ? '?enabled_only=true' : '';
     const response = await fetch(`${getBaseUrl()}/api/GetSkills${params}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetSkills');
 }
 
 export async function getSkill(skillName, includeInstructions = true) {
@@ -141,12 +159,12 @@ export async function getSkill(skillName, includeInstructions = true) {
         include_instructions: includeInstructions
     });
     const response = await fetch(`${getBaseUrl()}/api/GetSkill?${params}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetSkill');
 }
 
 export async function getLLMs() {
     const response = await fetch(`${getBaseUrl()}/spellbook/llms`);
-    return response.json();
+    return parseJsonResponse(response, 'GetLLMs');
 }
 
 export async function getLLMConfig(llmName) {
@@ -154,7 +172,7 @@ export async function getLLMConfig(llmName) {
     // explicitly allows slashes in the llm_id: [a-zA-Z0-9_\-.:\/]+
     const encodedName = encodeURIComponent(llmName).replace(/%2F/gi, '/');
     const response = await fetch(`${getBaseUrl()}/spellbook/llms/${encodedName}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetLLMConfig');
 }
 
 // POST requests (require signed data)
@@ -189,7 +207,7 @@ export async function addMessage(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'AddMessage');
 }
 
 export async function editAgent(wif, data) {
@@ -199,7 +217,7 @@ export async function editAgent(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'EditAgent');
 }
 
 export async function editConversation(wif, data) {
@@ -209,7 +227,7 @@ export async function editConversation(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'EditConversation');
 }
 
 export async function deleteConversation(wif, data) {
@@ -219,7 +237,7 @@ export async function deleteConversation(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'DeleteConversation');
 }
 
 export async function stageFile(wif, data) {
@@ -229,7 +247,7 @@ export async function stageFile(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'StageFile');
 }
 
 export async function removeStagedFile(wif, data) {
@@ -239,7 +257,7 @@ export async function removeStagedFile(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'RemoveStagedFile');
 }
 
 export async function startWorkflow(wif, data) {
@@ -249,7 +267,7 @@ export async function startWorkflow(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'StartWorkflow');
 }
 
 export async function stopGeneration(wif, data) {
@@ -259,7 +277,7 @@ export async function stopGeneration(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'StopGeneration');
 }
 
 export async function saveMCPServerConfig(wif, data) {
@@ -269,7 +287,7 @@ export async function saveMCPServerConfig(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveMCPServerConfig');
 }
 
 export async function deleteMCPServerConfig(wif, data) {
@@ -279,7 +297,7 @@ export async function deleteMCPServerConfig(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'DeleteMCPServerConfig');
 }
 
 export async function saveToolset(wif, data) {
@@ -289,7 +307,7 @@ export async function saveToolset(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveToolset');
 }
 
 export async function deleteToolset(wif, data) {
@@ -299,7 +317,7 @@ export async function deleteToolset(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'DeleteToolset');
 }
 
 export async function saveLLMConfig(wif, data) {
@@ -309,7 +327,7 @@ export async function saveLLMConfig(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveLLMConfig');
 }
 
 export async function deleteLLMConfig(wif, data) {
@@ -319,7 +337,7 @@ export async function deleteLLMConfig(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'DeleteLLMConfig');
 }
 
 export async function saveDefaultLLM(wif, data) {
@@ -329,7 +347,7 @@ export async function saveDefaultLLM(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveDefaultLLM');
 }
 
 export async function editAgentRole(wif, data) {
@@ -339,7 +357,7 @@ export async function editAgentRole(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'EditAgentRole');
 }
 
 // Skills POST requests (signed)
@@ -350,7 +368,7 @@ export async function saveSkill(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveSkill');
 }
 
 export async function deleteSkill(wif, data) {
@@ -360,7 +378,7 @@ export async function deleteSkill(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'DeleteSkill');
 }
 
 // Spellbook API
@@ -371,7 +389,7 @@ export async function uploadFile(file) {
         method: 'POST',
         body: formData
     });
-    return response.json();
+    return parseJsonResponse(response, 'UploadFile');
 }
 
 export async function transcribeAudio(audioBlob) {
@@ -381,7 +399,7 @@ export async function transcribeAudio(audioBlob) {
         method: 'POST',
         body: formData
     });
-    return response.json();
+    return parseJsonResponse(response, 'TranscribeAudio');
 }
 
 // Upload profile picture (two-step: upload file, then register with agent)
@@ -392,7 +410,7 @@ export async function uploadProfilePicture(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'UploadProfilePicture');
 }
 
 // Upload voice file (two-step: upload file, then register with agent)
@@ -403,7 +421,7 @@ export async function uploadVoice(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'UploadVoice');
 }
 
 // Archive conversation (regular HTTP POST, no signing required)
@@ -413,7 +431,7 @@ export async function archiveConversation(data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     });
-    return response.json();
+    return parseJsonResponse(response, 'ArchiveConversation');
 }
 
 // Summarize conversation
@@ -424,7 +442,7 @@ export async function summarizeConversation(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SummarizeConversation');
 }
 
 // Generate memory
@@ -435,7 +453,7 @@ export async function generateMemory(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'GenerateMemory');
 }
 
 // Update knowledge base
@@ -446,7 +464,7 @@ export async function updateKnowledgeBase(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'UpdateKnowledgeBase');
 }
 
 // Move to folder (regular HTTP POST, no signing required)
@@ -456,7 +474,7 @@ export async function moveToFolder(data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     });
-    return response.json();
+    return parseJsonResponse(response, 'MoveToFolder');
 }
 
 // Initialize agent voices on OpenVoice server
@@ -467,7 +485,7 @@ export async function initializeAgentVoices(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'InitializeAgentVoices');
 }
 
 // Generate workflow from instructions
@@ -478,7 +496,7 @@ export async function generateWorkflow(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'GenerateWorkflow');
 }
 
 // Edit workflow step
@@ -489,7 +507,7 @@ export async function editWorkflowStep(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'EditWorkflowStep');
 }
 
 // Clone persona
@@ -500,7 +518,7 @@ export async function clonePersona(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'ClonePersona');
 }
 
 // Generate TTS audio URL using local proxy to avoid browser timeouts
@@ -522,12 +540,12 @@ export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'de
 export async function getScheduledTasks(enabledOnly = false) {
     const params = enabledOnly ? '?enabled_only=true' : '';
     const response = await fetch(`${getBaseUrl()}/api/GetScheduledTasks${params}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetScheduledTasks');
 }
 
 export async function getScheduledTask(taskId) {
     const response = await fetch(`${getBaseUrl()}/api/GetScheduledTask?task_id=${encodeURIComponent(taskId)}`);
-    return response.json();
+    return parseJsonResponse(response, 'GetScheduledTask');
 }
 
 export async function saveScheduledTask(wif, data) {
@@ -537,7 +555,7 @@ export async function saveScheduledTask(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveScheduledTask');
 }
 
 export async function deleteScheduledTask(wif, data) {
@@ -547,7 +565,7 @@ export async function deleteScheduledTask(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'DeleteScheduledTask');
 }
 
 export async function runScheduledTaskNow(wif, data) {
@@ -557,7 +575,7 @@ export async function runScheduledTaskNow(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'RunScheduledTaskNow');
 }
 
 // Save ComfyUI server config
@@ -568,7 +586,7 @@ export async function saveComfyUIServer(wif, data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signedData)
     });
-    return response.json();
+    return parseJsonResponse(response, 'SaveComfyUIServer');
 }
 
 // WebSocket connection for streaming
