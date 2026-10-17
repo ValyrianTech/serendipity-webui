@@ -79,7 +79,8 @@ On first launch, you'll be prompted to configure:
 
 2. **WIF Key**
    - Enter an existing WIF key or generate a new one
-   - A password is required; the WIF key is always stored encrypted in localStorage (never in plaintext)
+   - A password is required; the WIF key is always stored encrypted in localStorage (never in plaintext). The encrypted blob uses PBKDF2-HMAC-SHA256 (600,000 iterations) with ChaCha20 + HMAC-SHA256 (encrypt-then-MAC) in pure JavaScript; the iteration count is stored in a self-describing blob header, and older stored blobs remain decryptable
+   - Because key derivation at 600,000 PBKDF2 iterations takes a moment, the unlock, setup "Save & Continue", and change-key "Save" buttons show a brief "Unlocking…"/"Encrypting…" busy state (and are disabled) while the key is derived, so the UI does not appear frozen.
    - The decrypted key is held in per-tab sessionStorage, so you unlock once per tab session and page navigations within that tab no longer re-prompt for the password
    - The decrypted key is cleared when the tab closes and is never written to disk; use the sidebar **Lock** button to forget the unlocked key for the current session
 
@@ -172,6 +173,8 @@ serendipity-webui/
 │   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
 │   ├── test_xss_sanitization.py # XSS sanitization tests
 │   ├── test_session_wif.py  # Session WIF unlock tests (QuickJS)
+│   ├── test_wif_busy_state.py # withWifBusy() busy-state UI helper tests
+│   ├── test_wif_encryption.py # WIF at-rest encryption tests (SCv2/SCv3/legacy, KAT, tamper)
 │   ├── test_wif_validation.py # WIF parse/validation tests
 │   └── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
 ├── Dockerfile               # Multi-stage Docker build
