@@ -274,66 +274,204 @@ export function generateWifKey() {
 // Storage utilities
 const STORAGE_KEY = 'serendipity_wif';
 
-export async function deriveEncryptionKey(password, salt) {
-    const encoder = new TextEncoder();
-    const keyMaterial = await window.crypto.subtle.importKey(
-        'raw',
-        encoder.encode(password),
-        'PBKDF2',
-        false,
-        ['deriveKey']
-    );
-    
-    return window.crypto.subtle.deriveKey(
-        {
-            name: 'PBKDF2',
-            salt: salt,
-            iterations: 100000,
-            hash: 'SHA-256'
-        },
-        keyMaterial,
-        { name: 'AES-GCM', length: 256 },
-        false,
-        ['encrypt', 'decrypt']
-    );
+// WIF-at-rest encryption.
+//
+// The Web Crypto `crypto.subtle` (SubtleCrypto) API is only exposed in secure
+// contexts (HTTPS, or http://localhost / http://127.0.0.1). When the UI is served
+// over plain HTTP on a LAN address, `crypto.subtle` is `undefined`, so a
+// PBKDF2 + AES-GCM implementation throws
+// "Cannot read properties of undefined (reading 'importKey')" and the key can
+// neither be saved nor unlocked. To work in every context the encryption below is
+// implemented in pure JavaScript on top of the vendored SHA-256:
+//
+//   * key derivation: PBKDF2-HMAC-SHA256 (64-byte output)
+//   * encryption:     ChaCha20 (RFC 8439) stream cipher
+//   * authentication: HMAC-SHA256 over magic || salt || nonce || ciphertext
+//                     (encrypt-then-MAC)
+//
+// The stored blob is base64(magic || salt(16) || nonce(12) || ciphertext || tag(32)).
+// Blobs written by the previous AES-GCM implementation carry no magic prefix and
+// are still decryptable via `crypto.subtle` when it is available (secure contexts).
+const WIF_CRYPTO_MAGIC = new Uint8Array([0x53, 0x43, 0x76, 0x32]); // "SCv2"
+const WIF_PBKDF2_ITERATIONS = 1000;
+const WIF_SALT_LENGTH = 16;
+const WIF_NONCE_LENGTH = 12;
+const WIF_TAG_LENGTH = 32;
+
+function utf8Encode(value) {
+    return new TextEncoder().encode(value);
+}
+
+function utf8Decode(bytes) {
+    return new TextDecoder().decode(bytes);
+}
+
+function concatBytes(...arrays) {
+    let total = 0;
+    for (const array of arrays) total += array.length;
+    const combined = new Uint8Array(total);
+    let offset = 0;
+    for (const array of arrays) {
+        combined.set(array, offset);
+        offset += array.length;
+    }
+    return combined;
+}
+
+function constantTimeEqual(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+    return diff === 0;
+}
+
+// PBKDF2-HMAC-SHA256 (RFC 8018) built on the existing `hmacSha256` helper.
+function pbkdf2Sha256(password, salt, iterations, keyLength) {
+    const hashLength = 32;
+    const blockCount = Math.ceil(keyLength / hashLength);
+    const derived = new Uint8Array(blockCount * hashLength);
+    const saltBlock = new Uint8Array(salt.length + 4);
+    saltBlock.set(salt, 0);
+    for (let block = 1; block <= blockCount; block++) {
+        saltBlock[salt.length] = (block >>> 24) & 0xff;
+        saltBlock[salt.length + 1] = (block >>> 16) & 0xff;
+        saltBlock[salt.length + 2] = (block >>> 8) & 0xff;
+        saltBlock[salt.length + 3] = block & 0xff;
+        let u = hmacSha256(password, saltBlock);
+        const accumulator = u.slice();
+        for (let iteration = 1; iteration < iterations; iteration++) {
+            u = hmacSha256(password, u);
+            for (let i = 0; i < hashLength; i++) accumulator[i] ^= u[i];
+        }
+        derived.set(accumulator, (block - 1) * hashLength);
+    }
+    return derived.slice(0, keyLength);
+}
+
+function rotateLeft32(value, shift) {
+    return ((value << shift) | (value >>> (32 - shift))) >>> 0;
+}
+
+function chacha20QuarterRound(state, a, b, c, d) {
+    state[a] = (state[a] + state[b]) >>> 0; state[d] = rotateLeft32(state[d] ^ state[a], 16);
+    state[c] = (state[c] + state[d]) >>> 0; state[b] = rotateLeft32(state[b] ^ state[c], 12);
+    state[a] = (state[a] + state[b]) >>> 0; state[d] = rotateLeft32(state[d] ^ state[a], 8);
+    state[c] = (state[c] + state[d]) >>> 0; state[b] = rotateLeft32(state[b] ^ state[c], 7);
+}
+
+function readLittleEndian32(bytes, offset) {
+    return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+}
+
+// One 64-byte ChaCha20 keystream block (RFC 8439, 96-bit nonce, 32-bit counter).
+function chacha20Block(key, counter, nonce) {
+    const state = new Uint32Array(16);
+    state[0] = 0x61707865;
+    state[1] = 0x3320646e;
+    state[2] = 0x79622d32;
+    state[3] = 0x6b206574;
+    for (let i = 0; i < 8; i++) state[4 + i] = readLittleEndian32(key, i * 4);
+    state[12] = counter >>> 0;
+    for (let i = 0; i < 3; i++) state[13 + i] = readLittleEndian32(nonce, i * 4);
+
+    const working = state.slice();
+    for (let round = 0; round < 10; round++) {
+        chacha20QuarterRound(working, 0, 4, 8, 12);
+        chacha20QuarterRound(working, 1, 5, 9, 13);
+        chacha20QuarterRound(working, 2, 6, 10, 14);
+        chacha20QuarterRound(working, 3, 7, 11, 15);
+        chacha20QuarterRound(working, 0, 5, 10, 15);
+        chacha20QuarterRound(working, 1, 6, 11, 12);
+        chacha20QuarterRound(working, 2, 7, 8, 13);
+        chacha20QuarterRound(working, 3, 4, 9, 14);
+    }
+
+    const block = new Uint8Array(64);
+    for (let i = 0; i < 16; i++) {
+        const word = (working[i] + state[i]) >>> 0;
+        block[i * 4] = word & 0xff;
+        block[i * 4 + 1] = (word >>> 8) & 0xff;
+        block[i * 4 + 2] = (word >>> 16) & 0xff;
+        block[i * 4 + 3] = (word >>> 24) & 0xff;
+    }
+    return block;
+}
+
+function chacha20Xor(key, nonce, counter, data) {
+    const output = new Uint8Array(data.length);
+    let offset = 0;
+    let blockCounter = counter >>> 0;
+    while (offset < data.length) {
+        const block = chacha20Block(key, blockCounter, nonce);
+        const chunkLength = Math.min(64, data.length - offset);
+        for (let i = 0; i < chunkLength; i++) output[offset + i] = data[offset + i] ^ block[i];
+        offset += chunkLength;
+        blockCounter = (blockCounter + 1) >>> 0;
+    }
+    return output;
+}
+
+function deriveWifKeys(password, salt) {
+    const keyMaterial = pbkdf2Sha256(utf8Encode(password), salt, WIF_PBKDF2_ITERATIONS, 64);
+    return { encryptionKey: keyMaterial.slice(0, 32), macKey: keyMaterial.slice(32, 64) };
 }
 
 export async function encryptWif(wif, password) {
-    const encoder = new TextEncoder();
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveEncryptionKey(password, salt);
-    
-    const encrypted = await window.crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: iv },
-        key,
-        encoder.encode(wif)
+    const salt = window.crypto.getRandomValues(new Uint8Array(WIF_SALT_LENGTH));
+    const nonce = window.crypto.getRandomValues(new Uint8Array(WIF_NONCE_LENGTH));
+    const { encryptionKey, macKey } = deriveWifKeys(password, salt);
+
+    const ciphertext = chacha20Xor(encryptionKey, nonce, 0, utf8Encode(wif));
+    const header = concatBytes(WIF_CRYPTO_MAGIC, salt, nonce);
+    const tag = hmacSha256(macKey, header, ciphertext);
+
+    return btoa(String.fromCharCode(...concatBytes(header, ciphertext, tag)));
+}
+
+// Decrypt a blob written by the legacy `crypto.subtle` AES-GCM implementation.
+// Only possible in a secure context (where `crypto.subtle` exists).
+async function decryptLegacyWif(encryptedBase64, password) {
+    if (!window.crypto || !window.crypto.subtle) {
+        throw new Error(
+            'This key was stored with the legacy AES-GCM format, which requires a secure context (HTTPS or localhost). Please re-enter your WIF key.'
+        );
+    }
+    const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+    const salt = combined.slice(0, 16);
+    const iv = combined.slice(16, 28);
+    const encrypted = combined.slice(28);
+    const keyMaterial = await window.crypto.subtle.importKey('raw', utf8Encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await window.crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: salt, iterations: WIF_PBKDF2_ITERATIONS, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['decrypt']
     );
-    
-    const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
-    combined.set(salt, 0);
-    combined.set(iv, salt.length);
-    combined.set(new Uint8Array(encrypted), salt.length + iv.length);
-    
-    return btoa(String.fromCharCode(...combined));
+    const decrypted = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, encrypted);
+    return utf8Decode(decrypted);
 }
 
 export async function decryptWif(encryptedBase64, password) {
     const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-    
-    const salt = combined.slice(0, 16);
-    const iv = combined.slice(16, 28);
-    const encrypted = combined.slice(28);
-    
-    const key = await deriveEncryptionKey(password, salt);
-    
-    const decrypted = await window.crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: iv },
-        key,
-        encrypted
-    );
-    
-    return new TextDecoder().decode(decrypted);
+    const minimumLength = WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH + WIF_TAG_LENGTH;
+    if (combined.length < minimumLength || !constantTimeEqual(combined.slice(0, WIF_CRYPTO_MAGIC.length), WIF_CRYPTO_MAGIC)) {
+        return decryptLegacyWif(encryptedBase64, password);
+    }
+
+    const salt = combined.slice(WIF_CRYPTO_MAGIC.length, WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH);
+    const nonce = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH, WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH);
+    const ciphertext = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH, combined.length - WIF_TAG_LENGTH);
+    const tag = combined.slice(combined.length - WIF_TAG_LENGTH);
+
+    const { encryptionKey, macKey } = deriveWifKeys(password, salt);
+    const header = concatBytes(WIF_CRYPTO_MAGIC, salt, nonce);
+    const expectedTag = hmacSha256(macKey, header, ciphertext);
+    if (!constantTimeEqual(tag, expectedTag)) {
+        throw new Error('Invalid password or corrupted WIF data');
+    }
+
+    return utf8Decode(chacha20Xor(encryptionKey, nonce, 0, ciphertext));
 }
 
 export function saveWif(wif, encrypted, encryptedData = null) {
@@ -360,7 +498,7 @@ export function clearWifStorage() {
 
 export function isLegacyPlaintextWif(storage) {
     // Legacy shape stored the raw WIF in `data` with `encrypted` falsy/absent.
-    // New shape always has encrypted === true and an AES-GCM base64 blob in data.
+    // New shape always has encrypted === true and an encrypted base64 blob in data.
     return Boolean(storage && storage.data && storage.encrypted !== true);
 }
 
