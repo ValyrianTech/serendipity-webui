@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import contextmanager
+from typing import ClassVar
 from unittest.mock import patch
 
 import httpx
@@ -317,7 +318,7 @@ def test_non_integer_content_length_is_ignored(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
 
     class StubResponse:
-        headers = {"content-type": "audio/wav", "content-length": "unknown"}
+        headers: ClassVar[dict] = {"content-type": "audio/wav", "content-length": "unknown"}
         content = b"AUDI"
         status_code = 200
 
@@ -335,7 +336,7 @@ def test_undeclared_oversized_body_rejected_by_backstop(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
 
     class StubResponse:
-        headers = {"content-type": "audio/wav"}
+        headers: ClassVar[dict] = {"content-type": "audio/wav"}
         content = b"AUDIO"
         status_code = 200
 
