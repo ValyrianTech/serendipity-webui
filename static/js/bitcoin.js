@@ -286,17 +286,24 @@ const STORAGE_KEY = 'serendipity_wif';
 //
 //   * key derivation: PBKDF2-HMAC-SHA256 (64-byte output)
 //   * encryption:     ChaCha20 (RFC 8439) stream cipher
-//   * authentication: HMAC-SHA256 over magic || salt || nonce || ciphertext
+//   * authentication: HMAC-SHA256 over magic || iterations || salt || nonce || ciphertext
 //                     (encrypt-then-MAC)
 //
-// The stored blob is base64(magic || salt(16) || nonce(12) || ciphertext || tag(32)).
-// Blobs written by the previous AES-GCM implementation carry no magic prefix and
-// are still decryptable via `crypto.subtle` when it is available (secure contexts).
-const WIF_CRYPTO_MAGIC = new Uint8Array([0x53, 0x43, 0x76, 0x32]); // "SCv2"
-const WIF_PBKDF2_ITERATIONS = 1000;
+// The current stored blob is
+// base64(magic "SCv3" || iterations(u32 big-endian) || salt(16) || nonce(12) || ciphertext || tag(32)).
+// The PBKDF2 iteration count is self-describing: it is written into the header so
+// that raising the default iteration count in the future never breaks blobs that
+// were written with a lower count. Older pure-JS blobs ("SCv2", fixed 1000
+// iterations) and legacy AES-GCM blobs (no magic prefix) are still decryptable.
+const WIF_CRYPTO_MAGIC = new Uint8Array([0x53, 0x43, 0x76, 0x33]); // "SCv3"
+const WIF_CRYPTO_MAGIC_V2 = new Uint8Array([0x53, 0x43, 0x76, 0x32]); // "SCv2"
+const WIF_PBKDF2_ITERATIONS = 600000;
+const WIF_LEGACY_PBKDF2_ITERATIONS = 1000;
+const WIF_LEGACY_AES_GCM_ITERATIONS = 1000;
 const WIF_SALT_LENGTH = 16;
 const WIF_NONCE_LENGTH = 12;
 const WIF_TAG_LENGTH = 32;
+const WIF_ITERATIONS_LENGTH = 4;
 
 function utf8Encode(value) {
     return new TextEncoder().encode(value);
@@ -323,6 +330,19 @@ function constantTimeEqual(a, b) {
     let diff = 0;
     for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
     return diff === 0;
+}
+
+function writeUint32BE(value) {
+    return new Uint8Array([
+        (value >>> 24) & 0xff,
+        (value >>> 16) & 0xff,
+        (value >>> 8) & 0xff,
+        value & 0xff
+    ]);
+}
+
+function readUint32BE(bytes, offset) {
+    return ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
 }
 
 // PBKDF2-HMAC-SHA256 (RFC 8018) built on the existing `hmacSha256` helper.
@@ -411,18 +431,19 @@ function chacha20Xor(key, nonce, counter, data) {
     return output;
 }
 
-function deriveWifKeys(password, salt) {
-    const keyMaterial = pbkdf2Sha256(utf8Encode(password), salt, WIF_PBKDF2_ITERATIONS, 64);
+function deriveWifKeys(password, salt, iterations) {
+    const keyMaterial = pbkdf2Sha256(utf8Encode(password), salt, iterations, 64);
     return { encryptionKey: keyMaterial.slice(0, 32), macKey: keyMaterial.slice(32, 64) };
 }
 
-export async function encryptWif(wif, password) {
+export async function encryptWif(wif, password, iterations = WIF_PBKDF2_ITERATIONS) {
     const salt = window.crypto.getRandomValues(new Uint8Array(WIF_SALT_LENGTH));
     const nonce = window.crypto.getRandomValues(new Uint8Array(WIF_NONCE_LENGTH));
-    const { encryptionKey, macKey } = deriveWifKeys(password, salt);
+    const { encryptionKey, macKey } = deriveWifKeys(password, salt, iterations);
 
     const ciphertext = chacha20Xor(encryptionKey, nonce, 0, utf8Encode(wif));
-    const header = concatBytes(WIF_CRYPTO_MAGIC, salt, nonce);
+    const iterationsBytes = writeUint32BE(iterations);
+    const header = concatBytes(WIF_CRYPTO_MAGIC, iterationsBytes, salt, nonce);
     const tag = hmacSha256(macKey, header, ciphertext);
 
     return btoa(String.fromCharCode(...concatBytes(header, ciphertext, tag)));
@@ -442,7 +463,7 @@ async function decryptLegacyWif(encryptedBase64, password) {
     const encrypted = combined.slice(28);
     const keyMaterial = await window.crypto.subtle.importKey('raw', utf8Encode(password), 'PBKDF2', false, ['deriveKey']);
     const key = await window.crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt: salt, iterations: WIF_PBKDF2_ITERATIONS, hash: 'SHA-256' },
+        { name: 'PBKDF2', salt: salt, iterations: WIF_LEGACY_AES_GCM_ITERATIONS, hash: 'SHA-256' },
         keyMaterial,
         { name: 'AES-GCM', length: 256 },
         false,
@@ -454,24 +475,57 @@ async function decryptLegacyWif(encryptedBase64, password) {
 
 export async function decryptWif(encryptedBase64, password) {
     const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-    const minimumLength = WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH + WIF_TAG_LENGTH;
-    if (combined.length < minimumLength || !constantTimeEqual(combined.slice(0, WIF_CRYPTO_MAGIC.length), WIF_CRYPTO_MAGIC)) {
-        return decryptLegacyWif(encryptedBase64, password);
+
+    const isScv3 = combined.length >= WIF_CRYPTO_MAGIC.length &&
+        constantTimeEqual(combined.slice(0, WIF_CRYPTO_MAGIC.length), WIF_CRYPTO_MAGIC);
+    const isScv2 = combined.length >= WIF_CRYPTO_MAGIC_V2.length &&
+        constantTimeEqual(combined.slice(0, WIF_CRYPTO_MAGIC_V2.length), WIF_CRYPTO_MAGIC_V2);
+
+    if (isScv3) {
+        const minimumLength = WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH + WIF_NONCE_LENGTH + WIF_TAG_LENGTH;
+        if (combined.length < minimumLength) {
+            throw new Error('Invalid password or corrupted WIF data');
+        }
+
+        const iterationsBytes = combined.slice(WIF_CRYPTO_MAGIC.length, WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH);
+        const iterations = readUint32BE(iterationsBytes, 0);
+        const salt = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH, WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH);
+        const nonce = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH, WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH + WIF_NONCE_LENGTH);
+        const ciphertext = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH + WIF_NONCE_LENGTH, combined.length - WIF_TAG_LENGTH);
+        const tag = combined.slice(combined.length - WIF_TAG_LENGTH);
+
+        const { encryptionKey, macKey } = deriveWifKeys(password, salt, iterations);
+        const header = concatBytes(WIF_CRYPTO_MAGIC, iterationsBytes, salt, nonce);
+        const expectedTag = hmacSha256(macKey, header, ciphertext);
+        if (!constantTimeEqual(tag, expectedTag)) {
+            throw new Error('Invalid password or corrupted WIF data');
+        }
+
+        return utf8Decode(chacha20Xor(encryptionKey, nonce, 0, ciphertext));
     }
 
-    const salt = combined.slice(WIF_CRYPTO_MAGIC.length, WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH);
-    const nonce = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH, WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH);
-    const ciphertext = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH, combined.length - WIF_TAG_LENGTH);
-    const tag = combined.slice(combined.length - WIF_TAG_LENGTH);
+    if (isScv2) {
+        const minimumLength = WIF_CRYPTO_MAGIC_V2.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH + WIF_TAG_LENGTH;
+        if (combined.length < minimumLength) {
+            throw new Error('Invalid password or corrupted WIF data');
+        }
 
-    const { encryptionKey, macKey } = deriveWifKeys(password, salt);
-    const header = concatBytes(WIF_CRYPTO_MAGIC, salt, nonce);
-    const expectedTag = hmacSha256(macKey, header, ciphertext);
-    if (!constantTimeEqual(tag, expectedTag)) {
-        throw new Error('Invalid password or corrupted WIF data');
+        const salt = combined.slice(WIF_CRYPTO_MAGIC_V2.length, WIF_CRYPTO_MAGIC_V2.length + WIF_SALT_LENGTH);
+        const nonce = combined.slice(WIF_CRYPTO_MAGIC_V2.length + WIF_SALT_LENGTH, WIF_CRYPTO_MAGIC_V2.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH);
+        const ciphertext = combined.slice(WIF_CRYPTO_MAGIC_V2.length + WIF_SALT_LENGTH + WIF_NONCE_LENGTH, combined.length - WIF_TAG_LENGTH);
+        const tag = combined.slice(combined.length - WIF_TAG_LENGTH);
+
+        const { encryptionKey, macKey } = deriveWifKeys(password, salt, WIF_LEGACY_PBKDF2_ITERATIONS);
+        const header = concatBytes(WIF_CRYPTO_MAGIC_V2, salt, nonce);
+        const expectedTag = hmacSha256(macKey, header, ciphertext);
+        if (!constantTimeEqual(tag, expectedTag)) {
+            throw new Error('Invalid password or corrupted WIF data');
+        }
+
+        return utf8Decode(chacha20Xor(encryptionKey, nonce, 0, ciphertext));
     }
 
-    return utf8Decode(chacha20Xor(encryptionKey, nonce, 0, ciphertext));
+    return decryptLegacyWif(encryptedBase64, password);
 }
 
 export function saveWif(wif, encrypted, encryptedData = null) {

@@ -143,7 +143,7 @@
         </div>
         
         <div class="flex gap-3">
-            <button onclick="saveNewWifKey()" class="btn-primary flex-1">Save</button>
+            <button id="save-new-wif-button" onclick="saveNewWifKey()" class="btn-primary flex-1">Save</button>
             <button onclick="generateNewKey()" class="btn-secondary">Generate New</button>
             <button onclick="closeChangeWifModal()" class="btn-secondary">Cancel</button>
         </div>
@@ -155,6 +155,29 @@
 <script type="module">
     import { getSettings, saveSettings, saveComfyUIServer } from '/static/js/api.js';
     import { wifToAddress, generateWifKey, encryptWif, saveWif, loadWifStorage, clearWifStorage } from '/static/js/bitcoin.js';
+
+    // Show a busy state while a slow (PBKDF2) key derivation runs, then yield a
+    // macrotask so the browser can paint the updated label before the blocking
+    // synchronous derivation begins. Restores the original label/disabled state
+    // when the wrapped promise settles.
+    window.withWifBusy = async function (buttonId, busyLabel, task) {
+        const button = buttonId ? document.getElementById(buttonId) : null;
+        const originalLabel = button ? button.textContent : null;
+        if (button) {
+            button.disabled = true;
+            button.textContent = busyLabel;
+        }
+        // Yield so the paint happens before the blocking derivation starts.
+        await new Promise(function (resolve) { setTimeout(resolve, 0); });
+        try {
+            return await task();
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalLabel;
+            }
+        }
+    };
     
     document.addEventListener('DOMContentLoaded', () => {
         loadSettings();
@@ -280,7 +303,9 @@
         }
         
         try {
-            const encrypted = await encryptWif(wif, password);
+            const encrypted = await window.withWifBusy('save-new-wif-button', 'Encrypting…', async function () {
+                return await encryptWif(wif, password);
+            });
             saveWif(null, true, encrypted);
             
             window.currentWif = wif;

@@ -145,9 +145,9 @@ function __runChacha20(keyHex, nonceHex, counter, length) {
     return __bytesToHex(chacha20Xor(__hexToBytes(keyHex), __hexToBytes(nonceHex), counter, data));
 }
 
-function __runEncrypt(wif, password) {
+function __runEncrypt(wif, password, iterations) {
     __asyncResult = { status: 'pending', threw: false, message: null, value: null };
-    encryptWif(wif, password).then(
+    encryptWif(wif, password, iterations).then(
         function (v) { __asyncResult = { status: 'fulfilled', threw: false, message: null, value: v }; },
         function (e) { __asyncResult = { status: 'rejected', threw: true, message: e.message, value: null }; }
     );
@@ -163,15 +163,30 @@ function __runDecrypt(blob, password) {
     return __asyncResult;
 }
 
-function __runRoundTrip(wif, password) {
+function __runRoundTrip(wif, password, iterations) {
     __asyncResult = { status: 'pending', threw: false, message: null, value: null };
-    encryptWif(wif, password).then(function (blob) {
+    encryptWif(wif, password, iterations).then(function (blob) {
         return decryptWif(blob, password);
     }).then(
         function (v) { __asyncResult = { status: 'fulfilled', threw: false, message: null, value: v }; },
         function (e) { __asyncResult = { status: 'rejected', threw: true, message: e.message, value: null }; }
     );
     return __asyncResult;
+}
+
+// Reconstructs the legacy SCv2 blob layout (magic || salt || nonce ||
+// ciphertext || tag) at the fixed 1000 iteration count, exactly as the old
+// pure-JS writer produced it, so decryptWif's SCv2 read path can be exercised.
+function __buildScv2Blob(wif, password) {
+    var salt = window.crypto.getRandomValues(new Uint8Array(WIF_SALT_LENGTH));
+    var nonce = window.crypto.getRandomValues(new Uint8Array(WIF_NONCE_LENGTH));
+    var keyMaterial = pbkdf2Sha256(utf8Encode(password), salt, WIF_LEGACY_PBKDF2_ITERATIONS, 64);
+    var encryptionKey = keyMaterial.slice(0, 32);
+    var macKey = keyMaterial.slice(32, 64);
+    var ciphertext = chacha20Xor(encryptionKey, nonce, 0, utf8Encode(wif));
+    var header = concatBytes(WIF_CRYPTO_MAGIC_V2, salt, nonce);
+    var tag = hmacSha256(macKey, header, ciphertext);
+    return btoa(String.fromCharCode.apply(null, concatBytes(header, ciphertext, tag)));
 }
 """
 
@@ -254,8 +269,11 @@ def _run_async(ctx: quickjs.Context, call: str) -> dict:
     return json.loads(ctx.eval("JSON.stringify(__asyncResult)"))
 
 
-def _encrypt(ctx: quickjs.Context, wif: str, password: str) -> str:
-    result = _run_async(ctx, "__runEncrypt(" + json.dumps(wif) + ", " + json.dumps(password) + ")")
+def _encrypt(ctx: quickjs.Context, wif: str, password: str, iterations: int | None = None) -> str:
+    args = [json.dumps(wif), json.dumps(password)]
+    if iterations is not None:
+        args.append(str(iterations))
+    result = _run_async(ctx, "__runEncrypt(" + ", ".join(args) + ")")
     assert result["status"] == "fulfilled", result["message"]
     return result["value"]
 
@@ -281,6 +299,12 @@ def test_pbkdf2_sha256_matches_hashlib():
         assert actual == expected, (password, salt, iterations, key_length)
 
 
+def test_pbkdf2_sha256_known_answer_vector():
+    ctx = _build_context()
+    actual = _run_pbkdf2(ctx, "password", "73616c74", 4096, 32)
+    assert actual == "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a"
+
+
 def test_chacha20_matches_rfc8439_vector():
     ctx = _build_context()
     actual = _run_chacha20(ctx, _CHACHA_KEY.hex(), _CHACHA_NONCE.hex(), _CHACHA_COUNTER, len(_CHACHA_KEYSTREAM))
@@ -294,7 +318,7 @@ def test_round_trip_without_crypto_subtle():
     ctx = _build_context()
     result = _run_async(
         ctx,
-        "__runRoundTrip(" + json.dumps(_VALID_WIF) + ", " + json.dumps("correct horse battery staple") + ")",
+        "__runRoundTrip(" + json.dumps(_VALID_WIF) + ", " + json.dumps("correct horse battery staple") + ", 1000)",
     )
     assert result["status"] == "fulfilled", result["message"]
     assert result["value"] == _VALID_WIF
@@ -302,22 +326,27 @@ def test_round_trip_without_crypto_subtle():
 
 def test_encrypted_blob_has_magic_prefix():
     ctx = _build_context()
-    blob = _encrypt(ctx, _VALID_WIF, "password")
+    default_iterations = ctx.eval("WIF_PBKDF2_ITERATIONS")
+    assert default_iterations >= 600000
+    assert default_iterations == 600000
+
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
     raw = base64.b64decode(blob)
-    assert raw[:4] == b"SCv2"
-    assert len(raw) == 4 + 16 + 12 + len(_VALID_WIF) + 32
+    assert raw[:4] == b"SCv3"
+    assert len(raw) == 4 + 4 + 16 + 12 + len(_VALID_WIF) + 32
+    assert int.from_bytes(raw[4:8], "big") == 1000
 
 
 def test_encryption_is_randomised():
     ctx = _build_context()
-    first = _encrypt(ctx, _VALID_WIF, "password")
-    second = _encrypt(ctx, _VALID_WIF, "password")
+    first = _encrypt(ctx, _VALID_WIF, "password", 1000)
+    second = _encrypt(ctx, _VALID_WIF, "password", 1000)
     assert first != second
 
 
 def test_decrypt_with_wrong_password_is_rejected():
     ctx = _build_context()
-    blob = _encrypt(ctx, _VALID_WIF, "right-password")
+    blob = _encrypt(ctx, _VALID_WIF, "right-password", 1000)
     result = _decrypt(ctx, blob, "wrong-password")
     assert result["status"] == "rejected"
     assert "Invalid password" in result["message"]
@@ -325,9 +354,9 @@ def test_decrypt_with_wrong_password_is_rejected():
 
 def test_decrypt_rejects_tampered_ciphertext():
     ctx = _build_context()
-    blob = _encrypt(ctx, _VALID_WIF, "password")
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
     raw = bytearray(base64.b64decode(blob))
-    raw[4 + 16 + 12] ^= 0x01  # flip a bit in the first ciphertext byte
+    raw[4 + 4 + 16 + 12] ^= 0x01  # flip a bit in the first ciphertext byte
     tampered = base64.b64encode(bytes(raw)).decode()
     result = _decrypt(ctx, tampered, "password")
     assert result["status"] == "rejected"
@@ -336,12 +365,42 @@ def test_decrypt_rejects_tampered_ciphertext():
 
 def test_decrypt_rejects_tampered_tag():
     ctx = _build_context()
-    blob = _encrypt(ctx, _VALID_WIF, "password")
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
     raw = bytearray(base64.b64decode(blob))
     raw[-1] ^= 0x01  # flip a bit in the authentication tag
     tampered = base64.b64encode(bytes(raw)).decode()
     result = _decrypt(ctx, tampered, "password")
     assert result["status"] == "rejected"
+
+
+def test_decrypt_rejects_tampered_iteration_count():
+    ctx = _build_context()
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
+    raw = bytearray(base64.b64decode(blob))
+    # Flip the low bit of the 32-bit big-endian iteration count so it reads 1001
+    # instead of 1000 (still small enough to derive quickly) while the stored
+    # ciphertext/tag were produced with the original 1000 iterations.
+    raw[7] ^= 0x01
+    tampered = base64.b64encode(bytes(raw)).decode()
+    result = _decrypt(ctx, tampered, "password")
+    assert result["status"] == "rejected"
+    assert "Invalid password" in result["message"]
+
+
+def test_decrypt_accepts_low_iteration_scv3_blob():
+    ctx = _build_context()
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
+    result = _decrypt(ctx, blob, "password")
+    assert result["status"] == "fulfilled"
+    assert result["value"] == _VALID_WIF
+
+
+def test_decrypt_accepts_legacy_scv2_blob():
+    ctx = _build_context()
+    blob = ctx.eval("__buildScv2Blob(" + json.dumps(_VALID_WIF) + ", " + json.dumps("password") + ")")
+    result = _decrypt(ctx, blob, "password")
+    assert result["status"] == "fulfilled"
+    assert result["value"] == _VALID_WIF
 
 
 def test_legacy_blob_without_crypto_subtle_raises_clear_error():
