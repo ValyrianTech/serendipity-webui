@@ -245,6 +245,30 @@ def test_tts_server_returns_null_when_unconfigured(client, monkeypatch):
     assert result.json() == {"url": None}
 
 
+def test_tts_server_cross_origin_rejected(client):
+    result = client.get("/api/tts-server", headers={"Origin": "http://evil.example.com"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
+
+
+def test_tts_server_cross_origin_referer_rejected(client):
+    result = client.get("/api/tts-server", headers={"Referer": "http://evil.example.com/page"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
+
+
+def test_tts_server_same_origin_allowed(client):
+    result = client.get("/api/tts-server", headers={"Origin": "http://testserver"})
+    assert result.status_code == 200
+    assert result.json() == {"url": "http://tts.local"}
+
+
+def test_tts_server_same_origin_referer_allowed(client):
+    result = client.get("/api/tts-server", headers={"Referer": "http://testserver/page"})
+    assert result.status_code == 200
+    assert result.json() == {"url": "http://tts.local"}
+
+
 def test_oversized_response_returns_502(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})

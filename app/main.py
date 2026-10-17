@@ -348,7 +348,7 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
 
 
 @app.get("/api/tts-server")
-async def tts_server() -> JSONResponse:
+async def tts_server(request: Request) -> JSONResponse:
     """Return the resolved default TTS server URL from server-side configuration.
 
     A read-only view of the configured default server, used by the UI for
@@ -356,10 +356,18 @@ async def tts_server() -> JSONResponse:
     concrete server URL (e.g. voice initialization). The proxy endpoint itself
     never uses a client-supplied URL.
 
+    Cross-origin requests are rejected with 403 to avoid leaking the configured
+    server URL to unrelated origins.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
     :returns: A JSON object with the resolved ``url``, or ``null`` when no
         default server is configured.
     :rtype: JSONResponse
     """
+    if not _origin_allowed(request):
+        return JSONResponse({"error": "Cross-origin TTS server request rejected"}, status_code=403)
+
     return JSONResponse({"url": resolve_tts_server(DEFAULT_TTS_SERVER)})
 
 
