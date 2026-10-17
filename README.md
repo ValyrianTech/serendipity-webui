@@ -176,7 +176,8 @@ serendipity-webui/
 │   ├── test_wif_busy_state.py # withWifBusy() busy-state UI helper tests
 │   ├── test_wif_encryption.py # WIF at-rest encryption tests (SCv2/SCv3/legacy, KAT, tamper)
 │   ├── test_wif_validation.py # WIF parse/validation tests
-│   └── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
+│   ├── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
+│   └── test_api_json_error_handling.py # API client JSON/status error-handling tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
 ├── requirements.txt        # Python dependencies
@@ -215,6 +216,8 @@ The web UI connects to a Serendipity backend server. All POST requests are authe
   "data": { /* request payload */ }
 }
 ```
+
+Every API call routes its `fetch` response through a shared `parseJsonResponse()` helper (`static/js/api.js`), which checks the HTTP status and `Content-Type` before parsing. Failed (non-2xx) requests throw an `Error` carrying the server's JSON `error`/`detail` message when the body is `application/json` (falling back to the status/status text otherwise), and successful responses that are not `application/json` are reported clearly as a `non-JSON response` error rather than surfacing an unhelpful JSON parse failure.
 
 ## Development
 
