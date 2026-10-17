@@ -298,6 +298,8 @@ const STORAGE_KEY = 'serendipity_wif';
 const WIF_CRYPTO_MAGIC = new Uint8Array([0x53, 0x43, 0x76, 0x33]); // "SCv3"
 const WIF_CRYPTO_MAGIC_V2 = new Uint8Array([0x53, 0x43, 0x76, 0x32]); // "SCv2"
 const WIF_PBKDF2_ITERATIONS = 600000;
+const WIF_MAX_PBKDF2_ITERATIONS = 10000000; // upper bound on iterations read from a blob header
+// Guards against a corrupted/tampered header causing an unbounded synchronous PBKDF2 loop.
 const WIF_LEGACY_PBKDF2_ITERATIONS = 1000;
 const WIF_LEGACY_AES_GCM_ITERATIONS = 1000;
 const WIF_SALT_LENGTH = 16;
@@ -489,6 +491,9 @@ export async function decryptWif(encryptedBase64, password) {
 
         const iterationsBytes = combined.slice(WIF_CRYPTO_MAGIC.length, WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH);
         const iterations = readUint32BE(iterationsBytes, 0);
+        if (iterations === 0 || iterations > WIF_MAX_PBKDF2_ITERATIONS) {
+            throw new Error('Invalid password or corrupted WIF data');
+        }
         const salt = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH, WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH);
         const nonce = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH, WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH + WIF_NONCE_LENGTH);
         const ciphertext = combined.slice(WIF_CRYPTO_MAGIC.length + WIF_ITERATIONS_LENGTH + WIF_SALT_LENGTH + WIF_NONCE_LENGTH, combined.length - WIF_TAG_LENGTH);

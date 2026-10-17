@@ -387,6 +387,32 @@ def test_decrypt_rejects_tampered_iteration_count():
     assert "Invalid password" in result["message"]
 
 
+def test_decrypt_rejects_absurd_iteration_count():
+    ctx = _build_context()
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
+    raw = bytearray(base64.b64decode(blob))
+    # Overwrite the 32-bit big-endian iteration field with 0xFFFFFFFF. The guard
+    # must reject the header before PBKDF2 runs, so this returns quickly rather
+    # than looping ~4 billion times.
+    raw[4:8] = b"\xff\xff\xff\xff"
+    tampered = base64.b64encode(bytes(raw)).decode()
+    result = _decrypt(ctx, tampered, "password")
+    assert result["status"] == "rejected"
+    assert "Invalid password" in result["message"]
+
+
+def test_decrypt_rejects_zero_iteration_count():
+    ctx = _build_context()
+    blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
+    raw = bytearray(base64.b64decode(blob))
+    # A zero iteration count is invalid and must be rejected before PBKDF2 runs.
+    raw[4:8] = b"\x00\x00\x00\x00"
+    tampered = base64.b64encode(bytes(raw)).decode()
+    result = _decrypt(ctx, tampered, "password")
+    assert result["status"] == "rejected"
+    assert "Invalid password" in result["message"]
+
+
 def test_decrypt_accepts_low_iteration_scv3_blob():
     ctx = _build_context()
     blob = _encrypt(ctx, _VALID_WIF, "password", 1000)
