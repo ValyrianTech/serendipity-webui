@@ -1,16 +1,15 @@
 """FastAPI web UI application for the Serendipity AI agent platform."""
 
-import ipaddress
+import json
 import logging
 import os
-import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -23,136 +22,53 @@ logger = logging.getLogger(__name__)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
-ALLOWED_TTS_SCHEMES = ("http", "https")
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
+DEFAULT_TTS_SERVER = "primary"
 
 WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
 
 
-def _env_flag(name: str) -> bool:
-    """Return True when an environment variable holds a truthy value.
+def get_configured_tts_servers() -> dict[str, str]:
+    """Return the trusted TTS server map (selector key -> base URL).
 
-    The values ``1``, ``true``, ``yes``, and ``on`` are treated as truthy
-    (case-insensitively). Any other value, including an unset variable, is
-    treated as falsey.
+    The map is read from the ``SERENDIPITY_TTS_SERVERS`` environment variable,
+    which must hold a JSON object mapping opaque selector keys to base URLs
+    (e.g. ``{"primary": "http://192.168.1.50:8000/tts"}``). This is the only
+    source of TTS server URLs; request-supplied values are never used to build
+    an outbound request.
 
-    :param name: The name of the environment variable to inspect.
-    :type name: str
-    :returns: True when the variable holds a truthy value, False otherwise.
-    :rtype: bool
+    :returns: A mapping of selector key to base URL. Empty when the variable is
+        unset, not valid JSON, or not a JSON object.
+    :rtype: dict[str, str]
     """
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _get_allowed_tts_hosts() -> set[str]:
-    """Return the set of operator-allowlisted TTS host names from the environment.
-
-    Reads ``SERENDIPITY_TTS_ALLOWED_HOSTS`` (a comma-separated list of host
-    names), stripping whitespace, lowercasing, and dropping empty entries.
-
-    :returns: A set of lowercase, allowlisted host names.
-    :rtype: set[str]
-    """
-    raw = os.environ.get("SERENDIPITY_TTS_ALLOWED_HOSTS", "")
-    return {host.strip().lower() for host in raw.split(",") if host.strip()}
-
-
-def _resolve_host(host: str) -> list[str]:
-    """Resolve a host name to the list of IP address strings it maps to.
-
-    :param host: The host name (or IP literal) to resolve.
-    :type host: str
-    :returns: A list of IP address strings the host resolves to.
-    :rtype: list[str]
-    :raises ValueError: If the host cannot be resolved.
-    """
+    raw = os.environ.get("SERENDIPITY_TTS_SERVERS", "").strip()
+    if not raw:
+        return {}
     try:
-        infos = socket.getaddrinfo(host, None)
-    except (socket.gaierror, OSError) as exc:
-        raise ValueError(f"could not resolve host {host!r}") from exc
-    return [str(info[4][0]) for info in infos]
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("SERENDIPITY_TTS_SERVERS is not valid JSON; ignoring")
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("SERENDIPITY_TTS_SERVERS must be a JSON object; ignoring")
+        return {}
+    return {
+        key: value
+        for key, value in data.items()
+        if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip()
+    }
 
 
-def _is_blocked_ip(ip_str: str) -> bool:
-    """Return True if an IP address should be blocked for TTS proxying.
+def resolve_tts_server(selector: str) -> str | None:
+    """Resolve an opaque selector to a trusted TTS base URL, or None if unknown.
 
-    :param ip_str: The IP address string to check.
-    :type ip_str: str
-    :returns: True if the address is private, loopback, link-local, reserved,
-        multicast, or unspecified, or if it cannot be parsed.
-    :rtype: bool
+    :param selector: The opaque selector key supplied by the client.
+    :type selector: str
+    :returns: The configured base URL, or None when the selector is unknown.
+    :rtype: str | None
     """
-    try:
-        ip = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return True
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-    )
-
-
-def _format_netloc_ip(ip: str) -> str:
-    """Render an IP address for use in a URL netloc, bracketing IPv6 literals.
-
-    :param ip: The IP address string (IPv4 or IPv6).
-    :type ip: str
-    :returns: The IP, wrapped in square brackets for IPv6 (e.g. ``[::1]``),
-        or unchanged for IPv4.
-    :rtype: str
-    """
-    if ipaddress.ip_address(ip).version == 6:
-        return f"[{ip}]"
-    return ip
-
-
-def _validate_tts_server(server: str) -> tuple[str, str | None]:
-    """Validate a TTS server URL to prevent SSRF to internal or non-HTTP resources.
-
-    :param server: The TTS server base URL to validate.
-    :type server: str
-    :returns: A tuple of ``(server_url, validated_ip)``. ``server_url`` is the
-        original ``server`` URL, and ``validated_ip`` is the single resolved and
-        vetted IP address to connect to, or ``None`` when the host is
-        operator-allowlisted (in which case the hostname is used directly).
-    :rtype: tuple[str, str | None]
-    :raises ValueError: If the scheme, host, or resolved IPs are disallowed.
-    """
-    parsed = urlparse(server)
-    if parsed.scheme not in ALLOWED_TTS_SCHEMES:
-        raise ValueError("invalid scheme")
-    host = parsed.hostname
-    if not host:
-        raise ValueError("missing host")
-
-    allowed = _get_allowed_tts_hosts()
-    if host.lower() in allowed:
-        return server, None
-    if allowed:
-        raise ValueError("host not allowed")
-    if not _env_flag("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST"):
-        raise ValueError("host not allowed")
-
-    try:
-        ipaddress.ip_address(host)
-        host_is_ip_literal = True
-    except ValueError:
-        host_is_ip_literal = False
-    if host_is_ip_literal:
-        if _is_blocked_ip(host):
-            raise ValueError("blocked IP")
-        return server, host
-
-    resolved = _resolve_host(host)
-    for ip in resolved:
-        if _is_blocked_ip(ip):
-            raise ValueError("blocked IP")
-    return server, resolved[0]
+    return get_configured_tts_servers().get(selector)
 
 
 def _origin_allowed(request: Request) -> bool:
@@ -348,13 +264,16 @@ async def workflows(request: Request, agent_name: str, workflow_id: str = "", no
 
 
 @app.get("/api/tts-proxy")
-async def tts_proxy(request: Request, server: str, voice: str, text: str, style: str = "default", language: str = "English", speed: float = 1.0) -> Response:
+async def tts_proxy(request: Request, voice: str, text: str, style: str = "default", language: str = "English", speed: float = 1.0, server: str = DEFAULT_TTS_SERVER) -> Response:
     """Proxy TTS requests to avoid browser timeouts on slow generation.
+
+    The ``server`` parameter is an opaque selector key resolved against the
+    server-side ``SERENDIPITY_TTS_SERVERS`` configuration. It is never a URL,
+    and no request-supplied value is used to build the outbound request URL, so
+    the endpoint cannot be used to fetch an attacker-chosen address.
 
     :param request: The incoming HTTP request.
     :type request: Request
-    :param server: The TTS server base URL to forward to.
-    :type server: str
     :param voice: The voice to synthesize with.
     :type voice: str
     :param text: The text to synthesize.
@@ -365,20 +284,21 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
     :type language: str
     :param speed: The playback speed multiplier.
     :type speed: float
+    :param server: The opaque TTS server selector key.
+    :type server: str
     :returns: The synthesized audio, or a JSON error response.
     :rtype: Response
     """
     if not _origin_allowed(request):
         return JSONResponse({"error": "Cross-origin TTS proxy request rejected"}, status_code=403)
 
-    try:
-        server_url, validated_ip = _validate_tts_server(server)
-    except ValueError:
-        return JSONResponse({"error": "Invalid or disallowed TTS server"}, status_code=400)
+    base_url = resolve_tts_server(server)
+    if base_url is None:
+        return JSONResponse({"error": "Unknown TTS server"}, status_code=400)
 
-    # Build the TTS URL
-    server_url = server_url.rstrip('/')
-    parsed = urlparse(server_url)
+    # The request URL is built solely from server-side configuration; the
+    # selector is never concatenated into the URL.
+    request_url = f"{base_url.rstrip('/')}/synthesize_speech/"
     params: dict[str, str | float] = {
         "voice": voice,
         "text": text,
@@ -388,48 +308,36 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
     if speed != 1.0:
         params["speed"] = speed
 
-    # Pin httpx to the exact vetted IP to avoid a second (TOCTOU) DNS resolution,
-    # while preserving the original hostname in the Host header. The server URL's
-    # path prefix (e.g. ``/tts``) must be preserved in front of ``/synthesize_speech/``.
-    path = f"{parsed.path}/synthesize_speech/"
-    host_headers: dict[str, str] = {}
-    if validated_ip is not None:
-        netloc = _format_netloc_ip(validated_ip)
-        if parsed.port is not None:
-            netloc = f"{netloc}:{parsed.port}"
-        request_url = f"{parsed.scheme}://{netloc}{path}"
-        host_header = parsed.hostname or ""
-        if parsed.port is not None:
-            host_header = f"{host_header}:{parsed.port}"
-        host_headers["Host"] = host_header
-    else:
-        request_url = f"{server_url}/synthesize_speech/"
-
     # Use a long timeout for slow TTS generation (5 minutes)
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
         try:
-            async with client.stream("GET", request_url, params=params, headers=host_headers) as response:
-                response.raise_for_status()
+            response = await client.get(request_url, params=params)
+            response.raise_for_status()
 
-                # Ensure we return audio content type
-                content_type = response.headers.get("content-type", "audio/wav")
-                if not content_type.startswith("audio/"):
-                    # TTS server returned non-audio content
-                    return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
+            # Ensure we return audio content type
+            content_type = response.headers.get("content-type", "audio/wav")
+            if not content_type.startswith("audio/"):
+                return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
 
-                chunks: list[bytes] = []
-                total = 0
-                async for chunk in response.aiter_bytes():
-                    total += len(chunk)
-                    if total > MAX_TTS_RESPONSE_BYTES:
+            # Reject oversized responses up front when the server advertises a
+            # Content-Length, and again after reading as a backstop.
+            declared_length = response.headers.get("content-length")
+            if declared_length is not None:
+                try:
+                    if int(declared_length) > MAX_TTS_RESPONSE_BYTES:
                         return JSONResponse({"error": "TTS response too large"}, status_code=502)
-                    chunks.append(chunk)
+                except ValueError:
+                    pass
 
-                return StreamingResponse(
-                    iter(chunks),
-                    media_type=content_type,
-                    headers={"Cache-Control": "no-cache"}
-                )
+            body = response.content
+            if len(body) > MAX_TTS_RESPONSE_BYTES:
+                return JSONResponse({"error": "TTS response too large"}, status_code=502)
+
+            return Response(
+                content=body,
+                media_type=content_type,
+                headers={"Cache-Control": "no-cache"}
+            )
         except httpx.TimeoutException:
             return JSONResponse({"error": "TTS generation timed out"}, status_code=504)
         except httpx.HTTPStatusError as e:
@@ -437,6 +345,22 @@ async def tts_proxy(request: Request, server: str, voice: str, text: str, style:
         except Exception:
             logger.exception("TTS proxy request failed")
             return JSONResponse({"error": "Internal TTS proxy error"}, status_code=500)
+
+
+@app.get("/api/tts-server")
+async def tts_server() -> JSONResponse:
+    """Return the resolved default TTS server URL from server-side configuration.
+
+    A read-only view of the configured default server, used by the UI for
+    actions that call the Serendipity backend directly and therefore need a
+    concrete server URL (e.g. voice initialization). The proxy endpoint itself
+    never uses a client-supplied URL.
+
+    :returns: A JSON object with the resolved ``url``, or ``null`` when no
+        default server is configured.
+    :rtype: JSONResponse
+    """
+    return JSONResponse({"url": resolve_tts_server(DEFAULT_TTS_SERVER)})
 
 
 if __name__ == "__main__":

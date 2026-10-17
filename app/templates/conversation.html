@@ -737,7 +737,7 @@
     }
     
     // Prefetch next chunks while audio is playing
-    async function prefetchChunks(messageId, openvoiceServer, voice, chunks) {
+    async function prefetchChunks(messageId, voice, chunks) {
         if (isFetching || playingMessageId !== messageId) return;
         if (nextFetchIndex >= chunks.length) return;
         
@@ -746,7 +746,7 @@
         nextFetchIndex++;
         
         const chunkText = chunks[fetchIndex];
-        const ttsUrl = getTTSUrl(openvoiceServer, chunkText, voice);
+        const ttsUrl = getTTSUrl(chunkText, voice);
         
         console.log(`Prefetching chunk ${fetchIndex + 1}/${chunks.length}`);
         
@@ -764,11 +764,11 @@
             
             // Try to play if this was the chunk we were waiting for
             if (fetchIndex === currentPlayIndex && !currentAudio) {
-                playFromQueue(messageId, openvoiceServer, voice, chunks);
+                playFromQueue(messageId, voice, chunks);
             }
             
             // Continue prefetching next chunk
-            prefetchChunks(messageId, openvoiceServer, voice, chunks);
+            prefetchChunks(messageId, voice, chunks);
             
         } catch (e) {
             isFetching = false;
@@ -776,12 +776,12 @@
             // Store error so playFromQueue can handle it
             prefetchedBlobs[fetchIndex] = { error: e };
             // Continue trying to prefetch remaining chunks
-            prefetchChunks(messageId, openvoiceServer, voice, chunks);
+            prefetchChunks(messageId, voice, chunks);
         }
     }
     
     // Play from the prefetched queue
-    async function playFromQueue(messageId, openvoiceServer, voice, chunks) {
+    async function playFromQueue(messageId, voice, chunks) {
         if (playingMessageId !== messageId) return;
         
         if (currentPlayIndex >= chunks.length) {
@@ -818,7 +818,7 @@
             currentAudio = null;
             prefetchedBlobs[currentPlayIndex] = null;  // Free memory
             currentPlayIndex++;
-            playFromQueue(messageId, openvoiceServer, voice, chunks);
+            playFromQueue(messageId, voice, chunks);
         };
         
         currentAudio.onerror = () => {
@@ -842,14 +842,6 @@
     }
     
     window.playMessageAudio = function(messageId, sender, content) {
-        const settings = getSettings();
-        const openvoiceServer = settings.openvoiceServer;
-        
-        if (!openvoiceServer) {
-            showToast('Please configure Voice Server in Settings', 'error');
-            return;
-        }
-        
         // Auto-select voice based on sender
         const voice = getVoiceForSender(sender);
         
@@ -899,7 +891,7 @@
         updatePlayButtonState(messageId, true, 'loading');
         
         // Start prefetching and playing
-        prefetchChunks(messageId, openvoiceServer, voice, chunks);
+        prefetchChunks(messageId, voice, chunks);
     };
     
     window.stopMessageAudio = function() {
@@ -966,8 +958,8 @@
     
     function autoPlayLastMessage(messageId, sender, content) {
         const settings = getSettings();
-        // Only require autoPlayVoice and openvoiceServer - voice is derived from sender name
-        if (!settings.autoPlayVoice || !settings.openvoiceServer) return;
+        // Only require autoPlayVoice - voice is derived from sender name
+        if (!settings.autoPlayVoice) return;
         if (playedAudioMessages.has(messageId)) return;
         
         // Auto-play any message type

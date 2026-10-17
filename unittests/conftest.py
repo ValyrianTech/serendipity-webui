@@ -9,8 +9,7 @@ from app.main import app
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch):
     """Keep tests independent of any local .env / environment configuration."""
-    monkeypatch.delenv("SERENDIPITY_TTS_ALLOWED_HOSTS", raising=False)
-    monkeypatch.delenv("SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST", raising=False)
+    monkeypatch.delenv("SERENDIPITY_TTS_SERVERS", raising=False)
 
 
 @pytest.fixture

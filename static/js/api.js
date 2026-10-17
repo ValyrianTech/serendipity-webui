@@ -9,7 +9,6 @@ export function getSettings() {
         websocketPort: localStorage.getItem('serendipity_websocket_port') || '8765',
         agentName: localStorage.getItem('serendipity_agent_name') || 'Serendipity',
         folderName: localStorage.getItem('serendipity_folder_name') || 'default',
-        openvoiceServer: localStorage.getItem('serendipity_openvoice_server') || '',
         autoPlayVoice: localStorage.getItem('serendipity_auto_play') === 'true',
         activeVoice: localStorage.getItem('serendipity_active_voice') || ''
     };
@@ -21,7 +20,6 @@ export function saveSettings(settings) {
     if (settings.websocketPort) localStorage.setItem('serendipity_websocket_port', settings.websocketPort);
     if (settings.agentName) localStorage.setItem('serendipity_agent_name', settings.agentName);
     if (settings.folderName) localStorage.setItem('serendipity_folder_name', settings.folderName);
-    if (settings.openvoiceServer !== undefined) localStorage.setItem('serendipity_openvoice_server', settings.openvoiceServer);
     if (settings.autoPlayVoice !== undefined) localStorage.setItem('serendipity_auto_play', settings.autoPlayVoice);
     if (settings.activeVoice !== undefined) localStorage.setItem('serendipity_active_voice', settings.activeVoice);
 }
@@ -521,12 +519,13 @@ export async function clonePersona(wif, data) {
     return parseJsonResponse(response, 'ClonePersona');
 }
 
-// Generate TTS audio URL using local proxy to avoid browser timeouts
-export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'default', language = 'English') {
-    if (!openvoiceServer || !text || !voice) return null;
+// Generate TTS audio URL using local proxy to avoid browser timeouts.
+// The proxy resolves the TTS server from server-side configuration, so no
+// server URL is sent from the client.
+export function getTTSUrl(text, voice, speed = 1.0, style = 'default', language = 'English') {
+    if (!text || !voice) return null;
     // Use local proxy endpoint to handle slow TTS generation
     const params = new URLSearchParams({
-        server: openvoiceServer,
         voice: voice,
         text: text,
         style: style || 'default',
@@ -534,6 +533,13 @@ export function getTTSUrl(openvoiceServer, text, voice, speed = 1.0, style = 'de
     });
     if (speed && speed !== 1.0) params.append('speed', speed);
     return `/api/tts-proxy?${params.toString()}`;
+}
+
+// Fetch the server-configured default TTS server URL (used by voice
+// initialization, which calls the Serendipity backend directly).
+export async function getTTSServer() {
+    const response = await fetch('/api/tts-server');
+    return parseJsonResponse(response, 'GetTTSServer');
 }
 
 // Scheduled Tasks API

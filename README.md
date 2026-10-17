@@ -96,31 +96,23 @@ cp .env.example .env
 
 - `SERENDIPITY_WEBUI_HOST` — host address the web UI binds to (default `127.0.0.1`; set to `0.0.0.0` to expose the UI on all interfaces).
 - `SERENDIPITY_WEBUI_PORT` — port the web UI listens on (default `8080`).
-- `SERENDIPITY_TTS_ALLOWED_HOSTS` — comma-separated allowlist of TTS proxy host names (see [TTS proxy security](#tts-proxy-security)).
-- `SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST` — opt-in flag (truthy: `1`/`true`/`yes`/`on`, case-insensitive) that permits arbitrary public hosts when `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset (see [TTS proxy security](#tts-proxy-security)).
+- `SERENDIPITY_TTS_SERVERS` — JSON object mapping opaque selector keys to trusted TTS server base URLs (see [TTS proxy security](#tts-proxy-security)).
 
 `.env` is gitignored; commit only `.env.example`.
 
 ### TTS proxy security
 
-The `/api/tts-proxy` endpoint validates the `server` query parameter before forwarding to prevent SSRF to internal or non-HTTP resources:
+The `/api/tts-proxy` endpoint does not accept a server URL from the client. The `server` query parameter is an **opaque selector key** resolved against the server-side `SERENDIPITY_TTS_SERVERS` configuration, and the outbound request URL is built solely from that configuration. Because no request-supplied value is ever used to build the fetch target, the endpoint cannot be driven to fetch an attacker-chosen address — the SSRF class is eliminated by design rather than by validation.
 
-- Cross-origin browser requests are rejected with HTTP 403 (`{"error": "Cross-origin TTS proxy request rejected"}`): the `Origin` header (falling back to `Referer`) is compared against the request `Host` header, and requests that do not match are refused. When neither header is present the request is treated as same-origin.
-- Only `http` and `https` schemes are allowed.
-- If the `SERENDIPITY_TTS_ALLOWED_HOSTS` environment variable is set (a comma-separated list of host names), the resolved host must be in that allowlist.
-- When the host is not allowlisted, it is resolved via DNS and any resulting private, loopback, link-local, reserved, multicast, or unspecified IP is blocked (IP literals are checked as well).
-- **Allowlist entries bypass all IP checks:** when a host matches an entry in `SERENDIPITY_TTS_ALLOWED_HOSTS`, DNS resolution and ALL private/loopback/link-local/reserved/multicast/unspecified IP checks are skipped entirely for that host.
-- Invalid or disallowed servers return HTTP 400 with `{"error": "Invalid or disallowed TTS server"}`.
+- The `server` parameter defaults to `primary`; an unknown selector returns HTTP 400 (`{"error": "Unknown TTS server"}`) and never falls back to an arbitrary URL.
+- `SERENDIPITY_TTS_SERVERS` must be a JSON object mapping selector keys to base URLs (e.g. `{"primary": "http://192.168.0.202:8000"}`). When it is unset, empty, or invalid, no selector resolves and the proxy returns HTTP 400.
+- Cross-origin browser requests are rejected with HTTP 403 (`{"error": "Cross-origin TTS proxy request rejected"}`): the `Origin` header (falling back to `Referer`) is compared against the request `Host` header, and requests that do not match are refused. When neither header is present the request is treated as same-origin. This is defence-in-depth only; correctness does not depend on it.
 - Non-audio (`audio/*`) responses return HTTP 502 (`"TTS server returned non-audio content"`).
+- Responses larger than 25 MB return HTTP 502 (`"TTS response too large"`); the `Content-Length` header is checked before reading the body where present, and the body length is checked again as a backstop.
 - Unexpected proxy failures return HTTP 500 with a generic `"Internal TTS proxy error"` message; details are logged server-side rather than returned to the client.
-- The 25 MB response-size limit is enforced while streaming: the proxy aborts the transfer with HTTP 502 (`"TTS response too large"`) as soon as the accumulated body exceeds the cap, rather than downloading the full response first.
-- For non-allowlisted hosts, the outbound connection is pinned to the single validated (non-blocked) IP resolved during validation — `httpx` is pointed at that IP (port preserved) while the original hostname and port are sent in the `Host` header — so the hostname is not re-resolved at connect time.
+- A read-only `GET /api/tts-server` endpoint returns the resolved default server URL (`{"url": ...}`, or `null` when unconfigured) for UI actions that call the Serendipity backend directly (voice initialization); the proxy itself never uses a client-supplied URL.
 
-When `SERENDIPITY_TTS_ALLOWED_HOSTS` is unset, the proxy is **disabled by default**: a host is only permitted if the opt-in `SERENDIPITY_TTS_ALLOW_ANY_PUBLIC_HOST` flag is set to a truthy value (`1`/`true`/`yes`/`on`, case-insensitive). Otherwise the request is rejected with HTTP 400 (`"host not allowed"`), and no public host is permitted.
-
-> **Note:** For non-allowlisted hosts, the outbound connection is pinned to the single IP that was resolved and validated, so a hostname whose DNS answer changes between validation and connection (a DNS-rebinding / TOCTOU attack) can no longer reach a different (internal) address — the previously open TOCTOU window is closed. Allowlisted hosts bypass DNS resolution and the IP checks entirely (see the warning below), so combine the allowlist with network-level egress controls for defense in depth.
-
-> **Warning:** Because an allowlisted host bypasses DNS resolution and the private-IP checks entirely, a misconfigured allowlist entry (for example an internal hostname, `localhost`, or `127.0.0.1`) reopens the SSRF path to that host. Only ever add trusted, public hosts to `SERENDIPITY_TTS_ALLOWED_HOSTS`, and rely on network-level egress controls for defense in depth rather than on the allowlist to block internal destinations.
+> **Note:** The endpoint buffers the full audio response before returning it (the client consumes complete blobs for `<audio>` playback, and the per-text-chunk prefetch queue provides the streaming behaviour). It does not claim to stream.
 
 ### Template-to-JavaScript interpolation
 
@@ -201,7 +193,8 @@ serendipity-webui/
 | `/toolsets` | Toolset management |
 | `/skills` | Skills management |
 | `/scheduled-tasks` | Scheduled tasks |
-| `/api/tts-proxy` | TTS synthesis proxy endpoint (SSRF-protected; see [Configuration](#configuration)) |
+| `/api/tts-proxy` | TTS synthesis proxy endpoint (server-side selector; see [TTS proxy security](#tts-proxy-security)) |
+| `/api/tts-server` | Read-only default TTS server URL (for voice initialization) |
 
 ## API Integration
 
