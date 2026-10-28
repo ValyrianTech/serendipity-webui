@@ -273,6 +273,39 @@ def test_tts_server_sec_fetch_mode_without_origin_rejected(client):
     assert result.json() == {"error": "Cross-origin TTS server request rejected"}
 
 
+def test_tts_server_same_origin_sec_fetch_without_origin_allowed(client):
+    result = client.get(
+        "/api/tts-server",
+        headers={"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors"},
+    )
+    assert result.status_code == 200
+    assert result.json() == {"url": "http://tts.local"}
+
+
+def test_tts_server_cross_site_sec_fetch_without_origin_rejected(client):
+    result = client.get(
+        "/api/tts-server",
+        headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "cors"},
+    )
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
+
+
+def test_tts_proxy_same_origin_sec_fetch_without_origin_allowed(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get(
+            "/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors"},
+        )
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+    assert capture["url"] == "http://tts.local/synthesize_speech/"
+
+
 def test_oversized_response_returns_502(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
@@ -511,6 +544,25 @@ def test_origin_allowed_rejects_sec_fetch_mode_without_origin():
 
 def test_origin_allowed_rejects_sec_fetch_mode_without_origin_or_referer():
     request = _make_request([("sec-fetch-mode", "cors")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_same_origin_sec_fetch_without_origin_allowed():
+    request = _make_request(
+        [("host", "testserver"), ("sec-fetch-site", "same-origin"), ("sec-fetch-mode", "cors")]
+    )
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_same_origin_sec_fetch_case_insensitive():
+    request = _make_request(
+        [("host", "testserver"), ("sec-fetch-site", "Same-Origin"), ("sec-fetch-mode", "cors")]
+    )
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_cross_site_sec_fetch_without_origin_rejected():
+    request = _make_request([("sec-fetch-site", "cross-site"), ("sec-fetch-mode", "cors")])
     assert app_main._origin_allowed(request) is False
 
 
