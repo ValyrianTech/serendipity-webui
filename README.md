@@ -97,6 +97,7 @@ cp .env.example .env
 - `SERENDIPITY_WEBUI_HOST` — host address the web UI binds to (default `127.0.0.1`; set to `0.0.0.0` to expose the UI on all interfaces).
 - `SERENDIPITY_WEBUI_PORT` — port the web UI listens on (default `8080`).
 - `SERENDIPITY_TTS_SERVERS` — JSON object mapping opaque selector keys to trusted TTS server base URLs (see [TTS proxy security](#tts-proxy-security)).
+- `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` — comma-separated list of allowed origins (scheme + netloc) for cross-origin protection on the TTS endpoints (see [TTS proxy security](#tts-proxy-security)).
 
 `.env` is gitignored; commit only `.env.example`.
 
@@ -106,7 +107,7 @@ The `/api/tts-proxy` endpoint does not accept a server URL from the client. The 
 
 - The `server` parameter defaults to `primary`; an unknown selector returns HTTP 400 (`{"error": "Unknown TTS server"}`) and never falls back to an arbitrary URL.
 - `SERENDIPITY_TTS_SERVERS` must be a JSON object mapping selector keys to base URLs (e.g. `{"primary": "http://192.168.0.202:8000"}`). When it is unset, empty, or invalid, no selector resolves and the proxy returns HTTP 400.
-- Cross-origin browser requests are rejected with HTTP 403 (`{"error": "Cross-origin TTS proxy request rejected"}`): the `Origin` header (falling back to `Referer`) is compared against the request `Host` header, and requests that do not match are refused. When neither header is present the request is treated as same-origin. This is defence-in-depth only; correctness does not depend on it.
+- Cross-origin browser requests are rejected with HTTP 403 (`{"error": "Cross-origin TTS proxy request rejected"}`): the `Origin` header is compared against the server-side allow-list `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` (a comma-separated list of full origins such as `http://127.0.0.1:8080`), matched exactly against scheme + netloc. The `Referer` header is no longer used for the decision, and the request `Host` header is never trusted. When `Origin` is absent the request is allowed only if it does not look like a browser fetch (no `Sec-Fetch-Mode` header); this means `/api/tts-server` still returns the configured URL to non-browser clients. This is defence-in-depth only; correctness does not depend on it.
 - Non-audio (`audio/*`) responses return HTTP 502 (`"TTS server returned non-audio content"`).
 - Responses larger than 25 MB return HTTP 502 (`"TTS response too large"`); the `Content-Length` header is checked before reading the body where present, and the body length is checked again as a backstop.
 - Unexpected proxy failures return HTTP 500 with a generic `"Internal TTS proxy error"` message; details are logged server-side rather than returned to the client.
