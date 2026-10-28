@@ -108,11 +108,14 @@ def _origin_allowed(request: Request) -> bool:
     ``Referer`` header and the request ``Host`` header are never used for the
     decision and are never trusted (both are spoofable).
 
-    When ``Origin`` is absent the request is treated as non-browser traffic
-    (curl, tests, server-to-server): it is allowed unless ``Sec-Fetch-Mode`` is
-    present, which marks the request as a browser subresource fetch that would
-    have sent an ``Origin`` header (such a request is rejected). The ``Referer``
-    header, when present, is logged but never used.
+    When ``Origin`` is absent, a request with ``Sec-Fetch-Site: same-origin`` is
+    a same-origin browser fetch (browsers omit ``Origin`` on same-origin GETs)
+    and is allowed. Otherwise the request is treated as non-browser traffic
+    (curl, tests, server-to-server) and is allowed unless ``Sec-Fetch-Mode`` is
+    present, which marks the request as a browser subresource fetch without
+    ``Sec-Fetch-Site: same-origin`` (e.g. cross-site) that would have sent an
+    ``Origin`` header (such a request is rejected). The ``Referer`` header, when
+    present, is logged but never used.
 
     ``Origin: null`` (an opaque origin from a sandboxed iframe or ``file://``)
     is rejected unless the literal string ``null`` is present in the allow-list.
@@ -131,6 +134,8 @@ def _origin_allowed(request: Request) -> bool:
         referer = request.headers.get("referer")
         if referer is not None:
             logger.info("TTS request has no Origin header (Referer=%s); treating as non-browser client", referer)
+        if (request.headers.get("sec-fetch-site") or "").lower() == "same-origin":
+            return True
         return request.headers.get("sec-fetch-mode") is None
 
     if origin == "null":
@@ -413,8 +418,9 @@ async def tts_server(request: Request) -> JSONResponse:
     server URL to unrelated origins: the ``Origin`` header (scheme + netloc) is
     matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
     allow-list (the ``Referer`` and ``Host`` headers are never used for the
-    decision). Requests without an ``Origin`` header are allowed only when they
-    do not look like a browser fetch (no ``Sec-Fetch-Mode`` header).
+    decision). Requests without an ``Origin`` header are allowed when they are
+    same-origin browser fetches (``Sec-Fetch-Site: same-origin``) or do not
+    look like a browser fetch (no ``Sec-Fetch-Mode`` header).
 
     :param request: The incoming HTTP request.
     :type request: Request
