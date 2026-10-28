@@ -2,6 +2,21 @@
 import { signData, wifToAddress } from './bitcoin.js';
 
 // Get settings from localStorage
+// Return the currently-unlocked WIF key, or null (after showing an error toast)
+// when the user has not unlocked their key yet. Callers should bail out when
+// this returns null: `const wif = requireWif(); if (!wif) return;`
+// This centralizes the guard so new pages cannot forget to check window.currentWif
+// before calling a signed mutation helper.
+export function requireWif() {
+    if (typeof window !== 'undefined' && window.currentWif) {
+        return window.currentWif;
+    }
+    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+        window.showToast('Please unlock your WIF key first', 'error');
+    }
+    return null;
+}
+
 export function getSettings() {
     return {
         serverAddress: localStorage.getItem('serendipity_server_address') || 'localhost',

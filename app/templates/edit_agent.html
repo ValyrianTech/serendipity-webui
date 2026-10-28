@@ -282,7 +282,7 @@
 </div>
 
 <script type="module">
-    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills, getCustomTools, getToolsets } from '/static/js/api.js';
+    import { getAgent, getModels, editAgent, editAgentRole, uploadFile, uploadProfilePicture, uploadVoice, getSettings, getSkills, getCustomTools, getToolsets, requireWif } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     const agentName = {{ agent_name | tojson }};
@@ -803,13 +803,15 @@
     };
     
     window.removeRole = async function(idx) {
+        const wif = requireWif();
+        if (!wif) return;
         const role = roles[idx];
         const roleName = typeof role === 'string' ? role : (role.role_name || role.name);
         
         if (!confirm(`Are you sure you want to delete the role "${roleName}"?`)) return;
         
         try {
-            await editAgentRole(window.currentWif, {
+            await editAgentRole(wif, {
                 agent: agentName,
                 role_name: roleName,
                 action: 'delete'
@@ -853,6 +855,8 @@
     };
     
     window.saveRole = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const name = document.getElementById('role-name').value.trim();
         const rolePrompt = document.getElementById('role-system-message').value.trim();
         
@@ -864,7 +868,7 @@
         try {
             const action = editingRoleIndex >= 0 ? 'edit' : 'add';
             
-            await editAgentRole(window.currentWif, {
+            await editAgentRole(wif, {
                 agent: agentName,
                 role_name: name,
                 role_prompt: rolePrompt,
@@ -996,6 +1000,8 @@
     };
     
     window.saveAgent = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const data = {
             agent: agentName,
             description: document.getElementById('description').value,
@@ -1027,7 +1033,7 @@
         };
         
         try {
-            await editAgent(window.currentWif, data);
+            await editAgent(wif, data);
             showToast('Agent saved successfully', 'success');
         } catch (e) {
             showToast('Failed to save agent: ' + e.message, 'error');
