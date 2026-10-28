@@ -127,8 +127,42 @@ def _origin_allowed(request: Request) -> bool:
       no-``Sec-Fetch-Site`` case; it is not the same-origin distinction and is
       never consulted when ``Sec-Fetch-Site`` is present.
 
-    ``Origin: null`` (an opaque origin from a sandboxed iframe or ``file://``)
-    is rejected unless the literal string ``null`` is present in the allow-list.
+    ``Origin: null`` is a serialized opaque origin. Browsers send the literal
+    header value ``null`` for requests from contexts that have an opaque
+    (non-hierarchical) origin and therefore cannot name themselves, most
+    commonly: (a) a sandboxed iframe (``<iframe sandbox>`` without
+    ``allow-same-origin``), (b) a document loaded from a ``file://`` URL (e.g. a
+    locally-saved copy of an HTML page), (c) a ``data:`` or ``blob:`` URL used
+    as a top-level document, and (d) after a cross-origin redirect that taints
+    the origin. It is NOT the absence of an origin — it is a distinct,
+    explicitly-sent value meaning "I cannot name my origin".
+
+    ``Origin: null`` is rejected by default. The ``null`` origin is shared by
+    every such opaque-origin context, so allow-listing it is all-or-nothing: it
+    does NOT restrict access to one specific app or domain. Any sandboxed iframe
+    on any site, any local ``file://`` page, and any ``data:``/``blob:``
+    document in the user's browser would then be allowed to call the TTS proxy —
+    a much broader grant than a normal named-origin entry, which is why it is off
+    by default.
+
+    Allow-listing the literal string ``null`` is legitimately needed only when
+    the deployment genuinely serves this UI from an opaque-origin context: most
+    realistically, when the UI is opened as a local ``file://`` HTML page rather
+    than from the web server, or when the UI is embedded in a sandboxed iframe
+    WITHOUT ``allow-same-origin`` and that embedder is trusted. In those setups
+    requests carry ``Origin: null`` and would otherwise be rejected, breaking
+    TTS/voice features.
+
+    By adding ``null`` to ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``, operators accept
+    that EVERY opaque-origin context in the user's browser (any sandboxed iframe,
+    any ``file://`` page, any ``data:``/``blob:`` document) is allow-listed, not
+    just the intended one. Only enable it when it is specifically needed, and
+    combine it with the understanding that the allow-list is a coarse
+    defence-in-depth control, not the primary SSRF defence (which is the selector
+    design). Do NOT add ``null`` "just in case": prefer serving the UI from a
+    normal named origin and, for sandboxed embeds, add ``allow-same-origin`` and
+    use the real origin where possible. Only add ``null`` when the deployment
+    truly runs from an opaque origin and the trade-off is understood.
 
     Trade-off: the ``Sec-Fetch-Site``/``Sec-Fetch-Mode`` headers are
     client-supplied and therefore spoofable by non-browser clients. This check
