@@ -291,6 +291,28 @@ def test_tts_server_cross_site_sec_fetch_without_origin_rejected(client):
     assert result.json() == {"error": "Cross-origin TTS server request rejected"}
 
 
+def test_tts_server_same_site_sec_fetch_without_origin_rejected(client):
+    result = client.get(
+        "/api/tts-server",
+        headers={"Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "cors"},
+    )
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
+
+
+def test_tts_server_real_browser_same_origin_fetch_without_origin_allowed(client):
+    result = client.get(
+        "/api/tts-server",
+        headers={
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+        },
+    )
+    assert result.status_code == 200
+    assert result.json() == {"url": "http://tts.local"}
+
+
 def test_tts_proxy_same_origin_sec_fetch_without_origin_allowed(client):
     capture = {}
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
@@ -563,6 +585,35 @@ def test_origin_allowed_same_origin_sec_fetch_case_insensitive():
 
 def test_origin_allowed_cross_site_sec_fetch_without_origin_rejected():
     request = _make_request([("sec-fetch-site", "cross-site"), ("sec-fetch-mode", "cors")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_same_site_sec_fetch_without_origin_rejected():
+    request = _make_request([("sec-fetch-site", "same-site"), ("sec-fetch-mode", "cors")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_none_sec_fetch_without_origin_rejected():
+    request = _make_request([("sec-fetch-site", "none"), ("sec-fetch-mode", "navigate")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_same_origin_sec_fetch_with_no_cors_mode_allowed():
+    request = _make_request(
+        [("host", "testserver"), ("sec-fetch-site", "same-origin"), ("sec-fetch-mode", "no-cors")]
+    )
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_same_origin_sec_fetch_strips_whitespace():
+    request = _make_request(
+        [("host", "testserver"), ("sec-fetch-site", " Same-Origin "), ("sec-fetch-mode", "cors")]
+    )
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_cross_site_sec_fetch_with_navigate_mode_rejected():
+    request = _make_request([("sec-fetch-site", "cross-site"), ("sec-fetch-mode", "navigate")])
     assert app_main._origin_allowed(request) is False
 
 

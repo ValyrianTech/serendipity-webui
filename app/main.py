@@ -102,27 +102,41 @@ def get_allowed_origins() -> frozenset[str]:
 def _origin_allowed(request: Request) -> bool:
     """Return True when the request is permitted to drive the TTS proxy.
 
-    The decision is made solely from the ``Origin`` header, which is matched
+    The decision is made primarily from the ``Origin`` header, which is matched
     exactly (scheme + netloc, case-insensitive, trailing slash stripped) against
     the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. The
     ``Referer`` header and the request ``Host`` header are never used for the
     decision and are never trusted (both are spoofable).
 
-    When ``Origin`` is absent, a request with ``Sec-Fetch-Site: same-origin`` is
-    a same-origin browser fetch (browsers omit ``Origin`` on same-origin GETs)
-    and is allowed. Otherwise the request is treated as non-browser traffic
-    (curl, tests, server-to-server) and is allowed unless ``Sec-Fetch-Mode`` is
-    present, which marks the request as a browser subresource fetch without
-    ``Sec-Fetch-Site: same-origin`` (e.g. cross-site) that would have sent an
-    ``Origin`` header (such a request is rejected). The ``Referer`` header, when
-    present, is logged but never used.
+    When ``Origin`` is absent the decision is based on ``Sec-Fetch-Site``, not
+    ``Sec-Fetch-Mode``:
+
+    * ``Sec-Fetch-Site: same-origin`` (case-insensitive, whitespace stripped) is
+      the positive same-origin signal: browsers omit ``Origin`` on same-origin
+      GETs but still send ``Sec-Fetch-Site: same-origin``, so such requests are
+      allowed.
+    * Any other ``Sec-Fetch-Site`` value (``same-site``, ``cross-site``,
+      ``none``) is rejected: a browser that sends fetch metadata always sends a
+      correct ``Sec-Fetch-Site``, so a cross-site/same-site fetch is exactly
+      what must be blocked, and ``none`` (user-initiated navigation) has no
+      business calling these JSON/audio APIs.
+    * A request with no ``Sec-Fetch-Site`` at all is assumed to be a non-browser
+      client (curl, server-to-server, tests) and is allowed — but only when it
+      also lacks a ``Sec-Fetch-Mode`` header. ``Sec-Fetch-Mode`` is therefore
+      only a secondary "does this look like a browser?" detector for the
+      no-``Sec-Fetch-Site`` case; it is not the same-origin distinction and is
+      never consulted when ``Sec-Fetch-Site`` is present.
 
     ``Origin: null`` (an opaque origin from a sandboxed iframe or ``file://``)
     is rejected unless the literal string ``null`` is present in the allow-list.
 
-    Note: this trade-off means a non-browser client that omits ``Origin`` is
-    always allowed, so ``/api/tts-server`` still returns the configured URL to
-    any non-browser client.
+    Trade-off: the ``Sec-Fetch-Site``/``Sec-Fetch-Mode`` headers are
+    client-supplied and therefore spoofable by non-browser clients. This check
+    is defence-in-depth only for browsers that honour the fetch-metadata spec; a
+    non-browser client that simply omits all fetch-metadata headers is still
+    allowed, which is why ``/api/tts-server`` still returns the configured URL
+    to non-browser clients. Correctness and SSRF-safety do not depend on this
+    check (SSRF is eliminated by the selector design).
 
     :param request: The incoming HTTP request.
     :type request: Request
@@ -134,8 +148,9 @@ def _origin_allowed(request: Request) -> bool:
         referer = request.headers.get("referer")
         if referer is not None:
             logger.info("TTS request has no Origin header (Referer=%s); treating as non-browser client", referer)
-        if (request.headers.get("sec-fetch-site") or "").lower() == "same-origin":
-            return True
+        sec_fetch_site = request.headers.get("sec-fetch-site")
+        if sec_fetch_site is not None:
+            return sec_fetch_site.strip().lower() == "same-origin"
         return request.headers.get("sec-fetch-mode") is None
 
     if origin == "null":
@@ -418,9 +433,16 @@ async def tts_server(request: Request) -> JSONResponse:
     server URL to unrelated origins: the ``Origin`` header (scheme + netloc) is
     matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
     allow-list (the ``Referer`` and ``Host`` headers are never used for the
-    decision). Requests without an ``Origin`` header are allowed when they are
-    same-origin browser fetches (``Sec-Fetch-Site: same-origin``) or do not
-    look like a browser fetch (no ``Sec-Fetch-Mode`` header).
+    decision). Requests without an ``Origin`` header are allowed only when
+    ``Sec-Fetch-Site: same-origin`` (a same-origin browser fetch, since browsers
+    omit ``Origin`` on same-origin GETs), and rejected for any other
+    ``Sec-Fetch-Site`` value (``same-site``/``cross-site``/``none``). A request
+    with no ``Sec-Fetch-Site`` and no ``Sec-Fetch-Mode`` is treated as a
+    non-browser client and allowed; ``Sec-Fetch-Mode`` is only a fallback
+    browser detector, not a trust signal on its own. Trade-off: these headers
+    are client-supplied and spoofable, so this is defence-in-depth only; a
+    non-browser client that omits them is still allowed, which is why this
+    endpoint still returns the configured URL to non-browser clients.
 
     :param request: The incoming HTTP request.
     :type request: Request
