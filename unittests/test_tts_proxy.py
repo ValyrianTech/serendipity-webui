@@ -622,7 +622,7 @@ def test_origin_allowed_cross_origin_with_matching_host_rejected():
     assert app_main._origin_allowed(request) is False
 
 
-def test_origin_allowed_forged_origin_host_not_in_allowlist_rejected():
+def test_origin_allowed_non_allowlisted_origin_rejected_regardless_of_host():
     request = _make_request([("host", "testserver"), ("origin", "http://forged.example.com")])
     assert app_main._origin_allowed(request) is False
 
