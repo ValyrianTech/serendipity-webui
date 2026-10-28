@@ -252,22 +252,25 @@ def test_tts_server_cross_origin_rejected(client):
     assert result.json() == {"error": "Cross-origin TTS server request rejected"}
 
 
-def test_tts_server_cross_origin_referer_rejected(client):
-    result = client.get("/api/tts-server", headers={"Referer": "http://evil.example.com/page"})
-    assert result.status_code == 403
-    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
-
-
 def test_tts_server_same_origin_allowed(client):
     result = client.get("/api/tts-server", headers={"Origin": "http://testserver"})
     assert result.status_code == 200
     assert result.json() == {"url": "http://tts.local"}
 
 
-def test_tts_server_same_origin_referer_allowed(client):
-    result = client.get("/api/tts-server", headers={"Referer": "http://testserver/page"})
+def test_tts_server_referer_ignored_when_origin_absent(client):
+    result = client.get("/api/tts-server", headers={"Referer": "http://evil.example.com/page"})
     assert result.status_code == 200
     assert result.json() == {"url": "http://tts.local"}
+
+
+def test_tts_server_sec_fetch_mode_without_origin_rejected(client):
+    result = client.get(
+        "/api/tts-server",
+        headers={"Referer": "http://testserver/page", "Sec-Fetch-Mode": "no-cors"},
+    )
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS server request rejected"}
 
 
 def test_oversized_response_returns_502(client, monkeypatch):
@@ -406,13 +409,16 @@ def test_cross_origin_rejected(client):
     assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
 
 
-def test_cross_origin_referer_rejected_when_origin_absent(client):
-    result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Referer": "http://evil.example.com/page"})
-    assert result.status_code == 403
-    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+def test_cross_origin_referer_ignored_when_origin_absent(client):
+    capture = {}
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response, capture=capture):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Referer": "http://evil.example.com/page"})
+
+    assert result.status_code == 200
 
 
-def test_same_origin_referer_allowed_when_origin_absent(client):
+def test_same_origin_referer_ignored_when_origin_absent(client):
     capture = {}
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
     with mock_async_client(response=response, capture=capture):
@@ -442,7 +448,8 @@ def test_empty_origin_host_rejected(client):
     assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
 
 
-def test_origin_with_port_matching_host_port_allowed(client):
+def test_origin_with_port_allowed_when_allowlisted(client, monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", "http://testserver:8080")
     capture = {}
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
     with mock_async_client(response=response, capture=capture):
@@ -478,7 +485,7 @@ def test_origin_allowed_same_origin():
 
 
 def test_origin_allowed_same_origin_case_insensitive():
-    request = _make_request([("host", "TESTSERVER"), ("origin", "http://testserver")])
+    request = _make_request([("host", "testserver"), ("origin", "HTTP://TESTSERVER")])
     assert app_main._origin_allowed(request) is True
 
 
@@ -487,14 +494,65 @@ def test_origin_allowed_cross_origin():
     assert app_main._origin_allowed(request) is False
 
 
-def test_origin_allowed_uses_referer_when_origin_absent():
+def test_origin_allowed_ignores_referer_same_origin():
     request = _make_request([("host", "testserver"), ("referer", "http://testserver/page")])
     assert app_main._origin_allowed(request) is True
 
 
-def test_origin_allowed_cross_origin_referer():
+def test_origin_allowed_ignores_referer_cross_origin():
     request = _make_request([("host", "testserver"), ("referer", "http://evil.example.com/page")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_rejects_sec_fetch_mode_without_origin():
+    request = _make_request([("referer", "http://testserver/page"), ("sec-fetch-mode", "no-cors")])
     assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_rejects_sec_fetch_mode_without_origin_or_referer():
+    request = _make_request([("sec-fetch-mode", "cors")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_cross_origin_with_matching_host_rejected():
+    request = _make_request([("host", "evil.example.com"), ("origin", "http://evil.example.com")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_forged_origin_host_not_in_allowlist_rejected():
+    request = _make_request([("host", "testserver"), ("origin", "http://forged.example.com")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_matching_origin_accepted_with_spoofed_host():
+    request = _make_request([("host", "evil.example.com"), ("origin", "http://testserver")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_null_rejected():
+    request = _make_request([("origin", "null")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_null_allowed_when_allowlisted(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", "http://testserver,null")
+    request = _make_request([("origin", "null")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_origin_with_path_normalised():
+    request = _make_request([("origin", "http://testserver/some/path")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_uppercase_scheme_host_accepted():
+    request = _make_request([("origin", "HTTP://TESTSERVER")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_trailing_slash_accepted():
+    request = _make_request([("origin", "http://testserver/")])
+    assert app_main._origin_allowed(request) is True
 
 
 def test_origin_allowed_unparseable_origin():
@@ -502,6 +560,42 @@ def test_origin_allowed_unparseable_origin():
     assert app_main._origin_allowed(request) is False
 
 
-def test_origin_allowed_origin_with_port_matches_host_port():
+def test_origin_allowed_empty_netloc_rejected():
+    request = _make_request([("origin", "http://")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_no_scheme_rejected():
+    request = _make_request([("origin", "testserver")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_with_port_allowed_when_allowlisted(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", "http://testserver:8080")
     request = _make_request([("host", "testserver:8080"), ("origin", "http://testserver:8080")])
     assert app_main._origin_allowed(request) is True
+
+
+def test_get_allowed_origins_empty_when_unset(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    assert app_main.get_allowed_origins() == frozenset()
+
+
+def test_get_allowed_origins_empty_when_blank(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", "   ")
+    assert app_main.get_allowed_origins() == frozenset()
+
+
+def test_get_allowed_origins_parses_list(monkeypatch):
+    monkeypatch.setenv(
+        "SERENDIPITY_WEBUI_ALLOWED_ORIGINS",
+        "  http://testserver/ , HTTPS://ui.example.com ,, , http://a.b:9000",
+    )
+    assert app_main.get_allowed_origins() == frozenset(
+        {"http://testserver", "https://ui.example.com", "http://a.b:9000"}
+    )
+
+
+def test_get_allowed_origins_ignores_empty_entries(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", ",http://testserver,,https://x.example,")
+    assert app_main.get_allowed_origins() == frozenset({"http://testserver", "https://x.example"})

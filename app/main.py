@@ -24,6 +24,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 DEFAULT_TTS_SERVER = "primary"
+DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
 
 WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
@@ -71,29 +72,76 @@ def resolve_tts_server(selector: str) -> str | None:
     return get_configured_tts_servers().get(selector)
 
 
+def get_allowed_origins() -> frozenset[str]:
+    """Return the set of origins allowed to drive the TTS proxy.
+
+    Origins are read from the ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` environment
+    variable, a comma-separated list of full origins (scheme + netloc, e.g.
+    ``http://127.0.0.1:8080`` or ``https://ui.example.com``; no path). Each
+    entry is normalised by stripping surrounding whitespace, lowercasing, and
+    stripping a single trailing slash; empty entries are ignored. The variable
+    is read lazily on each call so tests (and deployments) can change it without
+    restarting the process.
+
+    :returns: The normalised set of allowed origins. Empty when the variable is
+        unset or blank.
+    :rtype: frozenset[str]
+    """
+    raw = os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "")
+    if not raw:
+        return frozenset()
+    allowed: set[str] = set()
+    for entry in raw.split(","):
+        entry = entry.strip().lower()
+        if not entry:
+            continue
+        allowed.add(entry.removesuffix("/"))
+    return frozenset(allowed)
+
+
 def _origin_allowed(request: Request) -> bool:
     """Return True when the request is permitted to drive the TTS proxy.
 
-    The ``Origin`` header is inspected first; when absent, the ``Referer``
-    header is used instead. If neither header is present the request is treated
-    as same-origin (non-browser clients, same-origin navigation, curl, and
-    tests without those headers must still work). Otherwise the header's netloc
-    is compared (case-insensitively) against the request's ``Host`` header,
-    which may include a port.
+    The decision is made solely from the ``Origin`` header, which is matched
+    exactly (scheme + netloc, case-insensitive, trailing slash stripped) against
+    the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. The
+    ``Referer`` header and the request ``Host`` header are never used for the
+    decision and are never trusted (both are spoofable).
+
+    When ``Origin`` is absent the request is treated as non-browser traffic
+    (curl, tests, server-to-server): it is allowed unless ``Sec-Fetch-Mode`` is
+    present, which marks the request as a browser subresource fetch that would
+    have sent an ``Origin`` header (such a request is rejected). The ``Referer``
+    header, when present, is logged but never used.
+
+    ``Origin: null`` (an opaque origin from a sandboxed iframe or ``file://``)
+    is rejected unless the literal string ``null`` is present in the allow-list.
+
+    Note: this trade-off means a non-browser client that omits ``Origin`` is
+    always allowed, so ``/api/tts-server`` still returns the configured URL to
+    any non-browser client.
 
     :param request: The incoming HTTP request.
     :type request: Request
-    :returns: True when the request is same-origin, False otherwise.
+    :returns: True when the request is allowed, False otherwise.
     :rtype: bool
     """
-    origin = request.headers.get("origin") or request.headers.get("referer")
+    origin = request.headers.get("origin")
     if origin is None:
-        return True
-    origin_netloc = urlparse(origin).netloc
-    if not origin_netloc:
+        referer = request.headers.get("referer")
+        if referer is not None:
+            logger.info("TTS request has no Origin header (Referer=%s); treating as non-browser client", referer)
+        return request.headers.get("sec-fetch-mode") is None
+
+    if origin == "null":
+        return "null" in get_allowed_origins()
+
+    parsed = urlparse(origin)
+    if not parsed.scheme or not parsed.netloc:
         return False
-    host = request.headers.get("host", "")
-    return origin_netloc.lower() == host.lower()
+
+    normalised = f"{parsed.scheme}://{parsed.netloc}".lower().rstrip("/")
+    return normalised in get_allowed_origins()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -272,6 +320,11 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
     and no request-supplied value is used to build the outbound request URL, so
     the endpoint cannot be used to fetch an attacker-chosen address.
 
+    Cross-origin requests are rejected before any outbound work: the request's
+    ``Origin`` header (scheme + netloc) must match the server-side allow-list
+    ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). The
+    ``Referer`` and ``Host`` headers are never used for that decision.
+
     :param request: The incoming HTTP request.
     :type request: Request
     :param voice: The voice to synthesize with.
@@ -357,7 +410,11 @@ async def tts_server(request: Request) -> JSONResponse:
     never uses a client-supplied URL.
 
     Cross-origin requests are rejected with 403 to avoid leaking the configured
-    server URL to unrelated origins.
+    server URL to unrelated origins: the ``Origin`` header (scheme + netloc) is
+    matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
+    allow-list (the ``Referer`` and ``Host`` headers are never used for the
+    decision). Requests without an ``Origin`` header are allowed only when they
+    do not look like a browser fetch (no ``Sec-Fetch-Mode`` header).
 
     :param request: The incoming HTTP request.
     :type request: Request
