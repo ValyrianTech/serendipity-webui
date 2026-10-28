@@ -24,6 +24,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 DEFAULT_TTS_SERVER = "primary"
+DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
 
 WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
@@ -71,29 +72,130 @@ def resolve_tts_server(selector: str) -> str | None:
     return get_configured_tts_servers().get(selector)
 
 
+def get_allowed_origins() -> frozenset[str]:
+    """Return the set of origins allowed to drive the TTS proxy.
+
+    Origins are read from the ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` environment
+    variable, a comma-separated list of full origins (scheme + netloc, e.g.
+    ``http://127.0.0.1:8080`` or ``https://ui.example.com``; no path). Each
+    entry is normalised by stripping surrounding whitespace, lowercasing, and
+    stripping a single trailing slash; empty entries are ignored. The variable
+    is read lazily on each call so tests (and deployments) can change it without
+    restarting the process.
+
+    :returns: The normalised set of allowed origins. Empty when the variable is
+        unset or blank.
+    :rtype: frozenset[str]
+    """
+    raw = os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "")
+    if not raw:
+        return frozenset()
+    allowed: set[str] = set()
+    for entry in raw.split(","):
+        entry = entry.strip().lower()
+        if not entry:
+            continue
+        allowed.add(entry.removesuffix("/"))
+    return frozenset(allowed)
+
+
 def _origin_allowed(request: Request) -> bool:
     """Return True when the request is permitted to drive the TTS proxy.
 
-    The ``Origin`` header is inspected first; when absent, the ``Referer``
-    header is used instead. If neither header is present the request is treated
-    as same-origin (non-browser clients, same-origin navigation, curl, and
-    tests without those headers must still work). Otherwise the header's netloc
-    is compared (case-insensitively) against the request's ``Host`` header,
-    which may include a port.
+    The decision is made primarily from the ``Origin`` header, which is matched
+    exactly (scheme + netloc, case-insensitive, trailing slash stripped) against
+    the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. The
+    ``Referer`` header and the request ``Host`` header are never used for the
+    decision and are never trusted (both are spoofable).
+
+    When ``Origin`` is absent the decision is based on ``Sec-Fetch-Site``, not
+    ``Sec-Fetch-Mode``:
+
+    * ``Sec-Fetch-Site: same-origin`` (case-insensitive, whitespace stripped) is
+      the positive same-origin signal: browsers omit ``Origin`` on same-origin
+      GETs but still send ``Sec-Fetch-Site: same-origin``, so such requests are
+      allowed.
+    * Any other ``Sec-Fetch-Site`` value (``same-site``, ``cross-site``,
+      ``none``) is rejected: a browser that sends fetch metadata always sends a
+      correct ``Sec-Fetch-Site``, so a cross-site/same-site fetch is exactly
+      what must be blocked, and ``none`` (user-initiated navigation) has no
+      business calling these JSON/audio APIs.
+    * A request with no ``Sec-Fetch-Site`` at all is assumed to be a non-browser
+      client (curl, server-to-server, tests) and is allowed — but only when it
+      also lacks a ``Sec-Fetch-Mode`` header. ``Sec-Fetch-Mode`` is therefore
+      only a secondary "does this look like a browser?" detector for the
+      no-``Sec-Fetch-Site`` case; it is not the same-origin distinction and is
+      never consulted when ``Sec-Fetch-Site`` is present.
+
+    ``Origin: null`` is a serialized opaque origin. Browsers send the literal
+    header value ``null`` for requests from contexts that have an opaque
+    (non-hierarchical) origin and therefore cannot name themselves, most
+    commonly: (a) a sandboxed iframe (``<iframe sandbox>`` without
+    ``allow-same-origin``), (b) a document loaded from a ``file://`` URL (e.g. a
+    locally-saved copy of an HTML page), (c) a ``data:`` or ``blob:`` URL used
+    as a top-level document, and (d) after a cross-origin redirect that taints
+    the origin. It is NOT the absence of an origin — it is a distinct,
+    explicitly-sent value meaning "I cannot name my origin".
+
+    ``Origin: null`` is rejected by default. The ``null`` origin is shared by
+    every such opaque-origin context, so allow-listing it is all-or-nothing: it
+    does NOT restrict access to one specific app or domain. Any sandboxed iframe
+    on any site, any local ``file://`` page, and any ``data:``/``blob:``
+    document in the user's browser would then be allowed to call the TTS proxy —
+    a much broader grant than a normal named-origin entry, which is why it is off
+    by default.
+
+    Allow-listing the literal string ``null`` is legitimately needed only when
+    the deployment genuinely serves this UI from an opaque-origin context: most
+    realistically, when the UI is opened as a local ``file://`` HTML page rather
+    than from the web server, or when the UI is embedded in a sandboxed iframe
+    WITHOUT ``allow-same-origin`` and that embedder is trusted. In those setups
+    requests carry ``Origin: null`` and would otherwise be rejected, breaking
+    TTS/voice features.
+
+    By adding ``null`` to ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``, operators accept
+    that EVERY opaque-origin context in the user's browser (any sandboxed iframe,
+    any ``file://`` page, any ``data:``/``blob:`` document) is allow-listed, not
+    just the intended one. Only enable it when it is specifically needed, and
+    combine it with the understanding that the allow-list is a coarse
+    defence-in-depth control, not the primary SSRF defence (which is the selector
+    design). Do NOT add ``null`` "just in case": prefer serving the UI from a
+    normal named origin and, for sandboxed embeds, add ``allow-same-origin`` and
+    use the real origin where possible. Only add ``null`` when the deployment
+    truly runs from an opaque origin and the trade-off is understood.
+
+    Trade-off: the ``Sec-Fetch-Site``/``Sec-Fetch-Mode`` headers are
+    client-supplied and therefore spoofable by non-browser clients. This check
+    is defence-in-depth only for browsers that honour the fetch-metadata spec; a
+    non-browser client that simply omits all fetch-metadata headers is still
+    allowed, which is why ``/api/tts-server`` still returns the configured URL
+    to non-browser clients. Correctness and SSRF-safety do not depend on this
+    check (SSRF is eliminated by the selector design).
 
     :param request: The incoming HTTP request.
     :type request: Request
-    :returns: True when the request is same-origin, False otherwise.
+    :returns: True when the request is allowed, False otherwise.
     :rtype: bool
     """
-    origin = request.headers.get("origin") or request.headers.get("referer")
+    origin = request.headers.get("origin")
     if origin is None:
-        return True
-    origin_netloc = urlparse(origin).netloc
-    if not origin_netloc:
+        referer = request.headers.get("referer")
+        if referer is not None:
+            logger.info("TTS request has no Origin header (Referer=%s); treating as non-browser client", referer)
+        sec_fetch_site = request.headers.get("sec-fetch-site")
+        if sec_fetch_site is not None:
+            return sec_fetch_site.strip().lower() == "same-origin"
+        return request.headers.get("sec-fetch-mode") is None
+
+    if origin == "null":
+        return "null" in get_allowed_origins()
+
+    parsed = urlparse(origin)
+    if not parsed.scheme or not parsed.netloc:
         return False
-    host = request.headers.get("host", "")
-    return origin_netloc.lower() == host.lower()
+
+    normalised = f"{parsed.scheme}://{parsed.netloc}".lower().rstrip("/")
+    return normalised in get_allowed_origins()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -272,6 +374,11 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
     and no request-supplied value is used to build the outbound request URL, so
     the endpoint cannot be used to fetch an attacker-chosen address.
 
+    Cross-origin requests are rejected before any outbound work: the request's
+    ``Origin`` header (scheme + netloc) must match the server-side allow-list
+    ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). The
+    ``Referer`` and ``Host`` headers are never used for that decision.
+
     :param request: The incoming HTTP request.
     :type request: Request
     :param voice: The voice to synthesize with.
@@ -357,7 +464,19 @@ async def tts_server(request: Request) -> JSONResponse:
     never uses a client-supplied URL.
 
     Cross-origin requests are rejected with 403 to avoid leaking the configured
-    server URL to unrelated origins.
+    server URL to unrelated origins: the ``Origin`` header (scheme + netloc) is
+    matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
+    allow-list (the ``Referer`` and ``Host`` headers are never used for the
+    decision). Requests without an ``Origin`` header are allowed only when
+    ``Sec-Fetch-Site: same-origin`` (a same-origin browser fetch, since browsers
+    omit ``Origin`` on same-origin GETs), and rejected for any other
+    ``Sec-Fetch-Site`` value (``same-site``/``cross-site``/``none``). A request
+    with no ``Sec-Fetch-Site`` and no ``Sec-Fetch-Mode`` is treated as a
+    non-browser client and allowed; ``Sec-Fetch-Mode`` is only a fallback
+    browser detector, not a trust signal on its own. Trade-off: these headers
+    are client-supplied and spoofable, so this is defence-in-depth only; a
+    non-browser client that omits them is still allowed, which is why this
+    endpoint still returns the configured URL to non-browser clients.
 
     :param request: The incoming HTTP request.
     :type request: Request
