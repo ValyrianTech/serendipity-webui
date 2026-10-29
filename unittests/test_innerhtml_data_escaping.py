@@ -618,21 +618,19 @@ def _is_static_ternary_or_coalesce(text):
 
     A ternary ``cond ? a : b`` is safe only when *both* branches are single
     string literals (e.g. ``t.passive ? ' (passive)' : ''``), so a data-carrying
-    branch such as ``flag ? userSuppliedName : ''`` is rejected. A ``||``
-    expression with no ternary (and any other expression without a top-level
-    ternary) is safe only when it is a ``join``-based chain whose ``.map(...)``
-    callback *structurally* wraps its own element in ``escapeHtml``/``sanitizeHtml``
-    (e.g. ``(items || []).map(i => escapeHtml(i)).join(', ')``); a bare
-    ``x || 'y'``, a raw ``(server.toolFilter || []).join(', ')``, or a chain that
-    merely concatenates a separate ``escapeHtml(...)`` call on afterwards is
-    rejected.
+    branch such as ``flag ? userSuppliedName : ''`` is rejected. Any expression
+    without a top-level ternary is delegated to the single shared helper
+    ``_escaped_map_join_is_safe``, which accepts only a ``join``-based chain
+    whose ``.map(...)`` callback *structurally* wraps its own element in
+    ``escapeHtml``/``sanitizeHtml`` (e.g.
+    ``(items || []).map(i => escapeHtml(i)).join(', ')``); a bare ``x || 'y'``,
+    a raw ``(server.toolFilter || []).join(', ')``, or a chain that merely
+    concatenates a separate ``escapeHtml(...)`` call on afterwards is rejected.
     """
     parts = _split_ternary(text)
     if parts is not None:
         _, true_branch, false_branch = parts
         return _is_string_literal(true_branch.strip()) and _is_string_literal(false_branch.strip())
-    if "||" in text:
-        return _escaped_map_join_is_safe(text)
     return _escaped_map_join_is_safe(text)
 
 
