@@ -202,6 +202,14 @@ def test_mcps_and_toolsets_escape_options():
     assert "escapeHtml(t.description || '')" in toolsets
 
 
+def test_toolsets_tool_filter_is_escaped():
+    """renderServers escapes the joined toolFilter value in the input attribute."""
+    body = _func_body("toolsets.html", "renderServers")
+    assert "escapeHtml((server.toolFilter || []).join(', '))" in body
+    # The raw, unescaped interpolation must be gone.
+    assert 'value="${(server.toolFilter || []).join(\', \')}"' not in body
+
+
 def test_skills_dropdown_escapes_name():
     """skills.html escapes the skill name in its dropdown option."""
     content = _read_template("skills.html")
@@ -331,13 +339,6 @@ _NUMERIC_IDENTIFIERS = frozenset({
 # ``task.enabled ? 'bg-green-500' : 'bg-slate-500'``); their values are fixed
 # string literals, never server/user text.
 _CLASS_FLAG_IDENTIFIERS = frozenset({"enabledClass", "enabledText"})
-
-# Method calls tolerated inside a ternary/coalesce interpolation whose branches
-# are otherwise static strings (e.g. ``(server.toolFilter || []).join(', ')``).
-_TINY_SAFE_CALLS = frozenset({
-    "padStart", "parseInt", "toFixed", "substring", "charAt", "startsWith",
-    "join", "finally",
-})
 
 # How far back (chars) before an opening backtick to look for ``innerHTML``.
 _INNERHTML_LOOKBACK = 120
@@ -472,11 +473,6 @@ def _iter_interpolations(literal_text):
         i += 1
 
 
-def _calls_in(text):
-    """Return the identifier names of every call expression in ``text``."""
-    return re.findall(r"([A-Za-z_$][\w$]*)\s*\(", text)
-
-
 def _is_numeric_expression(text):
     """True if ``text`` is only identifiers/numbers/operators with safe tokens."""
     if not re.fullmatch(r"[\w$.\s+\-*()]+", text):
@@ -543,15 +539,16 @@ def _is_static_ternary_or_coalesce(text):
     string literals (e.g. ``t.passive ? ' (passive)' : ''``), so a data-carrying
     branch such as ``flag ? userSuppliedName : ''`` is rejected. A ``||``
     expression with no ternary is safe only when it is a ``join``-based chain
-    that calls nothing but the tiny safe set (e.g.
-    ``(server.toolFilter || []).join(', ')``); a bare ``x || 'y'`` is rejected.
+    that escapes/sanitizes each element (e.g.
+    ``(items || []).map(i => escapeHtml(i)).join(', ')``); a bare
+    ``x || 'y'`` or a raw ``(server.toolFilter || []).join(', ')`` is rejected.
     """
     parts = _split_ternary(text)
     if parts is not None:
         _, true_branch, false_branch = parts
         return _is_string_literal(true_branch.strip()) and _is_string_literal(false_branch.strip())
     if "||" in text:
-        return ".join(" in text and all(call in _TINY_SAFE_CALLS for call in _calls_in(text))
+        return ".join(" in text and ("escapeHtml(" in text or "sanitizeHtml(" in text)
     return False
 
 
@@ -654,6 +651,7 @@ def test_guardrail_helper_rejects_unsafe_interpolations():
         "flag ? data : ''",
         "x || 'y'",
         "(a || '')",
+        "(server.toolFilter || []).join(', ')",
     ):
         assert not _is_safe_interpolation(expr), f"should be unsafe: {expr!r}"
 
@@ -671,7 +669,7 @@ def test_guardrail_helper_accepts_safe_interpolations():
         "idx + 1",
         "encodeURIComponent(agentName)",
         "t.passive ? ' (passive)' : ''",
-        "(server.toolFilter || []).join(', ')",
+        "(items || []).map(i => escapeHtml(i)).join(', ')",
         "Date.now()",
         "address",
     ):
