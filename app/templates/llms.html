@@ -197,7 +197,7 @@
 </div>
 
 <script type="module">
-    import { getLLMs, getLLMConfig, getModels, saveLLMConfig, deleteLLMConfig, saveDefaultLLM as saveDefaultLLMApi } from '/static/js/api.js';
+    import { getLLMs, getLLMConfig, getModels, saveLLMConfig, deleteLLMConfig, saveDefaultLLM as saveDefaultLLMApi, requireWif } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     let isNewLLM = false;
@@ -310,6 +310,8 @@
     };
     
     window.saveConfig = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const name = document.getElementById('llm-name').value.trim();
         if (!name) {
             showToast('Name is required', 'error');
@@ -338,7 +340,7 @@
         };
         
         try {
-            await saveLLMConfig(window.currentWif, data);
+            await saveLLMConfig(wif, data);
             showToast('LLM configuration saved successfully', 'success');
             await loadLLMs();
             document.getElementById('llm-select').value = name;
@@ -348,12 +350,14 @@
     };
     
     window.deleteConfig = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         if (!currentLLMName) return;
         
         if (!confirm(`Are you sure you want to delete "${currentLLMName}"?`)) return;
         
         try {
-            await deleteLLMConfig(window.currentWif, { name: currentLLMName });
+            await deleteLLMConfig(wif, { name: currentLLMName });
             showToast('LLM configuration deleted', 'success');
             await loadLLMs();
             document.getElementById('config-form').classList.add('hidden');
@@ -364,6 +368,8 @@
     };
     
     window.saveDefaultLLM = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const llmName = document.getElementById('default-llm').value;
         if (!llmName) {
             showToast('Please select a default LLM', 'error');
@@ -371,7 +377,7 @@
         }
         
         try {
-            await saveDefaultLLMApi(window.currentWif, { llmName: llmName });
+            await saveDefaultLLMApi(wif, { llmName: llmName });
             showToast('Default LLM saved', 'success');
         } catch (e) {
             showToast('Failed to save default LLM: ' + e.message, 'error');

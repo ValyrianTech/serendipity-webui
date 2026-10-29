@@ -228,7 +228,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getWorkflows, getWorkflow, getModels, getAgent, getSettings, saveSettings, startWorkflow, generateWorkflow, editWorkflowStep } from '/static/js/api.js';
+    import { getWorkflows, getWorkflow, getModels, getAgent, getSettings, saveSettings, startWorkflow, generateWorkflow, editWorkflowStep, requireWif } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     const agentName = {{ agent_name | tojson }};
@@ -541,6 +541,8 @@
     };
     
     window.saveNodeChanges = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         if (!currentWorkflow || !currentNodeId) {
             showToast('No node selected', 'error');
             return;
@@ -583,7 +585,7 @@
         }
         
         try {
-            await editWorkflowStep(window.currentWif, data);
+            await editWorkflowStep(wif, data);
             
             showToast('Workflow step saved successfully', 'success');
             
@@ -599,6 +601,8 @@
     };
     
     window.generateNewWorkflow = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const workflowId = document.getElementById('workflow-id-field').value.trim();
         const instructions = document.getElementById('workflow-instructions').value.trim();
         const flowchart = document.getElementById('flowchart-code').value.trim();
@@ -618,7 +622,7 @@
             
             // Match Flutter Flow: include modelName and flowchart
             const settings = getSettings();
-            await generateWorkflow(window.currentWif, {
+            await generateWorkflow(wif, {
                 agent: agentName,
                 workflow_id: workflowId,
                 instructions: instructions,
@@ -643,6 +647,8 @@
     };
     
     window.runSelectedWorkflow = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const workflowId = document.getElementById('workflow-select').value;
         
         if (!workflowId) {
@@ -654,7 +660,7 @@
             showToast('Starting workflow...', 'info');
             
             // Match Flutter Flow: set folder to 'workflows'
-            const response = await startWorkflow(window.currentWif, {
+            const response = await startWorkflow(wif, {
                 agent: agentName,
                 folder_name: 'workflows',
                 workflow_id: workflowId,

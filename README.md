@@ -171,7 +171,8 @@ serendipity-webui/
 │   ├── test_wif_encryption.py # WIF at-rest encryption tests (SCv2/SCv3/legacy, KAT, tamper)
 │   ├── test_wif_validation.py # WIF parse/validation tests
 │   ├── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
-│   └── test_api_json_error_handling.py # API client JSON/status error-handling tests
+│   ├── test_api_json_error_handling.py # API client JSON/status error-handling tests
+│   └── test_wif_unlock_guard.py # Locked-WIF guard (requireWif) regression tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
 ├── requirements.txt        # Python dependencies

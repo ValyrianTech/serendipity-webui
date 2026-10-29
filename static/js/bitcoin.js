@@ -234,6 +234,9 @@ function jsonSortedEncode(obj, indent = '  ') {
 }
 
 export async function signData(messageData, wif) {
+    if (!wif) {
+        throw new Error('WIF key is locked');
+    }
     const jsonWithIndent = jsonSortedEncode(messageData, '  ');
     
     // Use the pure JS sha256 implementation instead of crypto.subtle

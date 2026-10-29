@@ -250,7 +250,7 @@ if __name__ == '__main__':
 </div>
 
 <script type="module">
-    import { getSkills, getSkill, saveSkill as saveSkillApi, deleteSkill } from '/static/js/api.js';
+    import { getSkills, getSkill, saveSkill as saveSkillApi, deleteSkill, requireWif } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     let isNewSkill = false;
@@ -653,6 +653,8 @@ if __name__ == '__main__':
     
     // Save skill
     window.saveSkill = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const name = document.getElementById('skill-name').value.trim();
         const description = document.getElementById('skill-description').value.trim();
         const instructions = document.getElementById('skill-instructions').value;
@@ -682,7 +684,7 @@ if __name__ == '__main__':
         };
         
         try {
-            const response = await saveSkillApi(window.currentWif, data);
+            const response = await saveSkillApi(wif, data);
             
             if (response.success) {
                 showToast(`Skill ${response.action || 'saved'} successfully`, 'success');
@@ -702,12 +704,14 @@ if __name__ == '__main__':
     
     // Delete skill
     window.deleteSkillConfig = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         if (!currentSkillName) return;
         
         if (!confirm(`Are you sure you want to delete "${currentSkillName}"? This will delete all resources and scripts.`)) return;
         
         try {
-            const response = await deleteSkill(window.currentWif, { skill_name: currentSkillName });
+            const response = await deleteSkill(wif, { skill_name: currentSkillName });
             
             if (response.success) {
                 showToast('Skill deleted', 'success');

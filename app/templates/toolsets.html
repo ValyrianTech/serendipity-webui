@@ -118,7 +118,7 @@
 </div>
 
 <script type="module">
-    import { getToolsets, getToolset, getMCPServers, getSkills, getCustomTools, saveToolset as saveToolsetApi, deleteToolset } from '/static/js/api.js';
+    import { getToolsets, getToolset, getMCPServers, getSkills, getCustomTools, saveToolset as saveToolsetApi, deleteToolset, requireWif } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     let isNewToolset = false;
@@ -390,6 +390,8 @@
     };
     
     window.saveToolset = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         const name = document.getElementById('toolset-name').value.trim();
         if (!name) {
             showToast('Name is required', 'error');
@@ -417,7 +419,7 @@
         };
         
         try {
-            await saveToolsetApi(window.currentWif, data);
+            await saveToolsetApi(wif, data);
             showToast('Toolset saved successfully', 'success');
             await loadToolsets();
             document.getElementById('toolset-select').value = name;
@@ -427,12 +429,14 @@
     };
     
     window.deleteToolsetConfig = async function() {
+        const wif = requireWif();
+        if (!wif) return;
         if (!currentToolsetName) return;
         
         if (!confirm(`Are you sure you want to delete "${currentToolsetName}"?`)) return;
         
         try {
-            await deleteToolset(window.currentWif, { toolset_name: currentToolsetName });
+            await deleteToolset(wif, { toolset_name: currentToolsetName });
             showToast('Toolset deleted', 'success');
             await loadToolsets();
             document.getElementById('config-form').classList.add('hidden');
