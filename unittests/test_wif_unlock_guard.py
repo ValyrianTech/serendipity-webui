@@ -23,8 +23,8 @@ import json
 import re
 from pathlib import Path
 
-import quickjs
 import pytest
+import quickjs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BITCOIN_JS_PATH = REPO_ROOT / "static" / "js" / "bitcoin.js"
