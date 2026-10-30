@@ -482,7 +482,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills, getBaseUrl } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills, getBaseUrl, getUrlScheme } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     import { signData } from '/static/js/bitcoin.js';
     
@@ -2369,7 +2369,7 @@
         }
         
         const settings = getSettings();
-        const wsUrl = `ws://${settings.serverAddress}:${settings.websocketPort}`;
+        const wsUrl = `${getUrlScheme(true)}//${settings.serverAddress}:${settings.websocketPort}`;
         
         console.log('WebSocket: Connecting to', wsUrl, 'for conversation', conversationId);
         
