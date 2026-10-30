@@ -155,3 +155,16 @@ def test_templates_no_longer_hardcode_http_base_url():
         content = (TEMPLATES_DIR / name).read_text(encoding="utf-8")
         assert "`http://${settings.serverAddress}:${settings.serverPort}`" not in content
         assert "getBaseUrl" in _import_line(content)
+
+
+def test_templates_no_longer_hardcode_ws_url():
+    """Regression guard: the streaming WebSocket must derive its scheme
+    (``wss://`` under HTTPS) from the page protocol via ``getUrlScheme(true)``
+    rather than hardcoding ``ws://``.
+    """
+    for name in ("agent_home.html", "agents.html", "conversation.html"):
+        content = (TEMPLATES_DIR / name).read_text(encoding="utf-8")
+        assert "`ws://${settings.serverAddress}" not in content
+        assert "ws://" not in content
+        if "new WebSocket(" in content:
+            assert "getUrlScheme(true)" in content
