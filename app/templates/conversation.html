@@ -482,7 +482,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills } from '/static/js/api.js';
+    import { getConversation, getAgent, getModels, addMessage, getSettings, saveSettings, uploadFile, stageFile, removeStagedFile, createStreamingConnection, archiveConversation, deleteConversation, summarizeConversation, generateMemory, updateKnowledgeBase, moveToFolder, getFolders, editConversation, getAvailableVoices, getTTSUrl, transcribeAudio, getTodo, getWishlist, getVariables, getWorkspace, stopGeneration, getSkills, getBaseUrl, getUrlScheme } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     import { signData } from '/static/js/bitcoin.js';
     
@@ -1285,7 +1285,7 @@
         if (msg.images && msg.images.length > 0) {
             const settings = getSettings();
             msg.images.forEach(img => {
-                const imgUrl = `http://${settings.serverAddress}:${settings.serverPort}/spellbook/files/${img}`;
+                const imgUrl = `${getBaseUrl()}/spellbook/files/${img}`;
                 contentHtml = `<img src="${escapeHtml(imgUrl)}" alt="Image" class="max-w-full rounded-lg mb-3">` + contentHtml;
             });
         }
@@ -1519,7 +1519,7 @@
             
             case 'image':
                 const settings = getSettings();
-                const imgUrl = content.startsWith('http') ? content : `http://${settings.serverAddress}:${settings.serverPort}/spellbook/files/${content}`;
+                const imgUrl = content.startsWith('http') ? content : `${getBaseUrl()}/spellbook/files/${content}`;
                 return `<img src="${escapeHtml(imgUrl)}" alt="Image" class="max-w-full rounded-lg mb-3">`;
             
             case 'tool_request':
@@ -2369,7 +2369,7 @@
         }
         
         const settings = getSettings();
-        const wsUrl = `ws://${settings.serverAddress}:${settings.websocketPort}`;
+        const wsUrl = `${getUrlScheme(true)}//${settings.serverAddress}:${settings.websocketPort}`;
         
         console.log('WebSocket: Connecting to', wsUrl, 'for conversation', conversationId);
         

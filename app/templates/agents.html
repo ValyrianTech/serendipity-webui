@@ -25,7 +25,7 @@
 
 {% block scripts %}
 <script type="module">
-    import { getAgents, getAgent, saveSettings, getSettings } from '/static/js/api.js';
+    import { getAgents, getAgent, saveSettings, getSettings, getBaseUrl } from '/static/js/api.js';
     import { escapeHtml, sanitizeHtml } from '/static/js/sanitize.js';
     
     window.getAgents = getAgents;
@@ -93,7 +93,7 @@
     
     function createAgentCard(agent) {
         const settings = getSettings();
-        const baseUrl = `http://${settings.serverAddress}:${settings.serverPort}`;
+        const baseUrl = getBaseUrl();
         
         const card = document.createElement('div');
         card.className = 'agent-card bg-slate-800 rounded-xl p-6 cursor-pointer hover:bg-slate-750 border border-slate-700';
