@@ -101,6 +101,10 @@ cp .env.example .env
 
 `.env` is gitignored; commit only `.env.example`.
 
+### HTTPS / TLS
+
+The UI derives the scheme of every backend request (HTTP API and WebSocket) from the current page protocol. When the Web UI is served over HTTPS, the frontend talks to the backend over `https://`/`wss://` as well; if the backend API port is not also reachable over TLS, the browser will refuse the connection (mixed-content / WebSocket upgrade failures). When running the Web UI behind HTTPS, make sure the Serendipity backend API and WebSocket ports are served over TLS too.
+
 ### TTS proxy security
 
 The `/api/tts-proxy` endpoint does not accept a server URL from the client. The `server` query parameter is an **opaque selector key** resolved against the server-side `SERENDIPITY_TTS_SERVERS` configuration, and the outbound request URL is built solely from that configuration. Because no request-supplied value is ever used to build the fetch target, the endpoint cannot be driven to fetch an attacker-chosen address — the SSRF class is eliminated by design rather than by validation.

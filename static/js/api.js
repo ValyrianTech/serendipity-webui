@@ -39,9 +39,19 @@ export function saveSettings(settings) {
     if (settings.activeVoice !== undefined) localStorage.setItem('serendipity_active_voice', settings.activeVoice);
 }
 
+// Derive the URL scheme from the page protocol so that a UI served over HTTPS
+// talks to the backend over HTTPS too (avoids active/passive mixed-content
+// blocking). NOTE: when the UI is served over TLS the backend port must also be
+// reachable over TLS, otherwise the browser will refuse the connection.
+export function getUrlScheme(websocket = false) {
+    const isHttps = typeof window !== 'undefined' && window.location && window.location.protocol === 'https:';
+    if (websocket) return isHttps ? 'wss:' : 'ws:';
+    return isHttps ? 'https:' : 'http:';
+}
+
 export function getBaseUrl() {
     const settings = getSettings();
-    return `http://${settings.serverAddress}:${settings.serverPort}`;
+    return `${getUrlScheme()}//${settings.serverAddress}:${settings.serverPort}`;
 }
 
 async function parseJsonResponse(response, context) {
@@ -613,7 +623,7 @@ export async function saveComfyUIServer(wif, data) {
 // WebSocket connection for streaming
 export function createStreamingConnection(conversationId, onMessage, onError, onClose) {
     const settings = getSettings();
-    const wsUrl = `ws://${settings.serverAddress}:${settings.websocketPort}`;
+    const wsUrl = `${getUrlScheme(true)}//${settings.serverAddress}:${settings.websocketPort}`;
     
     const ws = new WebSocket(wsUrl);
     
