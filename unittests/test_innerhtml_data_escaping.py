@@ -202,6 +202,14 @@ def test_mcps_and_toolsets_escape_options():
     assert "escapeHtml(t.description || '')" in toolsets
 
 
+def test_toolsets_tool_filter_is_escaped():
+    """renderServers escapes the joined toolFilter value in the input attribute."""
+    body = _func_body("toolsets.html", "renderServers")
+    assert "escapeHtml((server.toolFilter || []).join(', '))" in body
+    # The raw, unescaped interpolation must be gone.
+    assert 'value="${(server.toolFilter || []).join(\', \')}"' not in body
+
+
 def test_skills_dropdown_escapes_name():
     """skills.html escapes the skill name in its dropdown option."""
     content = _read_template("skills.html")
@@ -331,13 +339,6 @@ _NUMERIC_IDENTIFIERS = frozenset({
 # ``task.enabled ? 'bg-green-500' : 'bg-slate-500'``); their values are fixed
 # string literals, never server/user text.
 _CLASS_FLAG_IDENTIFIERS = frozenset({"enabledClass", "enabledText"})
-
-# Method calls tolerated inside a ternary/coalesce interpolation whose branches
-# are otherwise static strings (e.g. ``(server.toolFilter || []).join(', ')``).
-_TINY_SAFE_CALLS = frozenset({
-    "padStart", "parseInt", "toFixed", "substring", "charAt", "startsWith",
-    "join", "finally",
-})
 
 # How far back (chars) before an opening backtick to look for ``innerHTML``.
 _INNERHTML_LOOKBACK = 120
@@ -472,11 +473,6 @@ def _iter_interpolations(literal_text):
         i += 1
 
 
-def _calls_in(text):
-    """Return the identifier names of every call expression in ``text``."""
-    return re.findall(r"([A-Za-z_$][\w$]*)\s*\(", text)
-
-
 def _is_numeric_expression(text):
     """True if ``text`` is only identifiers/numbers/operators with safe tokens."""
     if not re.fullmatch(r"[\w$.\s+\-*()]+", text):
@@ -536,28 +532,114 @@ def _is_string_literal(text):
     return bool(re.fullmatch(r"(['\"]).*\1", text, re.DOTALL))
 
 
+def _find_matching_paren(text, open_idx):
+    """Return the index of the ')' matching the '(' at ``open_idx`` or ``None``.
+
+    Skips quoted strings and nested template literals so parentheses inside them
+    are not miscounted.
+    """
+    assert text[open_idx] == "("
+    depth = 0
+    i = open_idx
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch in ("'", '"'):
+            quote = ch
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    break
+                i += 1
+        elif ch == "`":
+            i = _consume_nested_template(text, i)
+            continue
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _escaped_map_join_is_safe(text):
+    """True if ``text`` is a ``.map(<p> => escapeHtml(<p>)).join(...)`` chain.
+
+    Structurally verifies that the ``.map(...)`` callback wraps its element
+    parameter with ``escapeHtml``/``sanitizeHtml`` (e.g. ``i => escapeHtml(i)``)
+    and that a ``.join(`` call follows the ``.map(...)``. A decoy such as
+    ``(items || []).map(t => t).join(', ') + escapeHtml('')`` -- where the map
+    callback does not escape its element and the escaping call is merely
+    concatenated on -- is rejected.
+    """
+    marker = ".map("
+    idx = text.find(marker)
+    if idx == -1:
+        return False
+    open_idx = idx + len(marker) - 1  # index of the '(' in '.map('
+    close_idx = _find_matching_paren(text, open_idx)
+    if close_idx is None:
+        return False
+    callback = text[open_idx + 1 : close_idx].strip()
+    if re.fullmatch(
+        r"([A-Za-z_$][\w$]*)\s*=>\s*(?:escapeHtml|sanitizeHtml)\(\s*\1\s*\)",
+        callback,
+    ):
+        return ".join(" in text[close_idx + 1 :]
+    # Template-literal and block-bodied callbacks (used by real templates) are
+    # also safe, provided the callback body passes its element parameter to
+    # ``escapeHtml``/``sanitizeHtml``. The escape must live *inside* the callback
+    # body, so a decoy that concatenates ``escapeHtml('')`` after ``.join(...)``
+    # is still rejected.
+    param_match = re.match(r"([A-Za-z_$][\w$]*)\s*=>", callback)
+    if param_match:
+        param = param_match.group(1)
+        body = callback[param_match.end() :]
+        for fn in ("escapeHtml", "sanitizeHtml"):
+            pos = body.find(fn + "(")
+            while pos != -1:
+                arg_open = pos + len(fn)
+                arg_close = _find_matching_paren(body, arg_open)
+                if arg_close is not None and re.search(
+                    r"\b" + re.escape(param) + r"\b", body[arg_open + 1 : arg_close]
+                ):
+                    return ".join(" in text[close_idx + 1 :]
+                pos = body.find(fn + "(", pos + 1)
+    return False
+
+
 def _is_static_ternary_or_coalesce(text):
     """True if ``text`` is a ternary/coalesce whose branches are static strings.
 
     A ternary ``cond ? a : b`` is safe only when *both* branches are single
     string literals (e.g. ``t.passive ? ' (passive)' : ''``), so a data-carrying
-    branch such as ``flag ? userSuppliedName : ''`` is rejected. A ``||``
-    expression with no ternary is safe only when it is a ``join``-based chain
-    that calls nothing but the tiny safe set (e.g.
-    ``(server.toolFilter || []).join(', ')``); a bare ``x || 'y'`` is rejected.
+    branch such as ``flag ? userSuppliedName : ''`` is rejected. Any expression
+    without a top-level ternary is delegated to the single shared helper
+    ``_escaped_map_join_is_safe``, which accepts only a ``join``-based chain
+    whose ``.map(...)`` callback *structurally* wraps its own element in
+    ``escapeHtml``/``sanitizeHtml`` (e.g.
+    ``(items || []).map(i => escapeHtml(i)).join(', ')``); a bare ``x || 'y'``,
+    a raw ``(server.toolFilter || []).join(', ')``, or a chain that merely
+    concatenates a separate ``escapeHtml(...)`` call on afterwards is rejected.
     """
     parts = _split_ternary(text)
     if parts is not None:
         _, true_branch, false_branch = parts
         return _is_string_literal(true_branch.strip()) and _is_string_literal(false_branch.strip())
-    if "||" in text:
-        return ".join(" in text and all(call in _TINY_SAFE_CALLS for call in _calls_in(text))
-    return False
+    return _escaped_map_join_is_safe(text)
 
 
 def _is_sanitized_map_join(text):
-    """True for a ``.map(...).join('')`` chain that escapes each element."""
-    return ".join(" in text and ("escapeHtml(" in text or "sanitizeHtml(" in text)
+    """True for a ``.map(...).join('')`` chain that escapes each element.
+
+    Delegates to the shared structural helper ``_escaped_map_join_is_safe``.
+    """
+    return _escaped_map_join_is_safe(text)
 
 
 def _is_safe_interpolation(expr):
@@ -654,8 +736,22 @@ def test_guardrail_helper_rejects_unsafe_interpolations():
         "flag ? data : ''",
         "x || 'y'",
         "(a || '')",
+        "(server.toolFilter || []).join(', ')",
     ):
         assert not _is_safe_interpolation(expr), f"should be unsafe: {expr!r}"
+
+
+def test_guardrail_rejects_coalesce_join_with_decoy_escape():
+    """A raw map+join with a decoy escapeHtml('') concatenated on is rejected.
+
+    Pins that the guardrail structurally requires the ``.map`` callback to wrap
+    its element (``t => escapeHtml(t)``); merely appending ``+ escapeHtml('')``
+    to an unescaped ``.map(t => t).join(...)`` chain must NOT be treated as safe.
+    """
+    decoy = "(items || []).map(t => t).join(', ') + escapeHtml('')"
+    assert not _is_safe_interpolation(decoy)
+    assert not _is_static_ternary_or_coalesce(decoy)
+    assert not _is_sanitized_map_join(decoy)
 
 
 def test_guardrail_helper_accepts_safe_interpolations():
@@ -671,7 +767,7 @@ def test_guardrail_helper_accepts_safe_interpolations():
         "idx + 1",
         "encodeURIComponent(agentName)",
         "t.passive ? ' (passive)' : ''",
-        "(server.toolFilter || []).join(', ')",
+        "(items || []).map(i => escapeHtml(i)).join(', ')",
         "Date.now()",
         "address",
     ):
