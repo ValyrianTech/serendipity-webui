@@ -1154,6 +1154,7 @@
             if (data.staged_files && data.staged_files.length > 0) {
                 stagedFiles = data.staged_files;
                 updateStagedFilesDisplay();
+                updateOpenFilesList();
             }
             
             // Render messages
@@ -2308,6 +2309,7 @@
                     
                     stagedFiles.push({ fileName: file.name, fileId: uploadResult.file_id });
                     updateStagedFilesDisplay();
+                    updateOpenFilesList();
                     showToast(`${file.name} staged`, 'success');
                 }
             } catch (e) {
@@ -2352,6 +2354,7 @@
             
             stagedFiles.splice(index, 1);
             updateStagedFilesDisplay();
+            updateOpenFilesList();
         } catch (e) {
             console.error('Failed to remove staged file:', e);
             showToast('Failed to remove file', 'error');
@@ -2850,19 +2853,16 @@
         
         container.innerHTML = stagedFiles.map((file, idx) => `
             <div class="flex items-center justify-between p-2 bg-slate-700/50 rounded text-sm">
-                <span class="truncate flex-1">📄 ${escapeHtml(file.name || file.filename || 'File ' + (idx + 1))}</span>
+                <span class="truncate flex-1">📄 ${escapeHtml(file.name || file.filename || file.fileName || 'File ' + (idx + 1))}</span>
                 <button onclick="removeOpenFile(${idx})" class="text-red-400 hover:text-red-300 ml-2">×</button>
             </div>
         `).join('');
     }
     
-    window.removeOpenFile = function(idx) {
-        if (stagedFiles[idx]) {
-            removeStagedFile(stagedFiles[idx].id);
-            stagedFiles.splice(idx, 1);
-            updateOpenFilesList();
-            updateStagedFilesDisplay();
-        }
+    window.removeOpenFile = async function(idx) {
+        if (!stagedFiles[idx]) return;
+        await window.removeStagedFileAt(idx);
+        updateOpenFilesList();
     };
 </script>
 {% endblock %}
