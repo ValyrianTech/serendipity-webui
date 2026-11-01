@@ -83,6 +83,7 @@ On first launch, you'll be prompted to configure:
    - Because key derivation at 600,000 PBKDF2 iterations takes a moment, the unlock, setup "Save & Continue", and change-key "Save" buttons show a brief "Unlocking…"/"Encrypting…" busy state (and are disabled) while the key is derived, so the UI does not appear frozen.
    - The decrypted key is held in per-tab sessionStorage, so you unlock once per tab session and page navigations within that tab no longer re-prompt for the password
    - The decrypted key is cleared when the tab closes and is never written to disk; use the sidebar **Lock** button to forget the unlocked key for the current session
+   - If a corrupted or non-JSON WIF entry is found in localStorage on startup (e.g. from manual edits or an interrupted write), the stored value is discarded with a console warning and the encrypted-key entry is cleared, so the setup/unlock flow starts cleanly instead of failing to load.
 
 All settings are stored in your browser's localStorage.
 
@@ -176,6 +177,7 @@ serendipity-webui/
 │   ├── test_wif_validation.py # WIF parse/validation tests
 │   ├── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
 │   ├── test_api_json_error_handling.py # API client JSON/status error-handling tests
+│   ├── test_load_wif_storage.py # loadWifStorage() corrupted/non-JSON localStorage recovery tests
 │   └── test_wif_unlock_guard.py # Locked-WIF guard (requireWif) regression tests
 ├── Dockerfile               # Multi-stage Docker build
 ├── entrypoint.sh           # Container entrypoint
