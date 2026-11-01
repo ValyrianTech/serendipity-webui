@@ -103,10 +103,6 @@ def _set_stored_raw(ctx: quickjs.Context, text: str) -> None:
     ctx.eval("__setStoredRaw(" + json.dumps(text) + ")")
 
 
-def _clear_stored(ctx: quickjs.Context) -> None:
-    ctx.eval("__clearStored()")
-
-
 def _run_load(ctx: quickjs.Context) -> dict:
     payload = ctx.eval("JSON.stringify(__runLoad())")
     return json.loads(payload)
