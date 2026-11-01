@@ -551,7 +551,17 @@ export function saveWif(wif, encrypted, encryptedData = null) {
 export function loadWifStorage() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return null;
-    return JSON.parse(stored);
+    try {
+        const parsed = JSON.parse(stored);
+        if (parsed === null || typeof parsed !== 'object') {
+            throw new Error('stored WIF is not an object');
+        }
+        return parsed;
+    } catch (e) {
+        console.warn('Discarding corrupted WIF storage entry:', e.message);
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+    }
 }
 
 export function clearWifStorage() {
