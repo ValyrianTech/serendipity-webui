@@ -48,11 +48,7 @@ docker run -p 8080:8080 serendipity-webui
 
 Access the application at `http://localhost:8080`
 
-> **Note:** The server binds to loopback (`127.0.0.1`) by default, so in Docker you must set `SERENDIPITY_WEBUI_HOST=0.0.0.0` (and publish the port) to reach the UI from outside the container:
->
-> ```bash
-> docker run -e SERENDIPITY_WEBUI_HOST=0.0.0.0 -p 8080:8080 serendipity-webui
-> ```
+> **Note:** The container entrypoint binds Uvicorn to `0.0.0.0` by default (the bare-metal `app.main` default of `127.0.0.1` is overridden inside the container), so `docker run -p 8080:8080 serendipity-webui` works as-is. To keep the UI loopback-only inside the container, set `SERENDIPITY_WEBUI_HOST=127.0.0.1`. Because a wildcard bind leaves the startup TTS allow-list empty, operators exposing the container should also set `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` explicitly (e.g. `docker run -e SERENDIPITY_WEBUI_ALLOWED_ORIGINS=http://localhost:8080 -p 8080:8080 serendipity-webui`).
 
 ### Local Development
 
@@ -96,7 +92,7 @@ Server-side settings are read from environment variables. These can be provided 
 cp .env.example .env
 ```
 
-- `SERENDIPITY_WEBUI_HOST` — host address the web UI binds to (default `127.0.0.1`; set to `0.0.0.0` to expose the UI on all interfaces).
+- `SERENDIPITY_WEBUI_HOST` — host address the web UI binds to. When running bare-metal or via `python -m app.main` the default is `127.0.0.1` (set to `0.0.0.0` to expose the UI on all interfaces); inside the container the `entrypoint.sh` default is `0.0.0.0` (set `127.0.0.1` to keep it loopback-only).
 - `SERENDIPITY_WEBUI_PORT` — port the web UI listens on (default `8080`).
 - `SERENDIPITY_TTS_SERVERS` — JSON object mapping opaque selector keys to trusted TTS server base URLs (see [TTS proxy security](#tts-proxy-security)).
 - `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` — comma-separated list of allowed origins (scheme + netloc) for cross-origin protection on the TTS endpoints (see [TTS proxy security](#tts-proxy-security)). When unset or blank it defaults to the server's own origin (`http://{host}:{port}`), so the default configuration permits same-origin requests while still rejecting cross-origin ones. When `SERENDIPITY_WEBUI_HOST` is a wildcard bind address (`0.0.0.0` or `::`), the startup default is left unset on purpose (because `http://0.0.0.0:PORT` is not a browser-reachable origin) and same-origin requests are instead derived per request from the request's scheme and `Host` header; set `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` explicitly if you want a fixed list. Behind a TLS-terminating reverse proxy the app sees `http` while the browser sends an `https` Origin, so the per-request same-origin fallback accepts both `http://<host>` and `https://<host>` for the request's own host; set `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` explicitly to the real `https://` origin(s) for the most explicit configuration, and/or set `SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO=1` when the app is only reachable through a proxy that sets `X-Forwarded-Proto` (never enable it when clients can reach the app directly).
@@ -170,6 +166,7 @@ serendipity-webui/
 │   ├── vulture_whitelist.py # Vulture false-positive whitelist (wired via [tool.vulture]; excluded from coverage)
 │   ├── test_pages.py        # Page route tests
 │   ├── test_main_entrypoint.py # __main__ entrypoint test
+│   ├── test_entrypoint_script.py # entrypoint.sh bind-host/export regression tests
 │   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
 │   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
 │   ├── test_xss_sanitization.py # XSS sanitization tests
@@ -264,6 +261,7 @@ The Dockerfile uses a multi-stage build for minimal image size:
 The container runs as a non-root user for security.
 
 - **ENTRYPOINT**: Runs `uvicorn` in the foreground as PID 1 via `exec` in `entrypoint.sh`, so the server receives `SIGTERM`/`SIGINT` for graceful shutdown and the container exits with the application's status code (allowing restart policies to detect crashes).
+- **Bind address**: The container entrypoint defaults the bind host to `0.0.0.0` (overriding the bare-metal `app.main` default of `127.0.0.1`) so `docker run -p 8080:8080` is reachable out of the box; set `SERENDIPITY_WEBUI_HOST=127.0.0.1` for loopback-only. Because a wildcard bind leaves the startup TTS allow-list empty, operators exposing the container should set `SERENDIPITY_WEBUI_ALLOWED_ORIGINS` explicitly.
 
 ## License
 
