@@ -809,3 +809,41 @@ def test_wildcard_bind_cross_origin_rejected(monkeypatch):
 
     request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://evil.example.com")])
     assert app_main._origin_allowed(request) is False
+
+
+def test_wildcard_bind_e2e_origin_localhost_8080_allowed(client, monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get(
+            "/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "http://localhost:8080", "Host": "localhost:8080"},
+        )
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+
+
+def test_wildcard_bind_e2e_cross_origin_rejected(client, monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get(
+            "/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "http://evil.example.com", "Host": "localhost:8080"},
+        )
+
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
