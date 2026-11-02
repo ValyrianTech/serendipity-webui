@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -17,10 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
 
-app = FastAPI(title="Serendipity Web UI")
 logger = logging.getLogger(__name__)
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 DEFAULT_TTS_SERVER = "primary"
@@ -28,6 +26,36 @@ DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
 
 WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
+
+
+def populate_default_allowed_origins() -> None:
+    """Populate the default TTS allow-list and log the effective value.
+
+    When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is unset or blank, it is set to
+    the server's own origin (``http://{WEBUI_HOST}:{WEBUI_PORT}``) so the
+    default configuration permits same-origin requests while still rejecting
+    cross-origin ones. The effective allow-list is then logged at INFO level
+    whether or not the variable was already set.
+
+    This is intended to run once at application startup. It mutates
+    ``os.environ`` rather than changing :func:`get_allowed_origins`, which keeps
+    returning ``frozenset()`` when the variable is unset.
+    """
+    if not os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "").strip():
+        os.environ[DEFAULT_ALLOWED_ORIGINS_ENV] = f"http://{WEBUI_HOST}:{WEBUI_PORT}"
+    logger.info("TTS allowed origins: %s", sorted(get_allowed_origins()))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: populate the default allow-list on startup."""
+    populate_default_allowed_origins()
+    yield
+
+
+app = FastAPI(title="Serendipity Web UI", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 
 def get_configured_tts_servers() -> dict[str, str]:
@@ -104,9 +132,15 @@ def _origin_allowed(request: Request) -> bool:
 
     The decision is made primarily from the ``Origin`` header, which is matched
     exactly (scheme + netloc, case-insensitive, trailing slash stripped) against
-    the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. The
-    ``Referer`` header and the request ``Host`` header are never used for the
-    decision and are never trusted (both are spoofable).
+    the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. When
+    that allow-list is empty (the default when the variable is unset), the check
+    falls back to the request's own origin — derived from the request scheme and
+    the ``Host`` header — so the default configuration rejects only cross-origin
+    requests rather than every request that carries an ``Origin`` header. The
+    ``Host`` header is used solely to derive the request's *own* origin in that
+    fallback and is never used to match an arbitrary foreign ``Origin``; the
+    ``Referer`` header is never used for the decision and never trusted (both
+    ``Referer`` and ``Host`` are spoofable).
 
     When ``Origin`` is absent the decision is based on ``Sec-Fetch-Site``, not
     ``Sec-Fetch-Mode``:
@@ -187,15 +221,22 @@ def _origin_allowed(request: Request) -> bool:
             return sec_fetch_site.strip().lower() == "same-origin"
         return request.headers.get("sec-fetch-mode") is None
 
+    allowed = get_allowed_origins()
+    if not allowed:
+        host = request.headers.get("host")
+        if host:
+            same_origin = f"{request.url.scheme}://{host.strip().lower()}".rstrip("/")
+            allowed = frozenset({same_origin})
+
     if origin == "null":
-        return "null" in get_allowed_origins()
+        return "null" in allowed
 
     parsed = urlparse(origin)
     if not parsed.scheme or not parsed.netloc:
         return False
 
     normalised = f"{parsed.scheme}://{parsed.netloc}".lower().rstrip("/")
-    return normalised in get_allowed_origins()
+    return normalised in allowed
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -376,8 +417,10 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
 
     Cross-origin requests are rejected before any outbound work: the request's
     ``Origin`` header (scheme + netloc) must match the server-side allow-list
-    ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). The
-    ``Referer`` and ``Host`` headers are never used for that decision.
+    ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). When
+    that allow-list is unset it defaults to the server's own origin, so the
+    default configuration rejects only cross-origin requests. The ``Referer``
+    and ``Host`` headers are never used for that decision.
 
     :param request: The incoming HTTP request.
     :type request: Request
@@ -467,7 +510,8 @@ async def tts_server(request: Request) -> JSONResponse:
     server URL to unrelated origins: the ``Origin`` header (scheme + netloc) is
     matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
     allow-list (the ``Referer`` and ``Host`` headers are never used for the
-    decision). Requests without an ``Origin`` header are allowed only when
+    decision); when the allow-list is unset it defaults to the server's own
+    origin. Requests without an ``Origin`` header are allowed only when
     ``Sec-Fetch-Site: same-origin`` (a same-origin browser fetch, since browsers
     omit ``Origin`` on same-origin GETs), and rejected for any other
     ``Sec-Fetch-Site`` value (``same-site``/``cross-site``/``none``). A request
