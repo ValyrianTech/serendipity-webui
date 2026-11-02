@@ -200,7 +200,8 @@
         if (window.currentWif) {
             const address = wifToAddress(window.currentWif);
             document.getElementById('current-address').value = address || 'Invalid key';
-            document.getElementById('wif-key-display').value = window.currentWif.substring(0, 10) + '...' + window.currentWif.substring(window.currentWif.length - 10);
+            // Never echo key material to the DOM; show a fixed placeholder instead.
+            document.getElementById('wif-key-display').value = '(key loaded — hidden)';
         } else if (storage) {
             document.getElementById('current-address').value = '(encrypted - unlock to view)';
             document.getElementById('wif-key-display').value = '(encrypted)';
