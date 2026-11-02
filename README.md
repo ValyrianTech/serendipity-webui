@@ -166,6 +166,7 @@ serendipity-webui/
 │   ├── vulture_whitelist.py # Vulture false-positive whitelist (wired via [tool.vulture]; excluded from coverage)
 │   ├── test_pages.py        # Page route tests
 │   ├── test_main_entrypoint.py # __main__ entrypoint test
+│   ├── test_entrypoint_script.py # entrypoint.sh bind-host/export regression tests
 │   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
 │   ├── test_tts_proxy.py    # /api/tts-proxy endpoint tests
 │   ├── test_xss_sanitization.py # XSS sanitization tests
