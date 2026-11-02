@@ -3,6 +3,8 @@
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -17,17 +19,94 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
 
-app = FastAPI(title="Serendipity Web UI")
 logger = logging.getLogger(__name__)
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 DEFAULT_TTS_SERVER = "primary"
 DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
+TRUST_FORWARDED_PROTO_ENV = "SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO"
+
+# Resolved startup default for the TTS allow-list, populated by
+# populate_default_allowed_origins(). ``None`` means "not yet resolved"; an
+# empty frozenset means "resolved, but no default (wildcard bind host)".
+DEFAULT_ALLOWED_ORIGINS: frozenset[str] | None = None
 
 WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
+
+
+def _is_wildcard_host(host: str) -> bool:
+    """Return True when the bind host is a wildcard address.
+
+    A wildcard bind host (``0.0.0.0`` or ``::``) makes the server listen on all
+    interfaces, so it cannot be turned into a browser-reachable origin for the
+    allow-list. Whitespace and the surrounding square brackets of an IPv6
+    literal form (e.g. ``[::]``) are ignored before the comparison.
+
+    :param host: The configured bind host string.
+    :type host: str
+    :returns: True when the host is ``0.0.0.0`` or ``::``, False otherwise.
+    :rtype: bool
+    """
+    normalised = host.strip()
+    if normalised.startswith("[") and normalised.endswith("]"):
+        normalised = normalised[1:-1].strip()
+    return normalised in {"0.0.0.0", "::"}
+
+
+def populate_default_allowed_origins() -> None:
+    """Resolve the default TTS allow-list and log the effective value.
+
+    When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is unset or blank and the bind
+    host is not a wildcard address, the module-level :data:`DEFAULT_ALLOWED_ORIGINS`
+    is set to the server's own origin (``http://{WEBUI_HOST}:{WEBUI_PORT}``) so
+    the default configuration permits same-origin requests while still rejecting
+    cross-origin ones.
+
+    When the bind host is a wildcard address (``0.0.0.0`` or ``::``), the
+    default is left empty: ``http://0.0.0.0:8080`` is not an origin any browser
+    sends, so it would be an unreachable allow-list entry. An empty default
+    keeps :func:`get_allowed_origins` returning ``frozenset()``, which makes
+    :func:`_origin_allowed` fall back to deriving each request's own origin from
+    its ``Host`` header at request time.
+
+    When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is set (non-blank), the explicit
+    value wins via :func:`get_allowed_origins`, so no startup default is needed
+    and :data:`DEFAULT_ALLOWED_ORIGINS` is left as ``None``.
+
+    The effective allow-list is logged at INFO level whether or not the variable
+    was already set, and the wildcard-host case additionally logs an informative
+    INFO message explaining that the allow-list was left unset.
+
+    This is intended to run once at application startup. It resolves the default
+    into the module-level :data:`DEFAULT_ALLOWED_ORIGINS` attribute and does not
+    mutate ``os.environ``.
+    """
+    global DEFAULT_ALLOWED_ORIGINS
+    if os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "").strip():
+        DEFAULT_ALLOWED_ORIGINS = None
+    elif _is_wildcard_host(WEBUI_HOST):
+        DEFAULT_ALLOWED_ORIGINS = frozenset()
+        logger.info(
+            "TTS allowed origins left unset (wildcard bind host %s); "
+            "same-origin requests are derived from each request's Host header",
+            WEBUI_HOST,
+        )
+    else:
+        DEFAULT_ALLOWED_ORIGINS = frozenset({f"http://{WEBUI_HOST}:{WEBUI_PORT}"})
+    logger.info("TTS allowed origins: %s", sorted(get_allowed_origins()))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan: populate the default allow-list on startup."""
+    populate_default_allowed_origins()
+    yield
+
+
+app = FastAPI(title="Serendipity Web UI", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
 
 
 def get_configured_tts_servers() -> dict[str, str]:
@@ -83,20 +162,78 @@ def get_allowed_origins() -> frozenset[str]:
     is read lazily on each call so tests (and deployments) can change it without
     restarting the process.
 
-    :returns: The normalised set of allowed origins. Empty when the variable is
-        unset or blank.
+    When the variable is unset or blank, the module-level
+    :data:`DEFAULT_ALLOWED_ORIGINS` (resolved at startup by
+    :func:`populate_default_allowed_origins`) is returned if it has been set;
+    otherwise (``None``) the empty set is returned.
+
+    :returns: The normalised set of allowed origins.
     :rtype: frozenset[str]
     """
     raw = os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "")
-    if not raw:
-        return frozenset()
-    allowed: set[str] = set()
-    for entry in raw.split(","):
-        entry = entry.strip().lower()
-        if not entry:
-            continue
-        allowed.add(entry.removesuffix("/"))
-    return frozenset(allowed)
+    if raw.strip():
+        allowed: set[str] = set()
+        for entry in raw.split(","):
+            entry = entry.strip().lower()
+            if not entry:
+                continue
+            allowed.add(entry.removesuffix("/"))
+        return frozenset(allowed)
+    if DEFAULT_ALLOWED_ORIGINS is not None:
+        return DEFAULT_ALLOWED_ORIGINS
+    return frozenset()
+
+
+def _trust_forwarded_proto() -> bool:
+    """Return True when the forwarded ``X-Forwarded-Proto`` header should be trusted.
+
+    This is an opt-in controlled by the ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``
+    environment variable. It must only be enabled when the app is reachable
+    exclusively through a reverse proxy that overwrites/strips the
+    ``X-Forwarded-Proto`` header; otherwise a client could spoof the header and
+    influence the derived self-origin scheme. Enabling it only ever widens the
+    derived *self* origin's scheme — never the host — so it cannot be used to
+    allow a foreign host.
+
+    The variable is treated as truthy (case-insensitive, whitespace-stripped)
+    only when it is exactly ``1``, ``true``, ``yes``, or ``on``; any other value
+    (including unset or blank) is treated as False.
+
+    :returns: True when the variable is set to a truthy value, False otherwise.
+    :rtype: bool
+    """
+    value = os.environ.get(TRUST_FORWARDED_PROTO_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _forwarded_scheme(request: Request) -> str | None:
+    """Return the trusted forwarded scheme from ``X-Forwarded-Proto``, or None.
+
+    When :func:`_trust_forwarded_proto` is False the header is never consulted
+    and this returns None. When it is True, the ``X-Forwarded-Proto`` header is
+    read, the first comma-separated value is taken (proxies may chain), it is
+    stripped and lowercased, and it is returned only when it is exactly ``http``
+    or ``https``; otherwise None is returned (missing or empty header, or any
+    other value such as ``ftp`` or garbage).
+
+    ``X-Forwarded-Host`` is never read or trusted: the host must keep coming
+    from the ``Host`` header.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: ``"http"`` or ``"https"`` when a valid forwarded scheme is present
+        and trusted, None otherwise.
+    :rtype: str | None
+    """
+    if not _trust_forwarded_proto():
+        return None
+    forwarded = request.headers.get("x-forwarded-proto")
+    if not forwarded:
+        return None
+    first = forwarded.split(",")[0].strip().lower()
+    if first in {"http", "https"}:
+        return first
+    return None
 
 
 def _origin_allowed(request: Request) -> bool:
@@ -104,9 +241,25 @@ def _origin_allowed(request: Request) -> bool:
 
     The decision is made primarily from the ``Origin`` header, which is matched
     exactly (scheme + netloc, case-insensitive, trailing slash stripped) against
-    the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. The
-    ``Referer`` header and the request ``Host`` header are never used for the
-    decision and are never trusted (both are spoofable).
+    the server-side allow-list from ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``. When
+    that allow-list is empty (the default when the variable is unset), the check
+    falls back to the request's own origin — derived from the request scheme and
+    the ``Host`` header — so the default configuration rejects only cross-origin
+    requests rather than every request that carries an ``Origin`` header. The
+    ``Host`` header is used solely to derive the request's *own* origin in that
+    fallback and is never used to match an arbitrary foreign ``Origin``; the
+    ``Referer`` header is never used for the decision and never trusted (both
+    ``Referer`` and ``Host`` are spoofable).
+
+    Because a TLS-terminating reverse proxy makes ``request.url.scheme`` ``http``
+    while the browser sees ``https``, the empty-allow-list fallback accepts BOTH
+    ``http://<host>`` and ``https://<host>`` for the request's own host — same
+    host only, so this does not permit any foreign origin. ``X-Forwarded-Proto``
+    is honoured ONLY when ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO`` is set to a
+    truthy value, and even then only to choose the scheme of the self-origin,
+    never the host. For TLS-terminated deployments operators may alternatively
+    (or additionally) set ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` explicitly to the
+    real https origin(s), which is the most explicit and recommended option.
 
     When ``Origin`` is absent the decision is based on ``Sec-Fetch-Site``, not
     ``Sec-Fetch-Mode``:
@@ -187,15 +340,30 @@ def _origin_allowed(request: Request) -> bool:
             return sec_fetch_site.strip().lower() == "same-origin"
         return request.headers.get("sec-fetch-mode") is None
 
+    allowed = get_allowed_origins()
+    if not allowed:
+        host = request.headers.get("host")
+        if host:
+            host = host.strip().lower()
+            scheme = _forwarded_scheme(request)
+            if scheme is None:
+                scheme = request.url.scheme
+            entries: set[str] = {f"{scheme}://{host}".rstrip("/")}
+            if scheme == "http":
+                entries.add(f"https://{host}".rstrip("/"))
+            elif scheme == "https":
+                entries.add(f"http://{host}".rstrip("/"))
+            allowed = frozenset(entries)
+
     if origin == "null":
-        return "null" in get_allowed_origins()
+        return "null" in allowed
 
     parsed = urlparse(origin)
     if not parsed.scheme or not parsed.netloc:
         return False
 
     normalised = f"{parsed.scheme}://{parsed.netloc}".lower().rstrip("/")
-    return normalised in get_allowed_origins()
+    return normalised in allowed
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -376,8 +544,14 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
 
     Cross-origin requests are rejected before any outbound work: the request's
     ``Origin`` header (scheme + netloc) must match the server-side allow-list
-    ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). The
-    ``Referer`` and ``Host`` headers are never used for that decision.
+    ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). When
+    that allow-list is unset it defaults to the server's own origin, so the
+    default configuration rejects only cross-origin requests; the request-time
+    fallback accepts both the ``http`` and ``https`` forms of the request's own
+    host (so TLS-terminating reverse proxies work out of the box), and
+    ``X-Forwarded-Proto`` is only honoured when explicitly trusted via
+    ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. The ``Referer`` and ``Host``
+    headers are never used for that decision.
 
     :param request: The incoming HTTP request.
     :type request: Request
@@ -467,7 +641,12 @@ async def tts_server(request: Request) -> JSONResponse:
     server URL to unrelated origins: the ``Origin`` header (scheme + netloc) is
     matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
     allow-list (the ``Referer`` and ``Host`` headers are never used for the
-    decision). Requests without an ``Origin`` header are allowed only when
+    decision); when the allow-list is unset it defaults to the server's own
+    origin, and the request-time fallback accepts both the ``http`` and ``https``
+    forms of the request's own host (so TLS-terminating reverse proxies work out
+    of the box); ``X-Forwarded-Proto`` is only honoured when explicitly trusted
+    via ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. Requests without an
+    ``Origin`` header are allowed only when
     ``Sec-Fetch-Site: same-origin`` (a same-origin browser fetch, since browsers
     omit ``Origin`` on same-origin GETs), and rejected for any other
     ``Sec-Fetch-Site`` value (``same-site``/``cross-site``/``none``). A request

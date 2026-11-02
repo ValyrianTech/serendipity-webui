@@ -1,6 +1,7 @@
 """Tests for the /api/tts-proxy endpoint defined in app.main."""
 
 import logging
+import os
 from contextlib import contextmanager
 from typing import ClassVar
 from unittest.mock import patch
@@ -22,6 +23,12 @@ def make_response(content=b"", status_code=200, headers=None):
 def _configure_primary_server(monkeypatch):
     """Configure a single trusted 'primary' TTS server for the happy path."""
     monkeypatch.setenv("SERENDIPITY_TTS_SERVERS", '{"primary": "http://tts.local"}')
+
+
+@pytest.fixture(autouse=True)  # noqa: V103
+def _reset_default_allowed_origins(monkeypatch):
+    """Reset the module-level default so tests are order-independent."""
+    monkeypatch.setattr(app_main, "DEFAULT_ALLOWED_ORIGINS", None)
 
 
 class MockAsyncClient:
@@ -518,13 +525,14 @@ def test_origin_with_port_allowed_when_allowlisted(client, monkeypatch):
     assert capture["url"] == "http://tts.local/synthesize_speech/"
 
 
-def _make_request(headers):
+def _make_request(headers, scheme="http"):
     scope = {
         "type": "http",
         "method": "GET",
         "path": "/api/tts-proxy",
         "headers": [(k.lower().encode(), v.encode()) for k, v in headers],
         "query_string": b"",
+        "scheme": scheme,
     }
     return Request(scope)
 
@@ -702,3 +710,308 @@ def test_get_allowed_origins_parses_list(monkeypatch):
 def test_get_allowed_origins_ignores_empty_entries(monkeypatch):
     monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", ",http://testserver,,https://x.example,")
     assert app_main.get_allowed_origins() == frozenset({"http://testserver", "https://x.example"})
+
+
+def test_get_allowed_origins_uses_module_default_when_env_unset(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setattr(app_main, "DEFAULT_ALLOWED_ORIGINS", frozenset({"http://default.example"}))
+    assert app_main.get_allowed_origins() == frozenset({"http://default.example"})
+
+
+def test_default_config_same_origin_with_origin_allowed(client, monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "http://testserver"})
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+
+
+def test_default_config_cross_origin_rejected(client, monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "http://evil.example.com"})
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+
+
+def test_origin_allowed_empty_allowlist_same_origin(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "testserver"), ("origin", "http://testserver")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_empty_allowlist_no_host_rejected(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("origin", "http://testserver")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_empty_allowlist_cross_origin_rejected(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "testserver"), ("origin", "http://evil.example.com")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_startup_populates_default_allowed_origins(monkeypatch, caplog):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    with caplog.at_level(logging.INFO):
+        app_main.populate_default_allowed_origins()
+
+    expected = f"http://{app_main.WEBUI_HOST}:{app_main.WEBUI_PORT}"
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset({expected})
+    assert app_main.get_allowed_origins() == frozenset({expected})
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert any("TTS allowed origins" in r.message for r in caplog.records)
+
+
+def test_startup_keeps_existing_allowed_origins(monkeypatch, caplog):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", "http://custom.example.com")
+    with caplog.at_level(logging.INFO):
+        app_main.populate_default_allowed_origins()
+
+    assert app_main.DEFAULT_ALLOWED_ORIGINS is None
+    assert app_main.get_allowed_origins() == frozenset({"http://custom.example.com"})
+    assert any("TTS allowed origins" in r.message for r in caplog.records)
+
+
+def test_populate_does_not_mutate_environ(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    expected = f"http://{app_main.WEBUI_HOST}:{app_main.WEBUI_PORT}"
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset({expected})
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "[::]", "  0.0.0.0  ", " [::] ", "  ::  "])
+def test_is_wildcard_host_returns_true(host):
+    assert app_main._is_wildcard_host(host) is True
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "192.168.1.10", "::1"])
+def test_is_wildcard_host_returns_false(host):
+    assert app_main._is_wildcard_host(host) is False
+
+
+def test_startup_wildcard_host_leaves_allowed_origins_unset(monkeypatch, caplog):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    with caplog.at_level(logging.INFO):
+        app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
+    assert app_main.get_allowed_origins() == frozenset()
+    assert any("left unset" in r.message for r in caplog.records)
+    assert any("TTS allowed origins" in r.message for r in caplog.records)
+
+
+def test_startup_wildcard_host_ipv6_leaves_allowed_origins_unset(monkeypatch, caplog):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "::")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    with caplog.at_level(logging.INFO):
+        app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
+    assert app_main.get_allowed_origins() == frozenset()
+
+
+def test_wildcard_bind_same_origin_allowed(monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
+    request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://192.168.1.10:8080")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_wildcard_bind_cross_origin_rejected(monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
+    request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://evil.example.com")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_wildcard_bind_e2e_origin_localhost_8080_allowed(client, monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
+
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get(
+            "/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "http://localhost:8080", "Host": "localhost:8080"},
+        )
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
+
+
+def test_wildcard_bind_e2e_cross_origin_rejected(client, monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
+
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get(
+            "/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "http://evil.example.com", "Host": "localhost:8080"},
+        )
+
+    assert result.status_code == 403
+    assert result.json() == {"error": "Cross-origin TTS proxy request rejected"}
+
+
+def test_trust_forwarded_proto_default_false(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
+    assert app_main._trust_forwarded_proto() is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " On "])
+def test_trust_forwarded_proto_truthy_values(monkeypatch, value):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", value)
+    assert app_main._trust_forwarded_proto() is True
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "garbage"])
+def test_trust_forwarded_proto_falsy_values(monkeypatch, value):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", value)
+    assert app_main._trust_forwarded_proto() is False
+
+
+def test_forwarded_scheme_none_when_untrusted(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "0")
+    request = _make_request([("host", "testserver"), ("x-forwarded-proto", "https")])
+    assert app_main._forwarded_scheme(request) is None
+
+
+def test_forwarded_scheme_none_when_trusted_but_header_missing(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request([("host", "testserver")])
+    assert app_main._forwarded_scheme(request) is None
+
+
+def test_forwarded_scheme_none_when_trusted_but_header_empty(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request([("host", "testserver"), ("x-forwarded-proto", "")])
+    assert app_main._forwarded_scheme(request) is None
+
+
+def test_forwarded_scheme_returns_https(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request([("host", "testserver"), ("x-forwarded-proto", "https")])
+    assert app_main._forwarded_scheme(request) == "https"
+
+
+def test_forwarded_scheme_returns_http(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request([("host", "testserver"), ("x-forwarded-proto", "http")])
+    assert app_main._forwarded_scheme(request) == "http"
+
+
+def test_forwarded_scheme_uses_first_value_case_insensitive(monkeypatch):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request([("host", "testserver"), ("x-forwarded-proto", " HTTPS , http")])
+    assert app_main._forwarded_scheme(request) == "https"
+
+
+@pytest.mark.parametrize("value", ["ftp", "javascript:"])
+def test_forwarded_scheme_rejects_malformed_value(monkeypatch, value):
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request([("host", "testserver"), ("x-forwarded-proto", value)])
+    assert app_main._forwarded_scheme(request) is None
+
+
+def test_origin_allowed_https_self_origin_adds_http_form(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
+    request = _make_request([("host", "ui.example.com"), ("origin", "http://ui.example.com")], scheme="https")
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_https_self_origin_https_form_allowed(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
+    request = _make_request([("host", "ui.example.com"), ("origin", "https://ui.example.com")], scheme="https")
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_tls_terminated_proxy_https_origin_allowed(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
+    request = _make_request([("host", "ui.example.com"), ("origin", "https://ui.example.com")], scheme="http")
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_tls_terminated_proxy_foreign_origin_still_rejected(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
+    request = _make_request([("host", "ui.example.com"), ("origin", "https://evil.example.com")], scheme="http")
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_trusted_forwarded_proto_https_origin_allowed(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request(
+        [("host", "ui.example.com"), ("origin", "https://ui.example.com"), ("x-forwarded-proto", "https")],
+        scheme="http",
+    )
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_trusted_forwarded_proto_does_not_allow_foreign_host(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
+    request = _make_request(
+        [("host", "ui.example.com"), ("origin", "https://evil.example.com"), ("x-forwarded-proto", "https")],
+        scheme="http",
+    )
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_untrusted_forwarded_proto_ignored(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "0")
+    request = _make_request(
+        [("host", "ui.example.com"), ("origin", "https://ui.example.com"), ("x-forwarded-proto", "http")],
+        scheme="http",
+    )
+    assert app_main._origin_allowed(request) is True
+
+    request = _make_request(
+        [("host", "ui.example.com"), ("origin", "http://ui.example.com"), ("x-forwarded-proto", "https")],
+        scheme="http",
+    )
+    assert app_main._origin_allowed(request) is True
+
+
+def test_tts_proxy_tls_terminated_e2e_allowed(client, monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
+    with mock_async_client(response=response):
+        result = client.get(
+            "/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "https://testserver", "Host": "testserver"},
+        )
+
+    assert result.status_code == 200
+    assert result.content == b"AUDIO"
