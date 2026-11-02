@@ -28,9 +28,15 @@ import quickjs
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_HTML_PATH = REPO_ROOT / "app" / "templates" / "settings.html"
 
-# Named constant for the cosmetic placeholder text shown in the unlocked state.
-# Keeping it in one place avoids coupling the template and test assertions to a
-# duplicated literal.
+# Single source of truth for the cosmetic placeholder text shown in the
+# unlocked state. This value is mirrored from the inline JS string in
+# ``app/templates/settings.html``; the template holds the same literal and the
+# ``assert HIDDEN_PLACEHOLDER in content`` test below verifies the template
+# still emits it.
+#
+# The test deliberately couples to this named constant (not a raw string) so
+# that if the cosmetic text changes, only this one line needs updating and the
+# ``assert HIDDEN_PLACEHOLDER in content`` check flags any template/test drift.
 HIDDEN_PLACEHOLDER = "(key loaded — hidden)"
 
 # A real-looking WIF used to prove no key material leaks at runtime.
