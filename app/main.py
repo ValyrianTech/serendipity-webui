@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
@@ -47,7 +48,7 @@ def populate_default_allowed_origins() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: populate the default allow-list on startup."""
     populate_default_allowed_origins()
     yield
