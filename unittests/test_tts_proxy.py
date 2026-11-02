@@ -25,6 +25,12 @@ def _configure_primary_server(monkeypatch):
     monkeypatch.setenv("SERENDIPITY_TTS_SERVERS", '{"primary": "http://tts.local"}')
 
 
+@pytest.fixture(autouse=True)  # noqa: V103
+def _reset_default_allowed_origins(monkeypatch):
+    """Reset the module-level default so tests are order-independent."""
+    monkeypatch.setattr(app_main, "DEFAULT_ALLOWED_ORIGINS", None)
+
+
 class MockAsyncClient:
     """Minimal stand-in for httpx.AsyncClient used by the proxy endpoint."""
 
@@ -705,6 +711,12 @@ def test_get_allowed_origins_ignores_empty_entries(monkeypatch):
     assert app_main.get_allowed_origins() == frozenset({"http://testserver", "https://x.example"})
 
 
+def test_get_allowed_origins_uses_module_default_when_env_unset(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setattr(app_main, "DEFAULT_ALLOWED_ORIGINS", frozenset({"http://default.example"}))
+    assert app_main.get_allowed_origins() == frozenset({"http://default.example"})
+
+
 def test_default_config_same_origin_with_origin_allowed(client, monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
@@ -746,8 +758,9 @@ def test_startup_populates_default_allowed_origins(monkeypatch, caplog):
         app_main.populate_default_allowed_origins()
 
     expected = f"http://{app_main.WEBUI_HOST}:{app_main.WEBUI_PORT}"
-    assert os.environ["SERENDIPITY_WEBUI_ALLOWED_ORIGINS"] == expected
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset({expected})
     assert app_main.get_allowed_origins() == frozenset({expected})
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
     assert any("TTS allowed origins" in r.message for r in caplog.records)
 
 
@@ -756,9 +769,18 @@ def test_startup_keeps_existing_allowed_origins(monkeypatch, caplog):
     with caplog.at_level(logging.INFO):
         app_main.populate_default_allowed_origins()
 
-    assert os.environ["SERENDIPITY_WEBUI_ALLOWED_ORIGINS"] == "http://custom.example.com"
+    assert app_main.DEFAULT_ALLOWED_ORIGINS is None
     assert app_main.get_allowed_origins() == frozenset({"http://custom.example.com"})
     assert any("TTS allowed origins" in r.message for r in caplog.records)
+
+
+def test_populate_does_not_mutate_environ(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    expected = f"http://{app_main.WEBUI_HOST}:{app_main.WEBUI_PORT}"
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset({expected})
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "::", "[::]", "  0.0.0.0  ", " [::] ", "  ::  "])
@@ -778,6 +800,7 @@ def test_startup_wildcard_host_leaves_allowed_origins_unset(monkeypatch, caplog)
         app_main.populate_default_allowed_origins()
 
     assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
     assert app_main.get_allowed_origins() == frozenset()
     assert any("left unset" in r.message for r in caplog.records)
     assert any("TTS allowed origins" in r.message for r in caplog.records)
@@ -790,6 +813,7 @@ def test_startup_wildcard_host_ipv6_leaves_allowed_origins_unset(monkeypatch, ca
         app_main.populate_default_allowed_origins()
 
     assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
     assert app_main.get_allowed_origins() == frozenset()
 
 
@@ -798,6 +822,7 @@ def test_wildcard_bind_same_origin_allowed(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     app_main.populate_default_allowed_origins()
 
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
     request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://192.168.1.10:8080")])
     assert app_main._origin_allowed(request) is True
 
@@ -807,6 +832,7 @@ def test_wildcard_bind_cross_origin_rejected(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     app_main.populate_default_allowed_origins()
 
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
     request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://evil.example.com")])
     assert app_main._origin_allowed(request) is False
 
@@ -817,6 +843,7 @@ def test_wildcard_bind_e2e_origin_localhost_8080_allowed(client, monkeypatch):
     app_main.populate_default_allowed_origins()
 
     assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
 
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
     with mock_async_client(response=response):
@@ -836,6 +863,7 @@ def test_wildcard_bind_e2e_cross_origin_rejected(client, monkeypatch):
     app_main.populate_default_allowed_origins()
 
     assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.DEFAULT_ALLOWED_ORIGINS == frozenset()
 
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
     with mock_async_client(response=response):
