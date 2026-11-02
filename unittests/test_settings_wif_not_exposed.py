@@ -13,6 +13,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_HTML_PATH = REPO_ROOT / "app" / "templates" / "settings.html"
 
 
+def _extract_js_function_body(content, signature):
+    start = content.index(signature)
+    brace = content.index("{", start)
+    depth = 0
+    for i in range(brace, len(content)):
+        if content[i] == "{":
+            depth += 1
+        elif content[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return content[start:i + 1]
+    raise AssertionError(f"Unbalanced braces in {signature}")
+
+
 def test_template_never_slices_current_wif_into_dom():
     content = SETTINGS_HTML_PATH.read_text(encoding="utf-8")
     assert "window.currentWif.substring(" not in content
@@ -23,14 +37,12 @@ def test_template_never_slices_current_wif_into_dom():
 
 def test_update_wif_display_has_no_current_wif_slicing():
     content = SETTINGS_HTML_PATH.read_text(encoding="utf-8")
-    start = content.index("function updateWifDisplay()")
-    try:
-        end = content.index("function ", start + 1)
-    except ValueError:
-        end = len(content)
-    fn_body = content[start:end]
+    fn_body = _extract_js_function_body(content, "function updateWifDisplay()")
     assert "'...'" not in fn_body
     assert "currentWif.substring" not in fn_body
+    for unrelated in ("saveServerSettings", "saveNewWifKey", "withWifBusy"):
+        assert unrelated not in fn_body
+    assert len(fn_body) < 1500
 
 
 def test_rendered_settings_page_does_not_echo_key_material(client):
