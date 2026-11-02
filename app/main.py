@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 DEFAULT_TTS_SERVER = "primary"
 DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
+TRUST_FORWARDED_PROTO_ENV = "SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO"
 
 # Resolved startup default for the TTS allow-list, populated by
 # populate_default_allowed_origins(). ``None`` means "not yet resolved"; an
@@ -183,6 +184,58 @@ def get_allowed_origins() -> frozenset[str]:
     return frozenset()
 
 
+def _trust_forwarded_proto() -> bool:
+    """Return True when the forwarded ``X-Forwarded-Proto`` header should be trusted.
+
+    This is an opt-in controlled by the ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``
+    environment variable. It must only be enabled when the app is reachable
+    exclusively through a reverse proxy that overwrites/strips the
+    ``X-Forwarded-Proto`` header; otherwise a client could spoof the header and
+    influence the derived self-origin scheme. Enabling it only ever widens the
+    derived *self* origin's scheme — never the host — so it cannot be used to
+    allow a foreign host.
+
+    The variable is treated as truthy (case-insensitive, whitespace-stripped)
+    only when it is exactly ``1``, ``true``, ``yes``, or ``on``; any other value
+    (including unset or blank) is treated as False.
+
+    :returns: True when the variable is set to a truthy value, False otherwise.
+    :rtype: bool
+    """
+    value = os.environ.get(TRUST_FORWARDED_PROTO_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _forwarded_scheme(request: Request) -> str | None:
+    """Return the trusted forwarded scheme from ``X-Forwarded-Proto``, or None.
+
+    When :func:`_trust_forwarded_proto` is False the header is never consulted
+    and this returns None. When it is True, the ``X-Forwarded-Proto`` header is
+    read, the first comma-separated value is taken (proxies may chain), it is
+    stripped and lowercased, and it is returned only when it is exactly ``http``
+    or ``https``; otherwise None is returned (missing or empty header, or any
+    other value such as ``ftp`` or garbage).
+
+    ``X-Forwarded-Host`` is never read or trusted: the host must keep coming
+    from the ``Host`` header.
+
+    :param request: The incoming HTTP request.
+    :type request: Request
+    :returns: ``"http"`` or ``"https"`` when a valid forwarded scheme is present
+        and trusted, None otherwise.
+    :rtype: str | None
+    """
+    if not _trust_forwarded_proto():
+        return None
+    forwarded = request.headers.get("x-forwarded-proto")
+    if not forwarded:
+        return None
+    first = forwarded.split(",")[0].strip().lower()
+    if first in {"http", "https"}:
+        return first
+    return None
+
+
 def _origin_allowed(request: Request) -> bool:
     """Return True when the request is permitted to drive the TTS proxy.
 
@@ -197,6 +250,16 @@ def _origin_allowed(request: Request) -> bool:
     fallback and is never used to match an arbitrary foreign ``Origin``; the
     ``Referer`` header is never used for the decision and never trusted (both
     ``Referer`` and ``Host`` are spoofable).
+
+    Because a TLS-terminating reverse proxy makes ``request.url.scheme`` ``http``
+    while the browser sees ``https``, the empty-allow-list fallback accepts BOTH
+    ``http://<host>`` and ``https://<host>`` for the request's own host — same
+    host only, so this does not permit any foreign origin. ``X-Forwarded-Proto``
+    is honoured ONLY when ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO`` is set to a
+    truthy value, and even then only to choose the scheme of the self-origin,
+    never the host. For TLS-terminated deployments operators may alternatively
+    (or additionally) set ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` explicitly to the
+    real https origin(s), which is the most explicit and recommended option.
 
     When ``Origin`` is absent the decision is based on ``Sec-Fetch-Site``, not
     ``Sec-Fetch-Mode``:
@@ -281,8 +344,16 @@ def _origin_allowed(request: Request) -> bool:
     if not allowed:
         host = request.headers.get("host")
         if host:
-            same_origin = f"{request.url.scheme}://{host.strip().lower()}".rstrip("/")
-            allowed = frozenset({same_origin})
+            host = host.strip().lower()
+            scheme = _forwarded_scheme(request)
+            if scheme is None:
+                scheme = request.url.scheme
+            entries: set[str] = {f"{scheme}://{host}".rstrip("/")}
+            if scheme == "http":
+                entries.add(f"https://{host}".rstrip("/"))
+            elif scheme == "https":
+                entries.add(f"http://{host}".rstrip("/"))
+            allowed = frozenset(entries)
 
     if origin == "null":
         return "null" in allowed
@@ -475,8 +546,12 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
     ``Origin`` header (scheme + netloc) must match the server-side allow-list
     ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` (see :func:`_origin_allowed`). When
     that allow-list is unset it defaults to the server's own origin, so the
-    default configuration rejects only cross-origin requests. The ``Referer``
-    and ``Host`` headers are never used for that decision.
+    default configuration rejects only cross-origin requests; the request-time
+    fallback accepts both the ``http`` and ``https`` forms of the request's own
+    host (so TLS-terminating reverse proxies work out of the box), and
+    ``X-Forwarded-Proto`` is only honoured when explicitly trusted via
+    ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. The ``Referer`` and ``Host``
+    headers are never used for that decision.
 
     :param request: The incoming HTTP request.
     :type request: Request
@@ -567,7 +642,11 @@ async def tts_server(request: Request) -> JSONResponse:
     matched against the server-side ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
     allow-list (the ``Referer`` and ``Host`` headers are never used for the
     decision); when the allow-list is unset it defaults to the server's own
-    origin. Requests without an ``Origin`` header are allowed only when
+    origin, and the request-time fallback accepts both the ``http`` and ``https``
+    forms of the request's own host (so TLS-terminating reverse proxies work out
+    of the box); ``X-Forwarded-Proto`` is only honoured when explicitly trusted
+    via ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. Requests without an
+    ``Origin`` header are allowed only when
     ``Sec-Fetch-Site: same-origin`` (a same-origin browser fetch, since browsers
     omit ``Origin`` on same-origin GETs), and rejected for any other
     ``Sec-Fetch-Site`` value (``same-site``/``cross-site``/``none``). A request
