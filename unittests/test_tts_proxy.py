@@ -759,3 +759,53 @@ def test_startup_keeps_existing_allowed_origins(monkeypatch, caplog):
     assert os.environ["SERENDIPITY_WEBUI_ALLOWED_ORIGINS"] == "http://custom.example.com"
     assert app_main.get_allowed_origins() == frozenset({"http://custom.example.com"})
     assert any("TTS allowed origins" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "[::]", "  0.0.0.0  ", " [::] ", "  ::  "])
+def test_is_wildcard_host_returns_true(host):
+    assert app_main._is_wildcard_host(host) is True
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "192.168.1.10", "::1"])
+def test_is_wildcard_host_returns_false(host):
+    assert app_main._is_wildcard_host(host) is False
+
+
+def test_startup_wildcard_host_leaves_allowed_origins_unset(monkeypatch, caplog):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    with caplog.at_level(logging.INFO):
+        app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.get_allowed_origins() == frozenset()
+    assert any("left unset" in r.message for r in caplog.records)
+    assert any("TTS allowed origins" in r.message for r in caplog.records)
+
+
+def test_startup_wildcard_host_ipv6_leaves_allowed_origins_unset(monkeypatch, caplog):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "::")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    with caplog.at_level(logging.INFO):
+        app_main.populate_default_allowed_origins()
+
+    assert "SERENDIPITY_WEBUI_ALLOWED_ORIGINS" not in os.environ
+    assert app_main.get_allowed_origins() == frozenset()
+
+
+def test_wildcard_bind_same_origin_allowed(monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://192.168.1.10:8080")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_wildcard_bind_cross_origin_rejected(monkeypatch):
+    monkeypatch.setattr(app_main, "WEBUI_HOST", "0.0.0.0")
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    app_main.populate_default_allowed_origins()
+
+    request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://evil.example.com")])
+    assert app_main._origin_allowed(request) is False

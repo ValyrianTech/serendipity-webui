@@ -29,21 +29,57 @@ WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
 
 
+def _is_wildcard_host(host: str) -> bool:
+    """Return True when the bind host is a wildcard address.
+
+    A wildcard bind host (``0.0.0.0`` or ``::``) makes the server listen on all
+    interfaces, so it cannot be turned into a browser-reachable origin for the
+    allow-list. Whitespace and the surrounding square brackets of an IPv6
+    literal form (e.g. ``[::]``) are ignored before the comparison.
+
+    :param host: The configured bind host string.
+    :type host: str
+    :returns: True when the host is ``0.0.0.0`` or ``::``, False otherwise.
+    :rtype: bool
+    """
+    normalised = host.strip()
+    if normalised.startswith("[") and normalised.endswith("]"):
+        normalised = normalised[1:-1].strip()
+    return normalised in {"0.0.0.0", "::"}
+
+
 def populate_default_allowed_origins() -> None:
     """Populate the default TTS allow-list and log the effective value.
 
-    When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is unset or blank, it is set to
-    the server's own origin (``http://{WEBUI_HOST}:{WEBUI_PORT}``) so the
-    default configuration permits same-origin requests while still rejecting
-    cross-origin ones. The effective allow-list is then logged at INFO level
-    whether or not the variable was already set.
+    When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is unset or blank and the bind
+    host is not a wildcard address, the variable is set to the server's own
+    origin (``http://{WEBUI_HOST}:{WEBUI_PORT}``) so the default configuration
+    permits same-origin requests while still rejecting cross-origin ones.
+
+    When the bind host is a wildcard address (``0.0.0.0`` or ``::``), the
+    variable is left unset: ``http://0.0.0.0:8080`` is not an origin any browser
+    sends, so it would be an unreachable allow-list entry. Leaving the variable
+    unset keeps :func:`get_allowed_origins` returning ``frozenset()``, which
+    makes :func:`_origin_allowed` fall back to deriving each request's own
+    origin from its ``Host`` header at request time.
+
+    The effective allow-list is logged at INFO level whether or not the variable
+    was already set, and the wildcard-host case additionally logs an informative
+    INFO message explaining that the allow-list was left unset.
 
     This is intended to run once at application startup. It mutates
     ``os.environ`` rather than changing :func:`get_allowed_origins`, which keeps
     returning ``frozenset()`` when the variable is unset.
     """
     if not os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "").strip():
-        os.environ[DEFAULT_ALLOWED_ORIGINS_ENV] = f"http://{WEBUI_HOST}:{WEBUI_PORT}"
+        if _is_wildcard_host(WEBUI_HOST):
+            logger.info(
+                "TTS allowed origins left unset (wildcard bind host %s); "
+                "same-origin requests are derived from each request's Host header",
+                WEBUI_HOST,
+            )
+        else:
+            os.environ[DEFAULT_ALLOWED_ORIGINS_ENV] = f"http://{WEBUI_HOST}:{WEBUI_PORT}"
     logger.info("TTS allowed origins: %s", sorted(get_allowed_origins()))
 
 
