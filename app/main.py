@@ -25,6 +25,11 @@ MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
 DEFAULT_TTS_SERVER = "primary"
 DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
 
+# Resolved startup default for the TTS allow-list, populated by
+# populate_default_allowed_origins(). ``None`` means "not yet resolved"; an
+# empty frozenset means "resolved, but no default (wildcard bind host)".
+DEFAULT_ALLOWED_ORIGINS: frozenset[str] | None = None
+
 WEBUI_HOST = os.environ.get("SERENDIPITY_WEBUI_HOST", "127.0.0.1")
 WEBUI_PORT = int(os.environ.get("SERENDIPITY_WEBUI_PORT", "8080"))
 
@@ -49,37 +54,45 @@ def _is_wildcard_host(host: str) -> bool:
 
 
 def populate_default_allowed_origins() -> None:
-    """Populate the default TTS allow-list and log the effective value.
+    """Resolve the default TTS allow-list and log the effective value.
 
     When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is unset or blank and the bind
-    host is not a wildcard address, the variable is set to the server's own
-    origin (``http://{WEBUI_HOST}:{WEBUI_PORT}``) so the default configuration
-    permits same-origin requests while still rejecting cross-origin ones.
+    host is not a wildcard address, the module-level :data:`DEFAULT_ALLOWED_ORIGINS`
+    is set to the server's own origin (``http://{WEBUI_HOST}:{WEBUI_PORT}``) so
+    the default configuration permits same-origin requests while still rejecting
+    cross-origin ones.
 
     When the bind host is a wildcard address (``0.0.0.0`` or ``::``), the
-    variable is left unset: ``http://0.0.0.0:8080`` is not an origin any browser
-    sends, so it would be an unreachable allow-list entry. Leaving the variable
-    unset keeps :func:`get_allowed_origins` returning ``frozenset()``, which
-    makes :func:`_origin_allowed` fall back to deriving each request's own
-    origin from its ``Host`` header at request time.
+    default is left empty: ``http://0.0.0.0:8080`` is not an origin any browser
+    sends, so it would be an unreachable allow-list entry. An empty default
+    keeps :func:`get_allowed_origins` returning ``frozenset()``, which makes
+    :func:`_origin_allowed` fall back to deriving each request's own origin from
+    its ``Host`` header at request time.
+
+    When ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` is set (non-blank), the explicit
+    value wins via :func:`get_allowed_origins`, so no startup default is needed
+    and :data:`DEFAULT_ALLOWED_ORIGINS` is left as ``None``.
 
     The effective allow-list is logged at INFO level whether or not the variable
     was already set, and the wildcard-host case additionally logs an informative
     INFO message explaining that the allow-list was left unset.
 
-    This is intended to run once at application startup. It mutates
-    ``os.environ`` rather than changing :func:`get_allowed_origins`, which keeps
-    returning ``frozenset()`` when the variable is unset.
+    This is intended to run once at application startup. It resolves the default
+    into the module-level :data:`DEFAULT_ALLOWED_ORIGINS` attribute and does not
+    mutate ``os.environ``.
     """
-    if not os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "").strip():
-        if _is_wildcard_host(WEBUI_HOST):
-            logger.info(
-                "TTS allowed origins left unset (wildcard bind host %s); "
-                "same-origin requests are derived from each request's Host header",
-                WEBUI_HOST,
-            )
-        else:
-            os.environ[DEFAULT_ALLOWED_ORIGINS_ENV] = f"http://{WEBUI_HOST}:{WEBUI_PORT}"
+    global DEFAULT_ALLOWED_ORIGINS
+    if os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "").strip():
+        DEFAULT_ALLOWED_ORIGINS = None
+    elif _is_wildcard_host(WEBUI_HOST):
+        DEFAULT_ALLOWED_ORIGINS = frozenset()
+        logger.info(
+            "TTS allowed origins left unset (wildcard bind host %s); "
+            "same-origin requests are derived from each request's Host header",
+            WEBUI_HOST,
+        )
+    else:
+        DEFAULT_ALLOWED_ORIGINS = frozenset({f"http://{WEBUI_HOST}:{WEBUI_PORT}"})
     logger.info("TTS allowed origins: %s", sorted(get_allowed_origins()))
 
 
@@ -148,20 +161,26 @@ def get_allowed_origins() -> frozenset[str]:
     is read lazily on each call so tests (and deployments) can change it without
     restarting the process.
 
-    :returns: The normalised set of allowed origins. Empty when the variable is
-        unset or blank.
+    When the variable is unset or blank, the module-level
+    :data:`DEFAULT_ALLOWED_ORIGINS` (resolved at startup by
+    :func:`populate_default_allowed_origins`) is returned if it has been set;
+    otherwise (``None``) the empty set is returned.
+
+    :returns: The normalised set of allowed origins.
     :rtype: frozenset[str]
     """
     raw = os.environ.get(DEFAULT_ALLOWED_ORIGINS_ENV, "")
-    if not raw:
-        return frozenset()
-    allowed: set[str] = set()
-    for entry in raw.split(","):
-        entry = entry.strip().lower()
-        if not entry:
-            continue
-        allowed.add(entry.removesuffix("/"))
-    return frozenset(allowed)
+    if raw.strip():
+        allowed: set[str] = set()
+        for entry in raw.split(","):
+            entry = entry.strip().lower()
+            if not entry:
+                continue
+            allowed.add(entry.removesuffix("/"))
+        return frozenset(allowed)
+    if DEFAULT_ALLOWED_ORIGINS is not None:
+        return DEFAULT_ALLOWED_ORIGINS
+    return frozenset()
 
 
 def _origin_allowed(request: Request) -> bool:
