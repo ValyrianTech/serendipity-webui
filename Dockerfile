@@ -28,7 +28,10 @@ COPY entrypoint.sh .
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 
-# Expose the application port
+# Expose the application port. The container entrypoint binds uvicorn to
+# 0.0.0.0 by default so published ports are reachable from outside the
+# container. Operators exposing the UI should set SERENDIPITY_WEBUI_ALLOWED_ORIGINS
+# explicitly (a wildcard bind leaves the TTS allow-list default empty).
 EXPOSE 8080
 
 # Run as non-root user for security
