@@ -59,6 +59,9 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+# or, as an editable install (pyproject.toml declares the same runtime dependencies,
+# including python-dotenv, which app/main.py needs to load .env at startup):
+pip install -e .
 
 # Run the development server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
@@ -165,6 +168,7 @@ serendipity-webui/
 │   ├── conftest.py          # Shared fixtures (FastAPI TestClient)
 │   ├── vulture_whitelist.py # Vulture false-positive whitelist (wired via [tool.vulture]; excluded from coverage)
 │   ├── test_pages.py        # Page route tests
+│   ├── test_dependency_manifests.py # pyproject.toml/requirements.txt dependency-parity tests
 │   ├── test_main_entrypoint.py # __main__ entrypoint test
 │   ├── test_entrypoint_script.py # entrypoint.sh bind-host/export regression tests
 │   ├── test_template_js_interpolation.py # JS interpolation (tojson) security tests
