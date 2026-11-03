@@ -1,12 +1,13 @@
 """FastAPI web UI application for the Serendipity AI agent platform."""
 
+import ipaddress
 import json
 import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 import httpx
 from dotenv import load_dotenv
@@ -52,6 +53,26 @@ def _is_wildcard_host(host: str) -> bool:
     if normalised.startswith("[") and normalised.endswith("]"):
         normalised = normalised[1:-1].strip()
     return normalised in {"0.0.0.0", "::"}
+
+
+def _is_ip_literal(value: str) -> bool:
+    """Return True when ``value`` parses as an IPv4 or IPv6 address.
+
+    Uses the stdlib :mod:`ipaddress` module to determine whether ``value`` is a
+    literal IP address (IPv4 or IPv6). A hostname that merely looks numeric but
+    does not parse (e.g. an invalid octet) is not an IP literal.
+
+    :param value: The host string to test (already stripped of port/brackets).
+    :type value: str
+    :returns: True when ``value`` is a valid IPv4 or IPv6 address, False
+        otherwise.
+    :rtype: bool
+    """
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
 
 
 def populate_default_allowed_origins() -> None:
@@ -245,21 +266,27 @@ def _origin_allowed(request: Request) -> bool:
     that allow-list is empty (the default when the variable is unset), the check
     falls back to the request's own origin — derived from the request scheme and
     the ``Host`` header — so the default configuration rejects only cross-origin
-    requests rather than every request that carries an ``Origin`` header. The
-    ``Host`` header is used solely to derive the request's *own* origin in that
-    fallback and is never used to match an arbitrary foreign ``Origin``; the
-    ``Referer`` header is never used for the decision and never trusted (both
-    ``Referer`` and ``Host`` are spoofable).
+    requests rather than every request that carries an ``Origin`` header. In
+    that empty-allow-list fallback the ``Host`` header is used to derive the
+    request's *own* origin, but ONLY when its netloc is an IP literal or
+    ``localhost`` (``127.0.0.1``/``::1``); a DNS name is rejected because a DNS
+    name can be rebound to ``127.0.0.1`` (DNS rebinding). It is therefore never
+    used to match an arbitrary foreign ``Origin``; the ``Referer`` header is
+    never used for the decision and never trusted (both ``Referer`` and ``Host``
+    are spoofable).
 
     Because a TLS-terminating reverse proxy makes ``request.url.scheme`` ``http``
     while the browser sees ``https``, the empty-allow-list fallback accepts BOTH
     ``http://<host>`` and ``https://<host>`` for the request's own host — same
-    host only, so this does not permit any foreign origin. ``X-Forwarded-Proto``
-    is honoured ONLY when ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO`` is set to a
-    truthy value, and even then only to choose the scheme of the self-origin,
-    never the host. For TLS-terminated deployments operators may alternatively
-    (or additionally) set ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS`` explicitly to the
-    real https origin(s), which is the most explicit and recommended option.
+    host only, and only when that host is an IP literal or ``localhost``, so this
+    does not permit any foreign origin and is rebinding-safe against
+    attacker-controlled DNS names. ``X-Forwarded-Proto`` is honoured ONLY when
+    ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO`` is set to a truthy value, and even
+    then only to choose the scheme of the self-origin, never the host. For
+    TLS-terminated deployments (and any deployment reachable via a real DNS
+    hostname), operators should set ``SERENDIPITY_WEBUI_ALLOWED_ORIGINS``
+    explicitly to the real https origin(s), which is the most explicit and
+    recommended option.
 
     When ``Origin`` is absent the decision is based on ``Sec-Fetch-Site``, not
     ``Sec-Fetch-Mode``:
@@ -345,6 +372,12 @@ def _origin_allowed(request: Request) -> bool:
         host = request.headers.get("host")
         if host:
             host = host.strip().lower()
+            try:
+                hostname = urlsplit("//" + host).hostname
+            except ValueError:
+                return False
+            if not hostname or (hostname not in {"localhost", "127.0.0.1", "::1"} and not _is_ip_literal(hostname)):
+                return False
             scheme = _forwarded_scheme(request)
             if scheme is None:
                 scheme = request.url.scheme
@@ -548,10 +581,11 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
     that allow-list is unset it defaults to the server's own origin, so the
     default configuration rejects only cross-origin requests; the request-time
     fallback accepts both the ``http`` and ``https`` forms of the request's own
-    host (so TLS-terminating reverse proxies work out of the box), and
-    ``X-Forwarded-Proto`` is only honoured when explicitly trusted via
-    ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. The ``Referer`` and ``Host``
-    headers are never used for that decision.
+    host only when that host is an IP literal or ``localhost`` (a DNS name is
+    rejected to prevent DNS rebinding), so TLS-terminating reverse proxies work
+    out of the box, and ``X-Forwarded-Proto`` is only honoured when explicitly
+    trusted via ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. The ``Referer`` and
+    ``Host`` headers are never used for that decision.
 
     :param request: The incoming HTTP request.
     :type request: Request
@@ -643,9 +677,11 @@ async def tts_server(request: Request) -> JSONResponse:
     allow-list (the ``Referer`` and ``Host`` headers are never used for the
     decision); when the allow-list is unset it defaults to the server's own
     origin, and the request-time fallback accepts both the ``http`` and ``https``
-    forms of the request's own host (so TLS-terminating reverse proxies work out
-    of the box); ``X-Forwarded-Proto`` is only honoured when explicitly trusted
-    via ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. Requests without an
+    forms of the request's own host only when that host is an IP literal or
+    ``localhost`` (a DNS name is rejected to prevent DNS rebinding), so
+    TLS-terminating reverse proxies work out of the box; ``X-Forwarded-Proto``
+    is only honoured when explicitly trusted via
+    ``SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO``. Requests without an
     ``Origin`` header are allowed only when
     ``Sec-Fetch-Site: same-origin`` (a same-origin browser fetch, since browsers
     omit ``Origin`` on same-origin GETs), and rejected for any other
