@@ -722,7 +722,11 @@ def test_default_config_same_origin_with_origin_allowed(client, monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
     with mock_async_client(response=response):
-        result = client.get("/api/tts-proxy", params=BASE_PARAMS, headers={"Origin": "http://testserver"})
+        result = client.get(
+            "http://127.0.0.1:8080/api/tts-proxy",
+            params=BASE_PARAMS,
+            headers={"Origin": "http://127.0.0.1:8080"},
+        )
 
     assert result.status_code == 200
     assert result.content == b"AUDIO"
@@ -737,7 +741,7 @@ def test_default_config_cross_origin_rejected(client, monkeypatch):
 
 def test_origin_allowed_empty_allowlist_same_origin(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
-    request = _make_request([("host", "testserver"), ("origin", "http://testserver")])
+    request = _make_request([("host", "127.0.0.1:8080"), ("origin", "http://127.0.0.1:8080")])
     assert app_main._origin_allowed(request) is True
 
 
@@ -750,6 +754,42 @@ def test_origin_allowed_empty_allowlist_no_host_rejected(monkeypatch):
 def test_origin_allowed_empty_allowlist_cross_origin_rejected(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     request = _make_request([("host", "testserver"), ("origin", "http://evil.example.com")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_empty_allowlist_dns_hostname_rejected(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "evil.example.com:8080"), ("origin", "http://evil.example.com:8080")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_empty_allowlist_localhost_allowed(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "localhost:8080"), ("origin", "http://localhost:8080")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_empty_allowlist_ipv6_loopback_allowed(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "[::1]:8080"), ("origin", "http://[::1]:8080")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_empty_allowlist_lan_ip_allowed(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "192.168.1.10:8080"), ("origin", "http://192.168.1.10:8080")])
+    assert app_main._origin_allowed(request) is True
+
+
+def test_origin_allowed_empty_allowlist_malformed_ipv6_host_rejected(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "[::1"), ("origin", "http://[::1")])
+    assert app_main._origin_allowed(request) is False
+
+
+def test_origin_allowed_empty_allowlist_bare_ipv6_without_brackets_rejected(monkeypatch):
+    monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
+    request = _make_request([("host", "::1"), ("origin", "http://[::1]")])
     assert app_main._origin_allowed(request) is False
 
 
@@ -792,6 +832,16 @@ def test_is_wildcard_host_returns_true(host):
 @pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "192.168.1.10", "::1"])
 def test_is_wildcard_host_returns_false(host):
     assert app_main._is_wildcard_host(host) is False
+
+
+@pytest.mark.parametrize("value", ["127.0.0.1", "192.168.1.10", "::1", "2001:db8::1", "0.0.0.0"])
+def test_is_ip_literal_returns_true(value):
+    assert app_main._is_ip_literal(value) is True
+
+
+@pytest.mark.parametrize("value", ["localhost", "example.com", "testserver", "999.999.999.999", "", "not-an-ip"])
+def test_is_ip_literal_returns_false(value):
+    assert app_main._is_ip_literal(value) is False
 
 
 def test_startup_wildcard_host_leaves_allowed_origins_unset(monkeypatch, caplog):
@@ -941,28 +991,28 @@ def test_forwarded_scheme_rejects_malformed_value(monkeypatch, value):
 def test_origin_allowed_https_self_origin_adds_http_form(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
-    request = _make_request([("host", "ui.example.com"), ("origin", "http://ui.example.com")], scheme="https")
+    request = _make_request([("host", "127.0.0.1:8443"), ("origin", "http://127.0.0.1:8443")], scheme="https")
     assert app_main._origin_allowed(request) is True
 
 
 def test_origin_allowed_https_self_origin_https_form_allowed(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
-    request = _make_request([("host", "ui.example.com"), ("origin", "https://ui.example.com")], scheme="https")
+    request = _make_request([("host", "127.0.0.1:8443"), ("origin", "https://127.0.0.1:8443")], scheme="https")
     assert app_main._origin_allowed(request) is True
 
 
 def test_origin_allowed_tls_terminated_proxy_https_origin_allowed(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
-    request = _make_request([("host", "ui.example.com"), ("origin", "https://ui.example.com")], scheme="http")
+    request = _make_request([("host", "127.0.0.1:8443"), ("origin", "https://127.0.0.1:8443")], scheme="http")
     assert app_main._origin_allowed(request) is True
 
 
 def test_origin_allowed_tls_terminated_proxy_foreign_origin_still_rejected(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", raising=False)
-    request = _make_request([("host", "ui.example.com"), ("origin", "https://evil.example.com")], scheme="http")
+    request = _make_request([("host", "127.0.0.1:8443"), ("origin", "https://evil.example.com")], scheme="http")
     assert app_main._origin_allowed(request) is False
 
 
@@ -970,7 +1020,7 @@ def test_origin_allowed_trusted_forwarded_proto_https_origin_allowed(monkeypatch
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
     request = _make_request(
-        [("host", "ui.example.com"), ("origin", "https://ui.example.com"), ("x-forwarded-proto", "https")],
+        [("host", "127.0.0.1:8443"), ("origin", "https://127.0.0.1:8443"), ("x-forwarded-proto", "https")],
         scheme="http",
     )
     assert app_main._origin_allowed(request) is True
@@ -980,7 +1030,7 @@ def test_origin_allowed_trusted_forwarded_proto_does_not_allow_foreign_host(monk
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "1")
     request = _make_request(
-        [("host", "ui.example.com"), ("origin", "https://evil.example.com"), ("x-forwarded-proto", "https")],
+        [("host", "127.0.0.1:8443"), ("origin", "https://evil.example.com"), ("x-forwarded-proto", "https")],
         scheme="http",
     )
     assert app_main._origin_allowed(request) is False
@@ -990,13 +1040,13 @@ def test_origin_allowed_untrusted_forwarded_proto_ignored(monkeypatch):
     monkeypatch.delenv("SERENDIPITY_WEBUI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO", "0")
     request = _make_request(
-        [("host", "ui.example.com"), ("origin", "https://ui.example.com"), ("x-forwarded-proto", "http")],
+        [("host", "127.0.0.1:8443"), ("origin", "https://127.0.0.1:8443"), ("x-forwarded-proto", "http")],
         scheme="http",
     )
     assert app_main._origin_allowed(request) is True
 
     request = _make_request(
-        [("host", "ui.example.com"), ("origin", "http://ui.example.com"), ("x-forwarded-proto", "https")],
+        [("host", "127.0.0.1:8443"), ("origin", "http://127.0.0.1:8443"), ("x-forwarded-proto", "https")],
         scheme="http",
     )
     assert app_main._origin_allowed(request) is True
@@ -1008,9 +1058,9 @@ def test_tts_proxy_tls_terminated_e2e_allowed(client, monkeypatch):
     response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav"})
     with mock_async_client(response=response):
         result = client.get(
-            "/api/tts-proxy",
+            "http://127.0.0.1:8443/api/tts-proxy",
             params=BASE_PARAMS,
-            headers={"Origin": "https://testserver", "Host": "testserver"},
+            headers={"Origin": "https://127.0.0.1:8443", "Host": "127.0.0.1:8443"},
         )
 
     assert result.status_code == 200
