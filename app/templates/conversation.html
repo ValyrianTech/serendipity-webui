@@ -1270,13 +1270,7 @@
             // Process thinking tags in raw content too
             const processedContent = processThinkingTags(content);
             if (processedContent !== content) {
-                const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
-                contentHtml = `<div class="markdown-content">${parts.map(p => {
-                    if (p.startsWith('<div class="thinking-block')) {
-                        return p;
-                    }
-                    return sanitizeHtml(marked.parse(p));
-                }).join('')}</div>`;
+                contentHtml = renderMarkdownWithThinking(processedContent);
             } else {
                 contentHtml = `<div class="markdown-content">${sanitizeHtml(marked.parse(content))}</div>`;
             }
@@ -1451,9 +1445,42 @@
             });
         });
         
+        bindThinkingToggles(div);
+        
         return div;
     }
     
+    // Matches the <div class="thinking-block ...">...</div> fragments produced by
+    // processThinkingTags(). Kept in one place so the render helper below owns the
+    // invariant that only sanitized markup reaches innerHTML.
+    const THINKING_BLOCK_SPLIT_RE = /(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/;
+
+    // Render content that may contain thinking blocks. Every fragment (both the
+    // thinking blocks and the surrounding markdown) is passed through sanitizeHtml,
+    // so no un-sanitized HTML string can ever reach innerHTML. This replaces the
+    // previously duplicated split/sanitize logic in three call sites.
+    function renderMarkdownWithThinking(processedContent) {
+        const parts = processedContent.split(THINKING_BLOCK_SPLIT_RE);
+        const inner = parts.map(p => {
+            if (p.startsWith('<div class="thinking-block')) {
+                // Thinking fragments are sanitized too (defense in depth): even if
+                // processThinkingTags() ever changes, this path stays safe.
+                return sanitizeHtml(p);
+            }
+            return sanitizeHtml(marked.parse(p));
+        }).join('');
+        return `<div class="markdown-content">${inner}</div>`;
+    }
+
+    // Wire up collapse/expand buttons of rendered thinking blocks. They use a
+    // data-* attribute (not an inline onclick, which sanitizeHtml/DOMPurify strips)
+    // so the shared sanitizer can run over the thinking fragment safely.
+    function bindThinkingToggles(root) {
+        root.querySelectorAll('[data-thinking-toggle]').forEach(btn => {
+            btn.addEventListener('click', () => toggleThinking(btn.dataset.thinkingToggle));
+        });
+    }
+
     // Process thinking tags - make them collapsible
     // isStreaming: if true, show thinking content expanded; if false, collapsed
     function processThinkingTags(content, isStreaming = false) {
@@ -1466,7 +1493,7 @@
             const isRotated = isStreaming ? 'rotate-90' : '';
             return `
                 <div class="thinking-block mb-3">
-                    <button onclick="toggleThinking('${uniqueId}')" class="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors">
+                    <button data-thinking-toggle="${uniqueId}" class="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors">
                         <svg id="${uniqueId}-icon" class="w-4 h-4 transform transition-transform ${isRotated}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                         </svg>
@@ -1493,14 +1520,7 @@
                 const processedContent = processThinkingTags(content, isStreaming);
                 // Only parse markdown on non-thinking parts
                 if (processedContent !== content) {
-                    // Has thinking tags - parse the non-thinking parts
-                    const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
-                    return `<div class="markdown-content">${parts.map(p => {
-                        if (p.startsWith('<div class="thinking-block')) {
-                            return p; // Keep thinking blocks as-is
-                        }
-                        return sanitizeHtml(marked.parse(p));
-                    }).join('')}</div>`;
+                    return renderMarkdownWithThinking(processedContent);
                 }
                 return `<div class="markdown-content">${sanitizeHtml(marked.parse(content))}</div>`;
             
@@ -2510,17 +2530,13 @@
             // Process thinking tags in streaming message - show expanded during streaming
             const processedContent = processThinkingTags(data.message, true);
             if (processedContent !== data.message) {
-                const parts = processedContent.split(/(<div class="thinking-block[\s\S]*?<\/div>\s*<\/div>)/);
-                contentEl.innerHTML = `<div class="markdown-content">${parts.map(p => {
-                    if (p.startsWith('<div class="thinking-block')) {
-                        return p;
-                    }
-                    return sanitizeHtml(marked.parse(p));
-                }).join('')}</div>`;
+                contentEl.innerHTML = renderMarkdownWithThinking(processedContent);
             } else {
                 contentEl.innerHTML = `<div class="markdown-content">${sanitizeHtml(marked.parse(data.message))}</div>`;
             }
         }
+        
+        bindThinkingToggles(contentEl);
         
         // Only show streaming content (hide typing dots) if there's actual content
         if (hasContent) {
