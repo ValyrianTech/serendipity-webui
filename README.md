@@ -128,7 +128,7 @@ Server-side values interpolated into JavaScript in Jinja2 templates (e.g. `agent
 
 ### HTML escaping in templates
 
-Dynamic values (e.g. agent names, descriptions, image URLs, message ids, sender names, tool/role/skill names) inserted into template `innerHTML` via JavaScript string interpolation are escaped with a shared `escapeHtml` helper covering `&`, `<`, `>`, `\"` and `'`, so values are safe in both element-text and quoted-attribute/inline-handler contexts. Inline `onclick` handlers that previously embedded untrusted values now use `data-*` attributes with `addEventListener` bindings. The TTS text-extraction helper (`getTextOnlyContent` in `conversation.html`) likewise sanitizes message content through `sanitizeHtml` (DOMPurify) before parsing it via `innerHTML`, so active markup is stripped as well as escaped. The same `escapeHtml` helper also guards the instruction/resource preview fallback in `skills.html` (`updateInstructionsPreview` and `setResourceTab`), which is used when the vendored `marked` library is unavailable, so unescaped content can no longer reach `innerHTML`.
+Dynamic values (e.g. agent names, descriptions, image URLs, message ids, sender names, tool/role/skill names) inserted into template `innerHTML` via JavaScript string interpolation are escaped with a shared `escapeHtml` helper covering `&`, `<`, `>`, `\"` and `'`, so values are safe in both element-text and quoted-attribute/inline-handler contexts. Inline `onclick` handlers that previously embedded untrusted values now use `data-*` attributes with `addEventListener` bindings. The TTS text-extraction helper (`getTextOnlyContent` in `conversation.html`) likewise sanitizes message content through `sanitizeHtml` (DOMPurify) before parsing it via `innerHTML`, so active markup is stripped as well as escaped. The same `escapeHtml` helper also guards the instruction/resource preview fallback in `skills.html` (`updateInstructionsPreview` and `setResourceTab`), which is used when the vendored `marked` library is unavailable, so unescaped content can no longer reach `innerHTML`. Rendered conversation message content (including thinking blocks) is likewise routed through `sanitizeHtml` via a shared `renderMarkdownWithThinking()` helper in `conversation.html`, so every fragment — thinking blocks included — is sanitized before reaching `innerHTML`, and collapse/expand buttons use `data-thinking-toggle` attributes with `addEventListener` (via `bindThinkingToggles()`) rather than inline `onclick` handlers, which the sanitizer strips.
 
 ## Project Structure
 
@@ -179,6 +179,7 @@ serendipity-webui/
 │   ├── test_wif_encryption.py # WIF at-rest encryption tests (SCv2/SCv3/legacy, KAT, tamper)
 │   ├── test_wif_validation.py # WIF parse/validation tests
 │   ├── test_innerhtml_data_escaping.py # innerHTML/data-escaping regression tests
+│   ├── test_thinking_block_sanitized.py # Thinking-block render sanitization / innerHTML injection regression tests
 │   ├── test_api_json_error_handling.py # API client JSON/status error-handling tests
 │   ├── test_load_wif_storage.py # loadWifStorage() corrupted/non-JSON localStorage recovery tests
 │   ├── test_wif_unlock_guard.py # Locked-WIF guard (requireWif) regression tests
