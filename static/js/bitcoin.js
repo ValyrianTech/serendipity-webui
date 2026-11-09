@@ -216,6 +216,22 @@ export async function signMessage(message, wif) {
     return btoa(String.fromCharCode(...sigBytes));
 }
 
+// Explicit float marker. JavaScript numbers cannot distinguish `1` from `1.0`,
+// but the backend types some fields (e.g. `temperature`) as a double and
+// re-serialises them via Python `json.dumps`, which emits an integral float as
+// `1.0`. Wrapping a value in `Float` forces `jsonSortedEncode` to emit a float
+// representation (`1.0`) so the signed bytes match Python, while
+// `toSignedNumbers` strips the marker before the data is POSTed (the backend
+// accepts a plain number for a float field).
+export class Float {
+    constructor(value) {
+        this.value = value;
+    }
+    valueOf() {
+        return this.value;
+    }
+}
+
 // Canonical JSON serialisation used to build the message that gets signed.
 //
 // This MUST produce output that is byte-identical to the backend's Python
@@ -237,11 +253,12 @@ export async function signMessage(message, wif) {
 //     `-0.0`, `0.7`, `1e+16`, `1e-07`), exponent always signed and zero-padded
 //     to at least two digits.
 //
-// WARNING: JavaScript has no int/float distinction, so an integral value like
-// `1` cannot be told apart from `1.0`. Do NOT pass a float whose value is
-// integral and therefore ambiguous; normalise such fields at the call site
-// (see `addMessage` in api.js) so the signed bytes stay stable. A float that
-// is not integral (e.g. `0.7`) is unambiguous and safe to pass.
+// WARNING: JavaScript has no int/float distinction, so a bare number `1`
+// cannot be told apart from `1.0`. For fields the backend types as a float
+// whose value is integral, wrap the value in a `Float` marker at the call site
+// (see `addMessage` in api.js) so the signed bytes carry the `.0` suffix and
+// stay byte-identical to Python. A float that is not integral (e.g. `0.7`) is
+// unambiguous and safe to pass as a plain number.
 function jsonSortedEncode(obj, indent = '  ') {
     // Sort keys by Unicode code point. JS Array.prototype.sort() compares
     // UTF-16 code units, which orders an astral-plane character (surrogate
@@ -276,13 +293,12 @@ function jsonSortedEncode(obj, indent = '  ') {
         return out;
     }
 
-    // CPython float repr. Integral safe-range numbers are printed as bare
-    // integers (matching Python int). Everything else uses shortest round-trip
-    // digits from Number.prototype.toExponential() and reformats them into
-    // CPython's fixed/scientific conventions.
-    function formatNumber(n) {
+    // CPython float repr (always emits a decimal point or exponent). Unlike
+    // formatNumber this never collapses an integral value to a bare integer, so
+    // an integral float (e.g. 1.0) is rendered "1.0" to match Python
+    // json.dumps of a float. Non-finite and null values render "null".
+    function formatFloat(n) {
         if (Object.is(n, -0)) return '-0.0';
-        if (Number.isSafeInteger(n)) return String(n);
         if (!Number.isFinite(n)) return 'null';
         const sci = n.toExponential();
         const eIdx = sci.indexOf('e');
@@ -317,7 +333,19 @@ function jsonSortedEncode(obj, indent = '  ') {
         return sign + '0.' + '0'.repeat(-exp - 1) + digits;
     }
 
+    // Plain-number formatting: integral safe integers are emitted as bare
+    // integers (matching Python int), everything else uses the shared CPython
+    // float repr above. A plain number has no int/float distinction, so an
+    // integral value always renders bare here; callers must use a `Float`
+    // marker to force the float representation.
+    function formatNumber(n) {
+        if (Object.is(n, -0)) return '-0.0';
+        if (Number.isSafeInteger(n)) return String(n);
+        return formatFloat(n);
+    }
+
     function encode(value, level) {
+        if (value instanceof Float) return formatFloat(value.valueOf());
         if (value === null) return 'null';
         const t = typeof value;
         if (t === 'boolean') return value ? 'true' : 'false';
@@ -347,6 +375,30 @@ function jsonSortedEncode(obj, indent = '  ') {
     return encode(obj, 0);
 }
 
+// Deep-clone a JSON-like structure, replacing any `Float` marker with its plain
+// numeric value. ``signData`` signs over the original ``messageData`` (so a
+// ``Float``-marked field produces the correct ``.0`` bytes) but returns the
+// result of this helper as ``data``, so the POSTed body contains only plain
+// numbers (a ``Float`` wrapper object would break the backend's float field).
+export function toSignedNumbers(value) {
+    if (value instanceof Float) return value.valueOf();
+    if (Array.isArray(value)) {
+        const out = [];
+        for (let i = 0; i < value.length; i++) {
+            out.push(toSignedNumbers(value[i]));
+        }
+        return out;
+    }
+    if (value !== null && typeof value === 'object') {
+        const out = {};
+        for (const key of Object.keys(value)) {
+            out[key] = toSignedNumbers(value[key]);
+        }
+        return out;
+    }
+    return value;
+}
+
 export async function signData(messageData, wif) {
     if (!wif) {
         throw new Error('WIF key is locked');
@@ -367,7 +419,7 @@ export async function signData(messageData, wif) {
         message: message,
         signature: signature,
         address: address,
-        data: messageData
+        data: toSignedNumbers(messageData)
     };
 }
 
