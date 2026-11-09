@@ -109,6 +109,14 @@ function __generateWif() {
     return generateWifKey();
 }
 
+function __tryEncode(expr) {
+    try {
+        return 'ok:' + jsonSortedEncode(expr);
+    } catch (e) {
+        return 'err:' + e.message;
+    }
+}
+
 function __runSignDataWithFloatTemperature(data, floatTemp, wif) {
     data.temperature = new Float(floatTemp);
     __signDataResult = { status: 'pending', message: null, data: null, tempType: null, serialized: null, error: null };
@@ -301,6 +309,22 @@ def test_json_sorted_encode_plain_integers_still_render_bare():
     # render as bare integers (matching Python int).
     assert ctx.eval("jsonSortedEncode(1)") == "1"
     assert ctx.eval("jsonSortedEncode(0)") == "0"
+
+
+def test_json_sorted_encode_rejects_non_finite_plain_numbers():
+    ctx = _build_context()
+    for expr in ["NaN", "Infinity", "-Infinity"]:
+        result = ctx.eval("__tryEncode(" + expr + ")")
+        assert result.startswith("err:"), result
+        assert "non-finite" in result
+
+
+def test_json_sorted_encode_rejects_non_finite_float_markers():
+    ctx = _build_context()
+    for expr in ["new Float(NaN)", "new Float(Infinity)", "new Float(-Infinity)"]:
+        result = ctx.eval("__tryEncode(" + expr + ")")
+        assert result.startswith("err:"), result
+        assert "non-finite" in result
 
 
 def _run_sign_data_float_temp(ctx, float_temp, temperature):
