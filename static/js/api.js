@@ -1,5 +1,5 @@
 // API client for Serendipity backend
-import { signData, wifToAddress } from './bitcoin.js';
+import { signData, wifToAddress, Float } from './bitcoin.js';
 
 // Get settings from localStorage
 // Return the currently-unlocked WIF key, or null (after showing an error toast)
@@ -209,7 +209,7 @@ export async function addMessage(wif, data) {
         agent: data.agent,
         folder_name: data.folderName || data.folder_name,
         memory: Math.trunc(Number(data.memory) || 0),
-        temperature: (data.temperature === undefined || data.temperature === null) ? data.temperature : Number(data.temperature),
+        temperature: (data.temperature === undefined || data.temperature === null) ? data.temperature : new Float(Number(data.temperature)),
         thinking_level: data.thinking_level,
         model_name: data.modelName || data.model_name,
         run: data.run,
