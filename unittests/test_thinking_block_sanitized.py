@@ -23,7 +23,6 @@ import re
 import subprocess
 from pathlib import Path
 
-import pytest
 from test_xss_sanitization import (
     _CHROME,
     _extract_from_sanitize_module,
