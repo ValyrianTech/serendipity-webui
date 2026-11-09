@@ -256,6 +256,12 @@ export class Float {
 //     float `repr` semantics: shortest round-trip digits, a decimal point or
 //     exponent always present (e.g. `-0.0`, `0.7`, `1e+16`, `1e-07`), exponent
 //     always signed and zero-padded to at least two digits.
+//   * Non-finite numbers (NaN, Infinity, -Infinity) are rejected with a
+//     `TypeError` rather than silently serialised as JSON `null`. Python
+//     `json.dumps` does not emit `null` for these values (it emits
+//     non-standard `NaN`/`Infinity`, or raises `ValueError` with
+//     `allow_nan=False`), so silently coercing them would mask caller bugs on
+//     the signing path and produce bytes that can never match the backend.
 //
 // WARNING: JavaScript has no int/float distinction, so a bare number `1`
 // cannot be told apart from `1.0`. For fields the backend types as a float
@@ -308,10 +314,10 @@ function jsonSortedEncode(obj, indent = '  ') {
     // CPython float repr (always emits a decimal point or exponent). Unlike
     // formatNumber this never collapses an integral value to a bare integer, so
     // an integral float (e.g. 1.0) is rendered "1.0" to match Python
-    // json.dumps of a float. Non-finite and null values render "null".
+    // json.dumps of a float. Non-finite values are rejected with a TypeError.
     function formatFloat(n) {
         if (Object.is(n, -0)) return '-0.0';
-        if (!Number.isFinite(n)) return 'null';
+        if (!Number.isFinite(n)) throw new TypeError('jsonSortedEncode: cannot serialise non-finite number ' + n);
         const sci = n.toExponential();
         const eIdx = sci.indexOf('e');
         const mantissaRaw = sci.slice(0, eIdx);
@@ -354,6 +360,7 @@ function jsonSortedEncode(obj, indent = '  ') {
     // renders bare here; callers must use a `Float` marker to force the float
     // representation.
     function formatNumber(n) {
+        if (!Number.isFinite(n)) throw new TypeError('jsonSortedEncode: cannot serialise non-finite number ' + n);
         if (Object.is(n, -0)) return '-0.0';
         if (Number.isSafeInteger(n)) return String(n);
         return formatFloat(n);
