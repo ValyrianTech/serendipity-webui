@@ -216,21 +216,135 @@ export async function signMessage(message, wif) {
     return btoa(String.fromCharCode(...sigBytes));
 }
 
+// Canonical JSON serialisation used to build the message that gets signed.
+//
+// This MUST produce output that is byte-identical to the backend's Python
+// `json.dumps(obj, sort_keys=True, indent=2, ensure_ascii=False)`. The
+// contract is:
+//
+//   * Object keys are sorted by Unicode code point (not UTF-16 code unit), so
+//     astral-plane keys sort consistently with Python's `sort_keys=True`.
+//   * Indentation uses the two-space indent string: objects and arrays are
+//     expanded with one entry per line, a single space follows the `:`
+//     separator, and empty `{}` / `[]` stay compact.
+//   * Strings are emitted as raw UTF-8 (ensure_ascii=False semantics): only
+//     `"`, `\` and control characters below U+0020 are escaped (using the
+//     two-character escapes \b \f \n \r \t and \u00xx for the rest); U+2028 /
+//     U+2029 and every other non-ASCII code point are emitted verbatim.
+//   * Integers (within the safe range) are printed without a decimal point.
+//     Non-integral numbers use CPython float `repr` semantics: shortest
+//     round-trip digits, a decimal point or exponent always present (e.g.
+//     `-0.0`, `0.7`, `1e+16`, `1e-07`), exponent always signed and zero-padded
+//     to at least two digits.
+//
+// WARNING: JavaScript has no int/float distinction, so an integral value like
+// `1` cannot be told apart from `1.0`. Do NOT pass a float whose value is
+// integral and therefore ambiguous; normalise such fields at the call site
+// (see `addMessage` in api.js) so the signed bytes stay stable. A float that
+// is not integral (e.g. `0.7`) is unambiguous and safe to pass.
 function jsonSortedEncode(obj, indent = '  ') {
-    function sortObject(o) {
-        if (o === null || typeof o !== 'object') {
-            return o;
+    // Sort keys by Unicode code point. JS Array.prototype.sort() compares
+    // UTF-16 code units, which orders an astral-plane character (surrogate
+    // pair starting at 0xD800) before any BMP character >= 0xE000, unlike
+    // Python's code-point sort. Compare via explicit code-point arrays.
+    function compareCodePoints(a, b) {
+        const ca = Array.from(a, c => c.codePointAt(0));
+        const cb = Array.from(b, c => c.codePointAt(0));
+        const n = Math.min(ca.length, cb.length);
+        for (let i = 0; i < n; i++) {
+            if (ca[i] !== cb[i]) return ca[i] - cb[i];
         }
-        if (Array.isArray(o)) {
-            return o.map(sortObject);
-        }
-        const sorted = {};
-        Object.keys(o).sort().forEach(key => {
-            sorted[key] = sortObject(o[key]);
-        });
-        return sorted;
+        return ca.length - cb.length;
     }
-    return JSON.stringify(sortObject(obj), null, indent);
+
+    // Python json.dumps(ensure_ascii=False) escaping: only `"`, `\` and control
+    // characters below U+0020 are escaped; everything else is emitted raw.
+    function escapeString(s) {
+        let out = '';
+        for (const ch of s) {
+            const cp = ch.codePointAt(0);
+            if (cp === 0x22) out += '\\"';
+            else if (cp === 0x5c) out += '\\\\';
+            else if (cp === 0x08) out += '\\b';
+            else if (cp === 0x09) out += '\\t';
+            else if (cp === 0x0a) out += '\\n';
+            else if (cp === 0x0c) out += '\\f';
+            else if (cp === 0x0d) out += '\\r';
+            else if (cp < 0x20) out += '\\u' + cp.toString(16).padStart(4, '0');
+            else out += ch;
+        }
+        return out;
+    }
+
+    // CPython float repr. Integral safe-range numbers are printed as bare
+    // integers (matching Python int). Everything else uses shortest round-trip
+    // digits from Number.prototype.toExponential() and reformats them into
+    // CPython's fixed/scientific conventions.
+    function formatNumber(n) {
+        if (Object.is(n, -0)) return '-0.0';
+        if (Number.isSafeInteger(n)) return String(n);
+        if (!Number.isFinite(n)) return 'null';
+        const sci = n.toExponential();
+        const eIdx = sci.indexOf('e');
+        const mantissaRaw = sci.slice(0, eIdx);
+        const exp = parseInt(sci.slice(eIdx + 1), 10);
+        const negative = mantissaRaw[0] === '-';
+        const mantissa = negative ? mantissaRaw.slice(1) : mantissaRaw;
+        const digits = mantissa.indexOf('.') !== -1 ? mantissa.replace('.', '') : mantissa;
+        const sign = negative ? '-' : '';
+        // CPython uses scientific notation when the leading-digit exponent is
+        // < -4 or >= 16, otherwise fixed notation.
+        if (exp < -4 || exp >= 16) {
+            let body = digits[0];
+            if (digits.length > 1) body += '.' + digits.slice(1);
+            const absExp = Math.abs(exp);
+            const expStr = (exp < 0 ? '-' : '+') + String(absExp).padStart(2, '0');
+            return sign + body + 'e' + expStr;
+        }
+        if (exp >= 0) {
+            const intLen = exp + 1;
+            let intPart;
+            let fracPart;
+            if (digits.length >= intLen) {
+                intPart = digits.slice(0, intLen);
+                fracPart = digits.slice(intLen);
+            } else {
+                intPart = digits + '0'.repeat(intLen - digits.length);
+                fracPart = '';
+            }
+            return sign + intPart + (fracPart ? '.' + fracPart : '.0');
+        }
+        return sign + '0.' + '0'.repeat(-exp - 1) + digits;
+    }
+
+    function encode(value, level) {
+        if (value === null) return 'null';
+        const t = typeof value;
+        if (t === 'boolean') return value ? 'true' : 'false';
+        if (t === 'number') return formatNumber(value);
+        if (t === 'string') return '"' + escapeString(value) + '"';
+        if (Array.isArray(value)) {
+            if (value.length === 0) return '[]';
+            const childIndent = indent.repeat(level + 1);
+            const closeIndent = indent.repeat(level);
+            const parts = [];
+            for (let i = 0; i < value.length; i++) {
+                parts.push(childIndent + encode(value[i], level + 1));
+            }
+            return '[\n' + parts.join(',\n') + '\n' + closeIndent + ']';
+        }
+        const keys = Object.keys(value).sort(compareCodePoints);
+        if (keys.length === 0) return '{}';
+        const childIndent = indent.repeat(level + 1);
+        const closeIndent = indent.repeat(level);
+        const parts = [];
+        for (let i = 0; i < keys.length; i++) {
+            parts.push(childIndent + '"' + escapeString(keys[i]) + '": ' + encode(value[keys[i]], level + 1));
+        }
+        return '{\n' + parts.join(',\n') + '\n' + closeIndent + '}';
+    }
+
+    return encode(obj, 0);
 }
 
 export async function signData(messageData, wif) {
