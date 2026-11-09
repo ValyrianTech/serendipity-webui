@@ -97,11 +97,11 @@ _HARNESS = """
 var __signDataResult = null;
 
 function __runSignData(data, wif) {
-    __signDataResult = { status: 'pending', message: null, error: null };
+    __signDataResult = { status: 'pending', message: null, data: null, error: null };
     var p = signData(data, wif);
     p.then(
-        function (v) { __signDataResult = { status: 'fulfilled', message: v.message, error: null }; },
-        function (e) { __signDataResult = { status: 'rejected', message: null, error: e.message }; }
+        function (v) { __signDataResult = { status: 'fulfilled', message: v.message, data: v.data, error: null }; },
+        function (e) { __signDataResult = { status: 'rejected', message: null, data: null, error: e.message }; }
     );
 }
 
@@ -115,25 +115,6 @@ function __tryEncode(expr) {
     } catch (e) {
         return 'err:' + e.message;
     }
-}
-
-function __runSignDataWithFloatTemperature(data, floatTemp, wif) {
-    data.temperature = new Float(floatTemp);
-    __signDataResult = { status: 'pending', message: null, data: null, tempType: null, serialized: null, error: null };
-    var p = signData(data, wif);
-    p.then(
-        function (v) {
-            __signDataResult = {
-                status: 'fulfilled',
-                message: v.message,
-                data: v.data,
-                tempType: typeof v.data.temperature,
-                serialized: JSON.stringify(v.data),
-                error: null
-            };
-        },
-        function (e) { __signDataResult = { status: 'rejected', message: null, data: null, tempType: null, serialized: null, error: e.message }; }
-    );
 }
 """
 
@@ -201,10 +182,9 @@ def _py_encode(fixture) -> str:
 
 # Golden fixtures. Each is a JSON-compatible object/array/string/scalar that the
 # JS serializer must match byte-for-byte. Integral floats (e.g. ``1.0``) are
-# deliberately avoided in these *plain* fixtures because JavaScript cannot
-# distinguish ``1`` from ``1.0`` and a plain number renders as a bare integer;
-# the ``Float`` marker (see the dedicated tests below) forces the ``.0``
-# representation for integral floats.
+# deliberately avoided in these fixtures because JavaScript cannot distinguish
+# ``1`` from ``1.0`` and an integral value renders as a bare integer (see the
+# dedicated tests below).
 GOLDEN_FIXTURES = [
     # Simple nested dict / list.
     {
@@ -254,10 +234,39 @@ def test_top_level_array_matches_python():
     assert _js_encode(ctx, fixture) == _py_encode(fixture)
 
 
-# The signData hash golden test: a representative apiData-like payload with a
-# non-integral temperature (0.7) so the signed bytes are deterministic and free
-# of the integral-float ambiguity. The signed ``message`` must be
-# ``/sha256/<hex>`` of Python's UTF-8-encoded canonical serialisation.
+def test_json_sorted_encode_omits_undefined_object_values():
+    ctx = _build_context()
+    # ``JSON.stringify`` drops keys whose value is ``undefined``; the encoder
+    # must do the same so the signed bytes match the POSTed body (the backend
+    # hashes the data as received).
+    assert ctx.eval("jsonSortedEncode({a: 1, b: undefined})") == _py_encode({"a": 1})
+    assert ctx.eval("jsonSortedEncode({b: undefined})") == "{}"
+
+
+def test_json_sorted_encode_renders_undefined_array_elements_as_null():
+    ctx = _build_context()
+    # ``JSON.stringify`` renders ``undefined`` inside an array as ``null``.
+    assert ctx.eval("jsonSortedEncode([1, undefined])") == _py_encode([1, None])
+
+
+def test_sign_data_omits_undefined_fields():
+    ctx = _build_context()
+    wif = ctx.eval("__generateWif()")
+    expected_message = "/sha256/" + hashlib.sha256(
+        _py_encode({"a": 1}).encode("utf-8")
+    ).hexdigest()
+
+    ctx.eval("__runSignData({a: 1, b: undefined}, " + json.dumps(wif) + ")")
+    _drain_jobs(ctx)
+    result = json.loads(ctx.eval("JSON.stringify(__signDataResult)"))
+
+    assert result["status"] == "fulfilled", result.get("error")
+    assert result["message"] == expected_message
+
+
+# The signData hash golden test: a representative apiData-like payload. The
+# signed ``message`` must be ``/sha256/<hex>`` of Python's UTF-8-encoded
+# canonical serialisation.
 _SIGN_FIXTURE = {
     "conversation_id": "conv-123",
     "sender": "user",
@@ -291,27 +300,20 @@ def test_sign_data_message_matches_python_sha256():
     assert result["message"] == expected_message
 
 
-# --- integral-float (temperature) canonicalisation via the Float marker ---------
+# --- integral values are signed exactly as they are sent -----------------------
 
 
-def test_json_sorted_encode_float_marker_renders_integral_floats():
+def test_json_sorted_encode_integral_values_render_bare():
     ctx = _build_context()
-    # An integral value wrapped in Float must carry a decimal point, matching
-    # Python json.dumps of a float (``1.0`` / ``0.0`` / ``-0.0``).
-    assert ctx.eval("jsonSortedEncode(new Float(1))") == "1.0"
-    assert ctx.eval("jsonSortedEncode(new Float(0))") == "0.0"
-    assert ctx.eval("jsonSortedEncode(new Float(-0))") == "-0.0"
-
-
-def test_json_sorted_encode_plain_integers_still_render_bare():
-    ctx = _build_context()
-    # A plain number has no int/float distinction, so integral values must still
-    # render as bare integers (matching Python int).
+    # JS has no int/float distinction, so an integral value renders as a bare
+    # integer — which is exactly what the request body carries, so the backend
+    # hashes the same bytes.
     assert ctx.eval("jsonSortedEncode(1)") == "1"
     assert ctx.eval("jsonSortedEncode(0)") == "0"
+    assert ctx.eval("jsonSortedEncode(1.0)") == "1"
 
 
-def test_json_sorted_encode_rejects_non_finite_plain_numbers():
+def test_json_sorted_encode_rejects_non_finite_numbers():
     ctx = _build_context()
     for expr in ["NaN", "Infinity", "-Infinity"]:
         result = ctx.eval("__tryEncode(" + expr + ")")
@@ -319,62 +321,35 @@ def test_json_sorted_encode_rejects_non_finite_plain_numbers():
         assert "non-finite" in result
 
 
-def test_json_sorted_encode_rejects_non_finite_float_markers():
+def test_sign_data_integral_temperature_matches_python_int():
     ctx = _build_context()
-    for expr in ["new Float(NaN)", "new Float(Infinity)", "new Float(-Infinity)"]:
-        result = ctx.eval("__tryEncode(" + expr + ")")
-        assert result.startswith("err:"), result
-        assert "non-finite" in result
-
-
-def _run_sign_data_float_temp(ctx, float_temp, temperature):
-    """Sign ``_SIGN_FIXTURE`` (without temperature) with a Float-marked one."""
     wif = ctx.eval("__generateWif()")
     fixture = dict(_SIGN_FIXTURE)
-    fixture["temperature"] = temperature  # Python float, e.g. 1.0
-    expected_digest = hashlib.sha256(
+    fixture["temperature"] = 1
+    expected_message = "/sha256/" + hashlib.sha256(
         _py_encode(fixture).encode("utf-8")
     ).hexdigest()
-    expected_message = "/sha256/" + expected_digest
 
-    data = dict(_SIGN_FIXTURE)
-    del data["temperature"]
-    ctx.eval(
-        "__runSignDataWithFloatTemperature("
-        + json.dumps(data)
-        + ", "
-        + json.dumps(float_temp)
-        + ", "
-        + json.dumps(wif)
-        + ")"
-    )
+    ctx.eval("__runSignData(" + json.dumps(fixture) + ", " + json.dumps(wif) + ")")
     _drain_jobs(ctx)
     result = json.loads(ctx.eval("JSON.stringify(__signDataResult)"))
-    return expected_message, result
 
-
-def test_sign_data_integral_temperature_1_matches_python_float():
-    ctx = _build_context()
-    expected_message, result = _run_sign_data_float_temp(ctx, 1, 1.0)
     assert result["status"] == "fulfilled", result.get("error")
     assert result["message"] == expected_message
 
 
-def test_sign_data_integral_temperature_0_matches_python_float():
+def test_sign_data_returns_the_signed_data_unchanged():
     ctx = _build_context()
-    expected_message, result = _run_sign_data_float_temp(ctx, 0, 0.0)
-    assert result["status"] == "fulfilled", result.get("error")
-    assert result["message"] == expected_message
+    wif = ctx.eval("__generateWif()")
 
+    ctx.eval("__runSignData(" + json.dumps(_SIGN_FIXTURE) + ", " + json.dumps(wif) + ")")
+    _drain_jobs(ctx)
+    result = json.loads(ctx.eval("JSON.stringify(__signDataResult)"))
 
-def test_sign_data_returns_plain_number_for_float_marker():
-    ctx = _build_context()
-    _, result = _run_sign_data_float_temp(ctx, 1, 1.0)
     assert result["status"] == "fulfilled", result.get("error")
-    # The returned data must contain a plain number (no Float wrapper object),
-    # so the POSTed JSON body carries ``1``, not ``{"value": 1}``.
-    assert result["tempType"] == "number"
-    assert json.loads(result["serialized"])["temperature"] == 1
+    # ``signData`` must return the payload it signed, so the POSTed body is
+    # byte-identical to the hashed bytes.
+    assert result["data"] == _SIGN_FIXTURE
 
 
 # --- the canonicalisation contract is documented and structurally enforced ---
