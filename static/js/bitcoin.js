@@ -247,11 +247,15 @@ export class Float {
 //     `"`, `\` and control characters below U+0020 are escaped (using the
 //     two-character escapes \b \f \n \r \t and \u00xx for the rest); U+2028 /
 //     U+2029 and every other non-ASCII code point are emitted verbatim.
-//   * Integers (within the safe range) are printed without a decimal point.
-//     Non-integral numbers use CPython float `repr` semantics: shortest
-//     round-trip digits, a decimal point or exponent always present (e.g.
-//     `-0.0`, `0.7`, `1e+16`, `1e-07`), exponent always signed and zero-padded
-//     to at least two digits.
+//   * Integers (within the safe range) are printed without a decimal point. A
+//     plain (non-`Float`) JS number that is an integer and satisfies
+//     `Number.isSafeInteger` — i.e. its magnitude is at most
+//     `Number.MAX_SAFE_INTEGER` = 2^53 - 1 = 9007199254740991 — is printed as a
+//     bare integer; values beyond that safe integer range fall through to
+//     CPython float `repr` formatting (below). Non-integral numbers use CPython
+//     float `repr` semantics: shortest round-trip digits, a decimal point or
+//     exponent always present (e.g. `-0.0`, `0.7`, `1e+16`, `1e-07`), exponent
+//     always signed and zero-padded to at least two digits.
 //
 // WARNING: JavaScript has no int/float distinction, so a bare number `1`
 // cannot be told apart from `1.0`. For fields the backend types as a float
@@ -259,6 +263,14 @@ export class Float {
 // (see `addMessage` in api.js) so the signed bytes carry the `.0` suffix and
 // stay byte-identical to Python. A float that is not integral (e.g. `0.7`) is
 // unambiguous and safe to pass as a plain number.
+//
+// Because a plain number is treated as an integer whenever it is a safe
+// integer, any integral value at or below 2^53 (the `Number.isSafeInteger`
+// boundary) — for example `1e15`, which is `1000000000000000` — is serialised
+// as a bare integer. That DIFFERS from Python's float `repr` (`1e+15`), so a
+// large integral float (and in fact any integral float, not just small ones
+// like `1.0`) must be wrapped in the `Float` marker to match Python's float
+// output.
 function jsonSortedEncode(obj, indent = '  ') {
     // Sort keys by Unicode code point. JS Array.prototype.sort() compares
     // UTF-16 code units, which orders an astral-plane character (surrogate
@@ -333,11 +345,14 @@ function jsonSortedEncode(obj, indent = '  ') {
         return sign + '0.' + '0'.repeat(-exp - 1) + digits;
     }
 
-    // Plain-number formatting: integral safe integers are emitted as bare
-    // integers (matching Python int), everything else uses the shared CPython
-    // float repr above. A plain number has no int/float distinction, so an
-    // integral value always renders bare here; callers must use a `Float`
-    // marker to force the float representation.
+    // Plain-number formatting: a number that is an integer within the exact
+    // safe range (`Number.isSafeInteger`, magnitude <= `Number.MAX_SAFE_INTEGER`
+    // = 2^53 - 1 = 9007199254740991) is emitted as a bare integer (matching
+    // Python int); every other number — non-integral values and integral values
+    // beyond 2^53 — falls through to the shared CPython float `repr` above. A
+    // plain number has no int/float distinction, so an integral value always
+    // renders bare here; callers must use a `Float` marker to force the float
+    // representation.
     function formatNumber(n) {
         if (Object.is(n, -0)) return '-0.0';
         if (Number.isSafeInteger(n)) return String(n);
