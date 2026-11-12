@@ -3,7 +3,6 @@
 import logging
 import os
 from contextlib import contextmanager
-from typing import ClassVar
 from unittest.mock import patch
 
 import httpx
@@ -13,10 +12,37 @@ from fastapi import Request
 from app import main as app_main
 
 
+class MockStreamResponse:
+    """A response-like object yielded by the mock client's ``stream()`` context.
+
+    Exposes the interface the proxy endpoint relies on: ``raise_for_status()``,
+    ``.headers`` and an async ``aiter_bytes()``. The body is delivered as one or
+    more chunks so tests can exercise mid-stream abort behaviour.
+    """
+
+    def __init__(self, content=b"", status_code=200, headers=None, chunks=None):
+        self.headers = dict(headers or {})
+        self.status_code = status_code
+        self._chunks = list(chunks) if chunks is not None else ([content] if content else [])
+        self.yielded = []
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            request = httpx.Request("GET", "http://tts.local/synthesize_speech/")
+            response = httpx.Response(self.status_code, content=b"", request=request)
+            raise httpx.HTTPStatusError(
+                f"Server error '{self.status_code}'", request=request, response=response
+            )
+
+    async def aiter_bytes(self):
+        for index, chunk in enumerate(self._chunks):
+            self.yielded.append(index)
+            yield chunk
+
+
 def make_response(content=b"", status_code=200, headers=None):
-    """Build a real httpx.Response so raise_for_status() behaves normally."""
-    request = httpx.Request("GET", "http://tts.local/synthesize_speech/")
-    return httpx.Response(status_code, content=content, headers=headers or {}, request=request)
+    """Build a streaming response that yields ``content`` as a single chunk."""
+    return MockStreamResponse(content=content, status_code=status_code, headers=headers)
 
 
 @pytest.fixture(autouse=True)  # noqa: V103
@@ -29,6 +55,32 @@ def _configure_primary_server(monkeypatch):
 def _reset_default_allowed_origins(monkeypatch):
     """Reset the module-level default so tests are order-independent."""
     monkeypatch.setattr(app_main, "DEFAULT_ALLOWED_ORIGINS", None)
+
+
+class MockStream:
+    """Async context manager wrapping a single streaming response."""
+
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self._response
+
+    async def __aexit__(self, *_exc_info):
+        return False
+
+
+class _RaisingStream:
+    """Async context manager whose ``__aenter__`` raises the given exception."""
+
+    def __init__(self, exc):
+        self._exc = exc
+
+    async def __aenter__(self):
+        raise self._exc
+
+    async def __aexit__(self, *_exc_info):
+        return False
 
 
 class MockAsyncClient:
@@ -45,14 +97,14 @@ class MockAsyncClient:
     async def __aexit__(self, *_exc_info):
         return False
 
-    async def get(self, url, params=None, headers=None):  # noqa: V107
+    def stream(self, method, url, params=None, headers=None):
         if self._capture is not None:
             self._capture["url"] = url
             self._capture["params"] = params
             self._capture["headers"] = headers
         if self._exc is not None:
-            raise self._exc
-        return self._response
+            return _RaisingStream(self._exc)
+        return MockStream(self._response)
 
 
 @contextmanager
@@ -381,16 +433,11 @@ def test_declared_content_length_over_cap_rejected(client, monkeypatch):
 
 def test_non_integer_content_length_is_ignored(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
-
-    class StubResponse:
-        headers: ClassVar[dict] = {"content-type": "audio/wav", "content-length": "unknown"}
-        content = b"AUDI"
-        status_code = 200
-
-        def raise_for_status(self):
-            pass
-
-    with mock_async_client(response=StubResponse()):
+    response = make_response(
+        content=b"AUDI",
+        headers={"content-type": "audio/wav", "content-length": "unknown"},
+    )
+    with mock_async_client(response=response):
         result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
     assert result.status_code == 200
@@ -399,20 +446,29 @@ def test_non_integer_content_length_is_ignored(client, monkeypatch):
 
 def test_undeclared_oversized_body_rejected_by_backstop(client, monkeypatch):
     monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
-
-    class StubResponse:
-        headers: ClassVar[dict] = {"content-type": "audio/wav"}
-        content = b"AUDIO"
-        status_code = 200
-
-        def raise_for_status(self):
-            pass
-
-    with mock_async_client(response=StubResponse()):
+    response = MockStreamResponse(
+        chunks=[b"AU", b"DI", b"O"],
+        headers={"content-type": "audio/wav"},
+    )
+    with mock_async_client(response=response):
         result = client.get("/api/tts-proxy", params=BASE_PARAMS)
 
     assert result.status_code == 502
     assert result.json() == {"error": "TTS response too large"}
+
+
+def test_stream_aborts_early_without_reading_later_chunks(client, monkeypatch):
+    monkeypatch.setattr("app.main.MAX_TTS_RESPONSE_BYTES", 4)
+    response = MockStreamResponse(
+        chunks=[b"a", b"x" * 1024, b"NEVER-REACHED"],
+        headers={"content-type": "audio/wav"},
+    )
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS response too large"}
+    assert response.yielded == [0, 1]
 
 
 def test_get_configured_tts_servers_parses_json(monkeypatch):
