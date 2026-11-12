@@ -9,10 +9,13 @@ skip marker that pytest reads implicitly at collection time, so it has no
 direct caller. ``from_docker`` is a required lambda-parameter name that
 mirrors ``build_docker.build``'s signature (``def build(docker_repo, tag,
 from_docker=None)``), so it is a live name even though the lambda body does
-not use it.
+not use it. ``method`` is a required parameter name mirroring
+``httpx.AsyncClient.stream``'s signature (used positionally by the code under
+test), so it is a live name even though the mock body does not reference it.
 """
 
 pytestmark  # type: ignore[name-defined]
 _isolate_env  # type: ignore[name-defined]
 _default_allowed_origins  # type: ignore[name-defined]
 from_docker  # type: ignore[name-defined]
+method  # type: ignore[name-defined]
