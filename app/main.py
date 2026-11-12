@@ -626,33 +626,38 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
     # Use a long timeout for slow TTS generation (5 minutes)
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
         try:
-            response = await client.get(request_url, params=params)
-            response.raise_for_status()
+            # Stream the upstream response and enforce the size cap while
+            # reading, so peak memory is bounded to MAX_TTS_RESPONSE_BYTES even
+            # for chunked responses with no Content-Length.
+            async with client.stream("GET", request_url, params=params) as response:
+                response.raise_for_status()
 
-            # Ensure we return audio content type
-            content_type = response.headers.get("content-type", "audio/wav")
-            if not content_type.startswith("audio/"):
-                return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
+                # Ensure we return audio content type
+                content_type = response.headers.get("content-type", "audio/wav")
+                if not content_type.startswith("audio/"):
+                    return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
 
-            # Reject oversized responses up front when the server advertises a
-            # Content-Length, and again after reading as a backstop.
-            declared_length = response.headers.get("content-length")
-            if declared_length is not None:
-                try:
-                    if int(declared_length) > MAX_TTS_RESPONSE_BYTES:
+                # Reject oversized responses up front when the server advertises a
+                # Content-Length, and again while reading as a backstop.
+                declared_length = response.headers.get("content-length")
+                if declared_length is not None:
+                    try:
+                        if int(declared_length) > MAX_TTS_RESPONSE_BYTES:
+                            return JSONResponse({"error": "TTS response too large"}, status_code=502)
+                    except ValueError:
+                        pass
+
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    body.extend(chunk)
+                    if len(body) > MAX_TTS_RESPONSE_BYTES:
                         return JSONResponse({"error": "TTS response too large"}, status_code=502)
-                except ValueError:
-                    pass
 
-            body = response.content
-            if len(body) > MAX_TTS_RESPONSE_BYTES:
-                return JSONResponse({"error": "TTS response too large"}, status_code=502)
-
-            return Response(
-                content=body,
-                media_type=content_type,
-                headers={"Cache-Control": "no-cache"}
-            )
+                return Response(
+                    content=bytes(body),
+                    media_type=content_type,
+                    headers={"Cache-Control": "no-cache"}
+                )
         except httpx.TimeoutException:
             return JSONResponse({"error": "TTS generation timed out"}, status_code=504)
         except httpx.HTTPStatusError as e:
