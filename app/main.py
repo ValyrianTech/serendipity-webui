@@ -23,6 +23,10 @@ load_dotenv(BASE_DIR / ".env")
 logger = logging.getLogger(__name__)
 
 MAX_TTS_RESPONSE_BYTES = 25 * 1024 * 1024
+ALLOWED_TTS_CONTENT_TYPES = frozenset({
+    "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3",
+    "audio/ogg", "audio/opus", "audio/webm", "audio/aac", "audio/flac",
+})
 DEFAULT_TTS_SERVER = "primary"
 DEFAULT_ALLOWED_ORIGINS_ENV = "SERENDIPITY_WEBUI_ALLOWED_ORIGINS"
 TRUST_FORWARDED_PROTO_ENV = "SERENDIPITY_WEBUI_TRUST_FORWARDED_PROTO"
@@ -170,6 +174,54 @@ def resolve_tts_server(selector: str) -> str | None:
     :rtype: str | None
     """
     return get_configured_tts_servers().get(selector)
+
+
+def sanitise_tts_content_type(raw_content_type: str) -> tuple[str | None, str]:
+    """Sanitise an upstream ``Content-Type`` value into a safe media type.
+
+    The upstream ``Content-Type`` header is attacker-influenceable (a malicious
+    or compromised TTS server controls it), so it must never be echoed verbatim
+    into the outgoing response's ``Content-Type`` header. This function reduces
+    the raw value to a single, known-good media type (or rejects it), stripping
+    everything that could be used for response splitting / header injection
+    (control characters such as ``\\r``/``\\n`` and parameter suffixes).
+
+    Processing steps:
+
+    1. Any parameters are discarded by taking the substring before the first
+       ``;`` (e.g. ``audio/ogg; codecs=opus`` becomes ``audio/ogg``).
+    2. Surrounding whitespace is stripped and the value lowercased.
+    3. If the resulting base value contains any control character (any character
+       whose ordinal is below ``0x20``, or DEL ``0x7f``) the value is treated as
+       invalid and ``("invalid", None)`` is returned. This is what blocks CRLF
+       header injection (``\\r`` and ``\\n`` are both below ``0x20``).
+    4. If the base value does not start with ``audio/`` it is not an audio type
+       and ``("non-audio", None)`` is returned.
+    5. Otherwise, if the base value is in :data:`ALLOWED_TTS_CONTENT_TYPES` it is
+       returned as-is; if it starts with ``audio/`` but is not allow-listed it
+       falls back to ``audio/wav`` (still a valid, safe audio media type).
+
+    :param raw_content_type: The raw ``Content-Type`` header value from the
+        upstream TTS server.
+    :type raw_content_type: str
+    :returns: A ``(media_type, status)`` tuple. ``status`` is one of:
+
+        * ``"ok"`` — ``media_type`` is a non-None, sanitised audio media type
+          (either an allow-listed value or the ``audio/wav`` fallback).
+        * ``"invalid"`` — the value contained control characters; ``media_type``
+          is None.
+        * ``"non-audio"`` — the value was not an audio type; ``media_type`` is
+          None.
+    :rtype: tuple[str | None, str]
+    """
+    base = raw_content_type.split(";", 1)[0].strip().lower()
+    if any(ord(char) < 0x20 or ord(char) == 0x7f for char in base):
+        return None, "invalid"
+    if not base.startswith("audio/"):
+        return None, "non-audio"
+    if base in ALLOWED_TTS_CONTENT_TYPES:
+        return base, "ok"
+    return "audio/wav", "ok"
 
 
 def get_allowed_origins() -> frozenset[str]:
@@ -634,7 +686,10 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
 
                 # Ensure we return audio content type
                 content_type = response.headers.get("content-type", "audio/wav")
-                if not content_type.startswith("audio/"):
+                sanitised, status = sanitise_tts_content_type(content_type)
+                if status == "invalid":
+                    return JSONResponse({"error": "TTS server returned invalid content type"}, status_code=502)
+                if status == "non-audio":
                     return JSONResponse({"error": "TTS server returned non-audio content"}, status_code=502)
 
                 # Reject oversized responses up front when the server advertises a
@@ -655,7 +710,7 @@ async def tts_proxy(request: Request, voice: str, text: str, style: str = "defau
 
                 return Response(
                     content=bytes(body),
-                    media_type=content_type,
+                    media_type=sanitised,
                     headers={"Cache-Control": "no-cache"}
                 )
         except httpx.TimeoutException:
