@@ -193,10 +193,10 @@ def sanitise_tts_content_type(raw_content_type: str) -> tuple[str | None, str]:
     2. Surrounding whitespace is stripped and the value lowercased.
     3. If the resulting base value contains any control character (any character
        whose ordinal is below ``0x20``, or DEL ``0x7f``) the value is treated as
-       invalid and ``("invalid", None)`` is returned. This is what blocks CRLF
+       invalid and ``(None, "invalid")`` is returned. This is what blocks CRLF
        header injection (``\\r`` and ``\\n`` are both below ``0x20``).
     4. If the base value does not start with ``audio/`` it is not an audio type
-       and ``("non-audio", None)`` is returned.
+       and ``(None, "non-audio")`` is returned.
     5. Otherwise, if the base value is in :data:`ALLOWED_TTS_CONTENT_TYPES` it is
        returned as-is; if it starts with ``audio/`` but is not allow-listed it
        falls back to ``audio/wav`` (still a valid, safe audio media type).
