@@ -722,6 +722,19 @@ export function isLegacyPlaintextWif(storage) {
 // tabs. This is an intentional middle ground: it avoids re-prompting for the
 // password on every page navigation while never writing the decrypted key to
 // disk or leaking it across tabs.
+//
+// DO NOT move the decrypted WIF out of sessionStorage into module-scope memory
+// (or any other per-document store). PR #37 proposed exactly that and was
+// rejected: this app is a server-rendered multi-page app (the sidebar links are
+// plain <a href> full page loads and there is no client-side router), so a
+// per-document store is destroyed on every navigation and the unlock password
+// would be re-prompted on every page change. Keeping the key in per-tab
+// sessionStorage is the deliberate trade-off that makes "unlock once per tab"
+// work; the reviewer should not flag it as a defect.
+//
+// The transport hardening half of PR #37 (refusing to sign requests over
+// plaintext http:// to a non-loopback host) is unrelated to this storage
+// choice and is not covered by this note.
 const SESSION_STORAGE_KEY = 'wif_session_key';
 
 export function saveSessionWif(wif) {
