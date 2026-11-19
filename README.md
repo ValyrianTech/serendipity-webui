@@ -18,7 +18,7 @@ A standalone web interface for the Serendipity AI agent platform. This applicati
 - **Toolsets** - Create collections of tools from MCP servers
 - **Dark/Light Mode** - Toggle between themes
 - **Bitcoin Authentication** - Secure API requests with Bitcoin message signing
-- **Session Unlock** - Decrypted WIF is held in per-tab sessionStorage with a Lock button, avoiding repeated password prompts within a tab
+- **Session Unlock** - The decrypted WIF is held only in memory for the lifetime of the page (never in persistent storage) with a Lock button; same-document navigation avoids repeated password prompts, while a full page reload re-prompts for the password
 
 ## Tech Stack
 
@@ -80,8 +80,8 @@ On first launch, you'll be prompted to configure:
    - Enter an existing WIF key or generate a new one
    - A password is required; the WIF key is always stored encrypted in localStorage (never in plaintext). The encrypted blob uses PBKDF2-HMAC-SHA256 (600,000 iterations) with ChaCha20 + HMAC-SHA256 (encrypt-then-MAC) in pure JavaScript; the iteration count is stored in a self-describing blob header, and older stored blobs remain decryptable
    - Because key derivation at 600,000 PBKDF2 iterations takes a moment, the unlock, setup "Save & Continue", and change-key "Save" buttons show a brief "Unlocking…"/"Encrypting…" busy state (and are disabled) while the key is derived, so the UI does not appear frozen.
-   - The decrypted key is held in per-tab sessionStorage, so you unlock once per tab session and page navigations within that tab no longer re-prompt for the password
-   - The decrypted key is cleared when the tab closes and is never written to disk; use the sidebar **Lock** button to forget the unlocked key for the current session
+   - The decrypted key is held only in module-scope memory for the lifetime of the page and is never written to `sessionStorage` or any other persistent storage; `sessionStorage` holds only a non-secret presence marker. Same-document navigation reuses the in-memory key and does not re-prompt for the password, but a full page reload re-prompts for the password (a deliberate trade-off so the raw private key is never persisted).
+   - The in-memory key is cleared on `pagehide`/`beforeunload` (best effort) and is never written to disk; use the sidebar **Lock** button to forget the unlocked key for the current session
    - When the key is unlocked, the Settings page shows a fixed `(key loaded — hidden)` placeholder for the key field rather than any part of the key — the WIF private key is never echoed into the page DOM (only the derived address is shown).
    - If a corrupted or non-JSON WIF entry is found in localStorage on startup (e.g. from manual edits or an interrupted write), the stored value is discarded with a console warning and the encrypted-key entry is cleared, so the setup/unlock flow starts cleanly instead of failing to load.
 
@@ -106,6 +106,8 @@ cp .env.example .env
 ### HTTPS / TLS
 
 The UI derives the scheme of every backend request (HTTP API and WebSocket) from the current page protocol. When the Web UI is served over HTTPS, the frontend talks to the backend over `https://`/`wss://` as well; if the backend API port is not also reachable over TLS, the browser will refuse the connection (mixed-content / WebSocket upgrade failures). When running the Web UI behind HTTPS, make sure the Serendipity backend API and WebSocket ports are served over TLS too.
+
+In addition, the client refuses to send signed requests over plaintext HTTP to a non-loopback server. New helpers in `static/js/api.js` — `isLoopbackHost()`, `isInsecureTransport()` and `assertSecureTransport()` — are invoked at the start of every signed POST helper; if the page is served over `http:` and the configured server address is not a loopback host (`localhost`, `127.0.0.1`, `::1`, or a `*.localhost` name), the request is aborted with an error instructing the operator to serve the UI over HTTPS (or connect via localhost/127.0.0.1). On startup the UI also shows a warning toast when this insecure-transport condition holds. Non-signed/read-only requests are unaffected. This ensures the WIF private key material used for signing is not transmitted across a plaintext link to a remote host.
 
 ### TTS proxy security
 
