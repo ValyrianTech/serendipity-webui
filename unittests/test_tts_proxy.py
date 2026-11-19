@@ -206,6 +206,68 @@ def test_non_audio_content_returns_502(client):
     assert result.json() == {"error": "TTS server returned non-audio content"}
 
 
+def test_crlf_content_type_is_rejected_and_not_injected(client):
+    response = make_response(
+        content=b"AUDIO",
+        headers={"content-type": "audio/wav\r\nSet-Cookie: session=stolen\r\nX-Injected: 1"},
+    )
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS server returned invalid content type"}
+    assert "set-cookie" not in result.headers
+    assert "x-injected" not in result.headers
+
+
+def test_content_type_parameters_are_stripped(client):
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/ogg; codecs=opus"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.headers["content-type"] == "audio/ogg"
+
+
+def test_allowlisted_content_type_is_normalised(client):
+    response = make_response(content=b"AUDIO", headers={"content-type": "Audio/X-Wav"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.headers["content-type"] == "audio/x-wav"
+
+
+def test_unallowlisted_audio_content_type_falls_back_to_wav(client):
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/vnd.weird"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 200
+    assert result.headers["content-type"] == "audio/wav"
+
+
+def test_content_type_with_del_control_char_is_rejected(client):
+    response = make_response(content=b"AUDIO", headers={"content-type": "audio/wav\x7f"})
+    with mock_async_client(response=response):
+        result = client.get("/api/tts-proxy", params=BASE_PARAMS)
+
+    assert result.status_code == 502
+    assert result.json() == {"error": "TTS server returned invalid content type"}
+
+
+def test_sanitise_tts_content_type_non_audio():
+    assert app_main.sanitise_tts_content_type("application/json") == (None, "non-audio")
+
+
+def test_sanitise_tts_content_type_allowlisted():
+    assert app_main.sanitise_tts_content_type("audio/mpeg") == ("audio/mpeg", "ok")
+
+
+def test_sanitise_tts_content_type_fallback():
+    assert app_main.sanitise_tts_content_type("audio/unknown") == ("audio/wav", "ok")
+
+
 def test_timeout_returns_504(client):
     with mock_async_client(exc=httpx.TimeoutException("too slow")):
         result = client.get("/api/tts-proxy", params=BASE_PARAMS)
