@@ -37,6 +37,11 @@
             <button onclick="startNewConversation()" class="btn-primary">Start your first conversation</button>
         </div>
         
+        <div id="conversations-render-error" class="text-center py-12 hidden">
+            <p class="text-slate-400 mb-4">This page could not be displayed</p>
+            <p class="text-slate-500 text-sm">Some conversations on this page could not be shown.</p>
+        </div>
+        
         <div id="conversations-error" class="text-center py-12 hidden">
             <p class="text-red-400 mb-4">Failed to load conversations</p>
             <button onclick="loadConversations()" class="btn-primary">Retry</button>
@@ -64,12 +69,14 @@
         const list = document.getElementById('conversations-list');
         const empty = document.getElementById('conversations-empty');
         const error = document.getElementById('conversations-error');
+        const renderError = document.getElementById('conversations-render-error');
         const pagination = document.getElementById('conversations-pagination');
         
         loading.classList.remove('hidden');
         list.classList.add('hidden');
         empty.classList.add('hidden');
         error.classList.add('hidden');
+        renderError.classList.add('hidden');
         pagination.classList.add('hidden');
         
         try {
@@ -78,7 +85,8 @@
             
             currentPage = data.pagination ? data.pagination.page : page;
             
-            if (data.conversations_info && data.conversations_info.length > 0) {
+            const hasRawItems = data.conversations_info && data.conversations_info.length > 0;
+            if (hasRawItems) {
                 list.innerHTML = '';
                 
                 data.conversations_info.forEach(conv => {
@@ -90,17 +98,22 @@
                     }
                 });
                 
-                if (list.children.length > 0) {
+                const renderedCount = list.children.length;
+                if (renderedCount > 0) {
                     loading.classList.add('hidden');
                     list.classList.remove('hidden');
                     renderPagination(data.pagination);
                 } else {
                     loading.classList.add('hidden');
-                    empty.classList.remove('hidden');
+                    renderError.classList.remove('hidden');
+                    renderPagination(data.pagination);
                 }
             } else {
                 loading.classList.add('hidden');
                 empty.classList.remove('hidden');
+                if (data.pagination && data.pagination.total_pages > 1) {
+                    renderPagination(data.pagination);
+                }
             }
         } catch (e) {
             console.error('Failed to load conversations:', e);
