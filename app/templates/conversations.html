@@ -137,7 +137,11 @@
         const id = String(conv.conversation_id ?? '');
         const item = document.createElement('div');
         item.className = 'conversation-item bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600';
-        item.onclick = () => openConversation(conv.conversation_id);
+        if (id) {
+            item.onclick = () => openConversation(id);
+        } else {
+            item.classList.add('opacity-50', 'cursor-not-allowed');
+        }
         
         item.innerHTML = `
             <div class="flex items-center justify-between">
