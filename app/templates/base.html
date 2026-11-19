@@ -227,9 +227,9 @@
         import { 
             wifToAddress, generateWifKey, encryptWif, decryptWif, 
             saveWif, loadWifStorage, clearWifStorage, isLegacyPlaintextWif,
-            saveSessionWif, loadSessionWif, clearSessionWif
+            saveSessionWif, loadSessionWif, clearSessionWif, isSessionUnlocked
         } from '/static/js/bitcoin.js';
-        import { getSettings, saveSettings, getFolders } from '/static/js/api.js';
+        import { getSettings, saveSettings, getFolders, isInsecureTransport } from '/static/js/api.js';
         
         // Make functions available globally
         window.wifToAddress = wifToAddress;
@@ -243,9 +243,11 @@
         window.saveSessionWif = saveSessionWif;
         window.loadSessionWif = loadSessionWif;
         window.clearSessionWif = clearSessionWif;
+        window.isSessionUnlocked = isSessionUnlocked;
         window.getSettings = getSettings;
         window.saveSettings = saveSettings;
         window.getFolders = getFolders;
+        window.isInsecureTransport = isInsecureTransport;
         
         // Current WIF key (in memory only)
         window.currentWif = null;
@@ -259,12 +261,16 @@
             const storage = loadWifStorage();
             console.log('WIF storage:', storage);
             
+            if (typeof isInsecureTransport === 'function' && isInsecureTransport()) {
+                showToast('Warning: signing is disabled over plaintext HTTP to a non-local server. Serve this UI over HTTPS.', 'error');
+            }
+            
             // Hide both modals first
             document.getElementById('unlock-modal').classList.add('hidden');
             document.getElementById('setup-wif-modal').classList.add('hidden');
             
             const sessionWif = loadSessionWif();
-            if (sessionWif && wifToAddress(sessionWif)) {
+            if (sessionWif && isSessionUnlocked() && wifToAddress(sessionWif)) {
                 // A decrypted WIF is already available for this tab session, so
                 // skip the unlock prompt and restore it directly.
                 console.log('Session WIF found, restoring without unlock prompt');

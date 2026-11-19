@@ -1,25 +1,26 @@
-"""Regression tests for the sessionStorage WIF-unlock feature.
+"""Regression tests for the in-memory WIF-unlock session feature.
 
 After the user unlocks their encrypted WIF (or completes initial setup), the
-*decrypted* WIF key is held in ``sessionStorage`` under ``wif_session_key`` so
-that page navigation within the same tab does not re-prompt for the password,
-while the key is still forgotten when the tab closes and never written to disk
-(the encrypted blob alone remains in ``localStorage``).
+*decrypted* WIF key is held only in module-scope memory and is never persisted
+anywhere. ``sessionStorage`` holds only a non-secret presence marker under
+``wif_session_key`` (value ``'1'``), so a full page reload re-prompts for the
+password while same-document navigation is still served by the in-memory copy.
+The encrypted blob alone remains in ``localStorage``.
 
 Three invariants are guarded here:
 
 1. ``initializeApp()`` (in ``app/templates/base.html``) restores the decrypted
-   key from ``sessionStorage`` *before* falling back to the unlock prompt.
-2. Locking the session clears ``sessionStorage``.
-3. The decrypted WIF is written only to ``sessionStorage`` and never leaks into
-   ``localStorage``.
+   key from memory *before* falling back to the unlock prompt.
+2. Locking the session clears the in-memory key (and the session marker).
+3. The decrypted WIF is never written to ``sessionStorage`` (only the ``'1'``
+   marker is) and never leaks into ``localStorage``.
 
 These tests execute the *real* ``static/js/bitcoin.js`` source (only its
 ``import``/``export`` statements are stripped so it can load as a classic
 script) inside an embedded QuickJS engine, following the same harness pattern
 as ``test_save_wif.py`` and ``test_legacy_wif_migration.py``. ``saveSessionWif``,
-``loadSessionWif``, and ``clearSessionWif`` are therefore the actual shipped
-functions, not reimplementations.
+``loadSessionWif``, ``clearSessionWif``, and ``isSessionUnlocked`` are therefore
+the actual shipped functions, not reimplementations.
 """
 
 import json
@@ -32,12 +33,14 @@ BITCOIN_JS_PATH = REPO_ROOT / "static" / "js" / "bitcoin.js"
 BASE_HTML_PATH = REPO_ROOT / "app" / "templates" / "base.html"
 
 SESSION_STORAGE_KEY = "wif_session_key"
+SESSION_MARKER = "1"
 
 # Browser stubs injected before loading bitcoin.js so its module-level code can
 # run. ``sessionStorage`` records every call into ``__sessionStorageCalls`` and
-# round-trips values through ``__sessionStorageData`` so ``loadSessionWif``
-# returns what ``saveSessionWif`` stored. ``localStorage`` records its calls too
-# so tests can prove the decrypted WIF never lands there.
+# round-trips values through ``__sessionStorageData``. ``localStorage`` records
+# its calls too so tests can prove the decrypted WIF never lands there.
+# ``window.addEventListener`` is a no-op so the new pagehide/beforeunload wipe
+# registration is exercised without throwing.
 _STUBS = """
 var __localStorageCalls = [];
 var localStorage = {
@@ -55,7 +58,7 @@ var sessionStorage = {
 var secp256k1 = {};
 var sha256 = function () {};
 var ripemd160 = function () {};
-var window = {};
+var window = { addEventListener: function () {} };
 """
 
 # Tiny JS harness that invokes the real session helpers and reports what they
@@ -95,6 +98,37 @@ function __runSaveSessionOnly(wif) {
     }
     result.sessionCalls = __sessionStorageCalls;
     result.localStorageCalls = __localStorageCalls;
+    return result;
+}
+
+function __runLoadOnly(seededValue) {
+    __resetCalls();
+    if (seededValue !== null) { __sessionStorageData['wif_session_key'] = seededValue; }
+    var result = { threw: false, message: null, loaded: null, sessionCalls: [], dataAfter: null };
+    try {
+        result.loaded = loadSessionWif();
+    } catch (error) {
+        result.threw = true;
+        result.message = error.message;
+    }
+    result.sessionCalls = __sessionStorageCalls;
+    result.dataAfter = __sessionStorageData;
+    return result;
+}
+
+function __runUnlockState() {
+    __resetCalls();
+    var result = { threw: false, message: null, initial: null, afterSave: null, afterClear: null };
+    try {
+        result.initial = isSessionUnlocked();
+        saveSessionWif('unlock-wif');
+        result.afterSave = isSessionUnlocked();
+        clearSessionWif();
+        result.afterClear = isSessionUnlocked();
+    } catch (error) {
+        result.threw = true;
+        result.message = error.message;
+    }
     return result;
 }
 """
@@ -140,7 +174,19 @@ def _run_save_session_only(ctx: quickjs.Context, wif) -> dict:
     return json.loads(payload)
 
 
-def test_session_wif_roundtrips_then_clears_on_lock():
+def _run_load_only(ctx: quickjs.Context, seeded_value) -> dict:
+    """Seed sessionStorage directly and run only ``loadSessionWif``."""
+    payload = ctx.eval("JSON.stringify(__runLoadOnly(" + json.dumps(seeded_value) + "))")
+    return json.loads(payload)
+
+
+def _run_unlock_state(ctx: quickjs.Context) -> dict:
+    """Run the save/clear lifecycle and report ``isSessionUnlocked()`` at each step."""
+    payload = ctx.eval("JSON.stringify(__runUnlockState())")
+    return json.loads(payload)
+
+
+def test_save_load_roundtrip_uses_memory_and_clears():
     ctx = _build_context()
     result = _run_session_lifecycle(ctx, "somewif")
     assert result["threw"] is False, result["message"]
@@ -148,34 +194,53 @@ def test_session_wif_roundtrips_then_clears_on_lock():
     assert result["saved"] == "somewif"
     assert result["cleared"] is None
 
-    remove_calls = [call for call in result["sessionCalls"] if call["method"] == "removeItem"]
-    assert any(call["key"] == SESSION_STORAGE_KEY for call in remove_calls)
 
-
-def test_decrypted_wif_never_lands_in_localstorage():
+def test_raw_wif_is_never_written_to_sessionstorage():
     ctx = _build_context()
     result = _run_save_session_only(ctx, "DECRYPTED_WIF_VALUE")
     assert result["threw"] is False, result["message"]
+
+    session_set_calls = [call for call in result["sessionCalls"] if call["method"] == "setItem"]
+    assert len(session_set_calls) == 1
+    assert session_set_calls[0]["key"] == SESSION_STORAGE_KEY
+    assert session_set_calls[0]["value"] == SESSION_MARKER
+
+    for call in session_set_calls:
+        assert "DECRYPTED_WIF_VALUE" not in str(call.get("value", ""))
 
     local_set_calls = [call for call in result["localStorageCalls"] if call["method"] == "setItem"]
     for call in local_set_calls:
         assert "DECRYPTED_WIF_VALUE" not in str(call.get("value", ""))
 
-    session_set_calls = [call for call in result["sessionCalls"] if call["method"] == "setItem"]
-    assert len(session_set_calls) == 1
-    assert session_set_calls[0]["key"] == SESSION_STORAGE_KEY
-    assert session_set_calls[0]["value"] == "DECRYPTED_WIF_VALUE"
+
+def test_load_session_wif_ignores_raw_value_in_sessionstorage():
+    ctx = _build_context()
+    result = _run_load_only(ctx, "RAW_WIF_IN_STORAGE")
+    assert result["threw"] is False, result["message"]
+
+    assert result["loaded"] is None
+    assert SESSION_STORAGE_KEY not in result["dataAfter"]
+
+
+def test_is_session_unlocked_reflects_memory():
+    ctx = _build_context()
+    result = _run_unlock_state(ctx)
+    assert result["threw"] is False, result["message"]
+
+    assert result["initial"] is False
+    assert result["afterSave"] is True
+    assert result["afterClear"] is False
 
 
 def test_base_html_bootstrap_uses_session_wif_before_unlock_branch():
     content = BASE_HTML_PATH.read_text(encoding="utf-8")
     assert "const sessionWif = loadSessionWif();" in content
-    assert "if (sessionWif && wifToAddress(sessionWif)) {" in content
+    assert "if (sessionWif && isSessionUnlocked() && wifToAddress(sessionWif)) {" in content
     assert "window.currentWif = sessionWif;" in content
     assert "updateWifStatus(true);" in content
     assert "if (storage && storage.data) {" in content
 
-    assert content.index("if (sessionWif && wifToAddress(sessionWif)) {") < content.index(
+    assert content.index("if (sessionWif && isSessionUnlocked() && wifToAddress(sessionWif)) {") < content.index(
         "if (storage && storage.data) {"
     )
 
@@ -219,6 +284,9 @@ def test_base_html_exposes_session_helpers_and_calls_save_session_wif():
     assert "window.saveSessionWif = saveSessionWif;" in content
     assert "window.loadSessionWif = loadSessionWif;" in content
     assert "window.clearSessionWif = clearSessionWif;" in content
+    assert "window.isInsecureTransport = isInsecureTransport;" in content
+
+    assert content.count("Serve this UI over HTTPS") == 1
 
     assert content.count("saveSessionWif(wif);") >= 2
 

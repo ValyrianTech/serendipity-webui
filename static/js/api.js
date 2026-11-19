@@ -43,6 +43,8 @@ export function saveSettings(settings) {
 // talks to the backend over HTTPS too (avoids active/passive mixed-content
 // blocking). NOTE: when the UI is served over TLS the backend port must also be
 // reachable over TLS, otherwise the browser will refuse the connection.
+// Plaintext http:// to a non-loopback server is refused for signed requests:
+// assertSecureTransport() (see below) requires HTTPS for non-local deployments.
 export function getUrlScheme(websocket = false) {
     const isHttps = typeof window !== 'undefined' && window.location && window.location.protocol === 'https:';
     if (websocket) return isHttps ? 'wss:' : 'ws:';
@@ -52,6 +54,39 @@ export function getUrlScheme(websocket = false) {
 export function getBaseUrl() {
     const settings = getSettings();
     return `${getUrlScheme()}//${settings.serverAddress}:${settings.serverPort}`;
+}
+
+export function isLoopbackHost(host) {
+    if (typeof host !== 'string') {
+        return false;
+    }
+    let normalized = host.trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+    if (normalized.startsWith('[') && normalized.endsWith(']')) {
+        normalized = normalized.slice(1, -1);
+    }
+    if (normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1') {
+        return true;
+    }
+    return normalized.endsWith('.localhost');
+}
+
+export function isInsecureTransport() {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    const settings = getSettings();
+    return getUrlScheme() === 'http:' && !isLoopbackHost(settings.serverAddress);
+}
+
+export function assertSecureTransport() {
+    if (isInsecureTransport()) {
+        const serverAddress = getSettings().serverAddress;
+        throw new Error('Refusing to send signed requests over plaintext HTTP to a non-loopback server (' + serverAddress + '). Use HTTPS (or connect via localhost/127.0.0.1).');
+    }
+    return true;
 }
 
 async function parseJsonResponse(response, context) {
@@ -224,6 +259,7 @@ export async function addMessage(wif, data) {
     if (enabledRoles !== undefined) apiData.enabled_roles = enabledRoles;
     if (enabledSkills !== undefined) apiData.enabled_skills = enabledSkills;
     
+    assertSecureTransport();
     const signedData = await signData(apiData, wif);
     const response = await fetch(`${getBaseUrl()}/api/AddMessage/message`, {
         method: 'POST',
@@ -234,6 +270,7 @@ export async function addMessage(wif, data) {
 }
 
 export async function editAgent(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/EditAgent/message`, {
         method: 'POST',
@@ -244,6 +281,7 @@ export async function editAgent(wif, data) {
 }
 
 export async function editConversation(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/EditConversation/message`, {
         method: 'POST',
@@ -254,6 +292,7 @@ export async function editConversation(wif, data) {
 }
 
 export async function deleteConversation(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/DeleteConversation/message`, {
         method: 'POST',
@@ -264,6 +303,7 @@ export async function deleteConversation(wif, data) {
 }
 
 export async function stageFile(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/StageFile/message`, {
         method: 'POST',
@@ -274,6 +314,7 @@ export async function stageFile(wif, data) {
 }
 
 export async function removeStagedFile(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/RemoveStagedFile/message`, {
         method: 'POST',
@@ -284,6 +325,7 @@ export async function removeStagedFile(wif, data) {
 }
 
 export async function startWorkflow(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/StartWorkflow/message`, {
         method: 'POST',
@@ -294,6 +336,7 @@ export async function startWorkflow(wif, data) {
 }
 
 export async function stopGeneration(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/StopGeneration/message`, {
         method: 'POST',
@@ -304,6 +347,7 @@ export async function stopGeneration(wif, data) {
 }
 
 export async function saveMCPServerConfig(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveMCPServerConfig/message`, {
         method: 'POST',
@@ -314,6 +358,7 @@ export async function saveMCPServerConfig(wif, data) {
 }
 
 export async function deleteMCPServerConfig(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/DeleteMCPServerConfig/message`, {
         method: 'POST',
@@ -324,6 +369,7 @@ export async function deleteMCPServerConfig(wif, data) {
 }
 
 export async function saveToolset(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveToolset/message`, {
         method: 'POST',
@@ -334,6 +380,7 @@ export async function saveToolset(wif, data) {
 }
 
 export async function deleteToolset(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/DeleteToolset/message`, {
         method: 'POST',
@@ -344,6 +391,7 @@ export async function deleteToolset(wif, data) {
 }
 
 export async function saveLLMConfig(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveLLMConfig/message`, {
         method: 'POST',
@@ -354,6 +402,7 @@ export async function saveLLMConfig(wif, data) {
 }
 
 export async function deleteLLMConfig(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/DeleteLLMConfig/message`, {
         method: 'POST',
@@ -364,6 +413,7 @@ export async function deleteLLMConfig(wif, data) {
 }
 
 export async function saveDefaultLLM(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveDefaultLLM/message`, {
         method: 'POST',
@@ -374,6 +424,7 @@ export async function saveDefaultLLM(wif, data) {
 }
 
 export async function editAgentRole(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/EditAgentRole/message`, {
         method: 'POST',
@@ -385,6 +436,7 @@ export async function editAgentRole(wif, data) {
 
 // Skills POST requests (signed)
 export async function saveSkill(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveSkill/message`, {
         method: 'POST',
@@ -395,6 +447,7 @@ export async function saveSkill(wif, data) {
 }
 
 export async function deleteSkill(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/DeleteSkill/message`, {
         method: 'POST',
@@ -427,6 +480,7 @@ export async function transcribeAudio(audioBlob) {
 
 // Upload profile picture (two-step: upload file, then register with agent)
 export async function uploadProfilePicture(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/UploadProfilePicture/message`, {
         method: 'POST',
@@ -438,6 +492,7 @@ export async function uploadProfilePicture(wif, data) {
 
 // Upload voice file (two-step: upload file, then register with agent)
 export async function uploadVoice(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/UploadVoice/message`, {
         method: 'POST',
@@ -459,6 +514,7 @@ export async function archiveConversation(data) {
 
 // Summarize conversation
 export async function summarizeConversation(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SummarizeConversation/message`, {
         method: 'POST',
@@ -470,6 +526,7 @@ export async function summarizeConversation(wif, data) {
 
 // Generate memory
 export async function generateMemory(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/GenerateMemory/message`, {
         method: 'POST',
@@ -481,6 +538,7 @@ export async function generateMemory(wif, data) {
 
 // Update knowledge base
 export async function updateKnowledgeBase(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/UpdateKnowledgeBase/message`, {
         method: 'POST',
@@ -502,6 +560,7 @@ export async function moveToFolder(data) {
 
 // Initialize agent voices on OpenVoice server
 export async function initializeAgentVoices(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/InitializeAgentVoices/message`, {
         method: 'POST',
@@ -513,6 +572,7 @@ export async function initializeAgentVoices(wif, data) {
 
 // Generate workflow from instructions
 export async function generateWorkflow(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/GenerateWorkflow/message`, {
         method: 'POST',
@@ -524,6 +584,7 @@ export async function generateWorkflow(wif, data) {
 
 // Edit workflow step
 export async function editWorkflowStep(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/EditWorkflowStep/message`, {
         method: 'POST',
@@ -535,6 +596,7 @@ export async function editWorkflowStep(wif, data) {
 
 // Clone persona
 export async function clonePersona(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/ClonePersona/message`, {
         method: 'POST',
@@ -580,6 +642,7 @@ export async function getScheduledTask(taskId) {
 }
 
 export async function saveScheduledTask(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveScheduledTask/message`, {
         method: 'POST',
@@ -590,6 +653,7 @@ export async function saveScheduledTask(wif, data) {
 }
 
 export async function deleteScheduledTask(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/DeleteScheduledTask/message`, {
         method: 'POST',
@@ -600,6 +664,7 @@ export async function deleteScheduledTask(wif, data) {
 }
 
 export async function runScheduledTaskNow(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/RunScheduledTaskNow/message`, {
         method: 'POST',
@@ -611,6 +676,7 @@ export async function runScheduledTaskNow(wif, data) {
 
 // Save ComfyUI server config
 export async function saveComfyUIServer(wif, data) {
+    assertSecureTransport();
     const signedData = await signData(data, wif);
     const response = await fetch(`${getBaseUrl()}/api/SaveComfyUIServer/message`, {
         method: 'POST',
