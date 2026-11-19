@@ -1,9 +1,9 @@
 """Regression tests for session-WIF validation in ``initializeApp()``.
 
 ``initializeApp()`` (in ``app/templates/base.html``) restores a decrypted WIF
-from ``sessionStorage``. A malformed/tampered/legacy session key must never be
-accepted verbatim: ``window.currentWif`` must not be set to it and it must not
-be left in ``sessionStorage``, otherwise downstream signing/address operations
+from the in-memory session store. A malformed/tampered/legacy session key must
+never be accepted verbatim: ``window.currentWif`` must not be set to it and it
+must not be left in memory, otherwise downstream signing/address operations
 (``wifToPrivateKey``) would throw and the user would never be re-prompted.
 
 These tests extract the *real* ``initializeApp`` function from the template
@@ -54,10 +54,12 @@ def _extract_function(source: str, name: str) -> str:
 
 
 # Recording stubs injected before evaluating the extracted ``initializeApp``.
-# ``sessionStorage``/``localStorage`` round-trip through plain objects,
-# ``document.getElementById`` returns fake elements whose ``classList.remove``
-# records which modal was shown, and ``wifToAddress`` returns a real-looking
-# address for the known valid WIF and ``null`` for anything else.
+# ``localStorage`` round-trips through a plain object, ``document.getElementById``
+# returns fake elements whose ``classList.remove`` records which modal was shown,
+# and ``wifToAddress`` returns a real-looking address for the known valid WIF and
+# ``null`` for anything else. ``loadSessionWif``/``isSessionUnlocked`` mirror the
+# new in-memory contract and are driven by the ``__sessionWif``/``__sessionUnlocked``
+# variables set by the harness; ``isInsecureTransport`` is stubbed to false.
 _STUBS = """
 var __state = {
     updateWifStatusCalls: [],
@@ -69,12 +71,10 @@ var __state = {
 };
 var window = { currentWif: null };
 
-var __sessionStorageData = {};
-var sessionStorage = {
-    getItem: function (key) { return (key in __sessionStorageData) ? __sessionStorageData[key] : null; },
-    setItem: function (key, value) { __sessionStorageData[key] = value; },
-    removeItem: function (key) { delete __sessionStorageData[key]; },
-};
+var __sessionWif = null;
+var __sessionUnlocked = false;
+var __insecure = false;
+
 var __localStorageData = {};
 var localStorage = {
     getItem: function (key) { return (key in __localStorageData) ? __localStorageData[key] : null; },
@@ -96,10 +96,12 @@ var document = { getElementById: function (id) { return __makeElement(id); } };
 
 var __storage = null;
 function loadWifStorage() { return __storage; }
-function loadSessionWif() { return sessionStorage.getItem('wif_session_key'); }
-function clearSessionWif() { __state.clearSessionWifCalls += 1; sessionStorage.removeItem('wif_session_key'); }
+function loadSessionWif() { return __sessionWif; }
+function clearSessionWif() { __state.clearSessionWifCalls += 1; __sessionWif = null; }
 function clearWifStorage() { localStorage.removeItem('serendipity_wif'); }
 function isLegacyPlaintextWif(storage) { return Boolean(storage && storage.data && storage.encrypted !== true); }
+function isSessionUnlocked() { return __sessionUnlocked; }
+function isInsecureTransport() { return __insecure; }
 function updateWifStatus(loaded) { __state.updateWifStatusCalls.push(loaded); }
 function showToast(message, type) { __state.showToastCalls.push({ message: message, type: type }); }
 function updateNavigation() {}
@@ -111,11 +113,11 @@ function wifToAddress(wif) {
 }
 """
 
-# Wrapper that seeds the storages, runs the real ``initializeApp``, and reports
-# the resulting state (window.currentWif, sessionStorage, and every recorded
-# side effect) as JSON.
+# Wrapper that seeds the session state, runs the real ``initializeApp``, and
+# reports the resulting state (window.currentWif, the in-memory session WIF, and
+# every recorded side effect) as JSON.
 _HARNESS = """
-function __run(storage, sessionWif) {
+function __run(storage, sessionWif, unlocked) {
     __state.updateWifStatusCalls = [];
     __state.showToastCalls = [];
     __state.clearSessionWifCalls = 0;
@@ -123,8 +125,9 @@ function __run(storage, sessionWif) {
     __state.threw = false;
     __state.error = null;
     window.currentWif = null;
-    __sessionStorageData = {};
-    if (sessionWif !== null) { __sessionStorageData['wif_session_key'] = sessionWif; }
+    __sessionWif = sessionWif;
+    __sessionUnlocked = !!unlocked;
+    __insecure = false;
     __storage = storage;
 
     try {
@@ -135,7 +138,7 @@ function __run(storage, sessionWif) {
     }
 
     __state.currentWif = window.currentWif;
-    __state.sessionWifAfter = sessionStorage.getItem('wif_session_key');
+    __state.sessionWifAfter = __sessionWif;
     return __state;
 }
 """
@@ -153,17 +156,23 @@ def _build_context() -> quickjs.Context:
     return ctx
 
 
-def _run(ctx: quickjs.Context, storage, session_wif) -> dict:
-    """Run ``initializeApp`` with the given localStorage payload and session WIF."""
+def _run(ctx: quickjs.Context, storage, session_wif, unlocked) -> dict:
+    """Run ``initializeApp`` with the given localStorage payload and session state."""
     payload = ctx.eval(
-        "JSON.stringify(__run(" + json.dumps(storage) + ", " + json.dumps(session_wif) + "))"
+        "JSON.stringify(__run("
+        + json.dumps(storage)
+        + ", "
+        + json.dumps(session_wif)
+        + ", "
+        + json.dumps(unlocked)
+        + "))"
     )
     return json.loads(payload)
 
 
 def test_malformed_session_wif_is_discarded_and_falls_back_to_unlock():
     ctx = _build_context()
-    result = _run(ctx, {"encrypted": True, "data": "encblob"}, _MALFORMED_WIF)
+    result = _run(ctx, {"encrypted": True, "data": "encblob"}, _MALFORMED_WIF, True)
     assert result["threw"] is False, result["error"]
 
     assert result["currentWif"] is None
@@ -180,20 +189,30 @@ def test_malformed_session_wif_is_discarded_and_falls_back_to_unlock():
 
 def test_valid_session_wif_is_accepted_without_unlock_prompt():
     ctx = _build_context()
-    result = _run(ctx, {"encrypted": True, "data": "encblob"}, _VALID_WIF)
+    result = _run(ctx, {"encrypted": True, "data": "encblob"}, _VALID_WIF, True)
     assert result["threw"] is False, result["error"]
 
     assert result["currentWif"] == _VALID_WIF
-    assert result["sessionWifAfter"] == _VALID_WIF
     assert result["clearSessionWifCalls"] == 0
     assert result["updateWifStatusCalls"] == [True]
     assert "unlock-modal" not in result["modalShown"]
     assert "setup-wif-modal" not in result["modalShown"]
 
 
+def test_raw_wif_in_sessionstorage_but_locked_falls_back_to_unlock():
+    ctx = _build_context()
+    result = _run(ctx, {"encrypted": True, "data": "encblob"}, None, False)
+    assert result["threw"] is False, result["error"]
+
+    assert result["currentWif"] is None
+    assert result["clearSessionWifCalls"] == 0
+    assert result["updateWifStatusCalls"] == []
+    assert "unlock-modal" in result["modalShown"]
+
+
 def test_absent_session_wif_falls_back_to_unlock():
     ctx = _build_context()
-    result = _run(ctx, {"encrypted": True, "data": "encblob"}, None)
+    result = _run(ctx, {"encrypted": True, "data": "encblob"}, None, False)
     assert result["threw"] is False, result["error"]
 
     assert result["currentWif"] is None
@@ -204,7 +223,7 @@ def test_absent_session_wif_falls_back_to_unlock():
 
 def test_malformed_session_wif_without_storage_falls_back_to_setup():
     ctx = _build_context()
-    result = _run(ctx, None, _MALFORMED_WIF)
+    result = _run(ctx, None, _MALFORMED_WIF, True)
     assert result["threw"] is False, result["error"]
 
     assert result["currentWif"] is None

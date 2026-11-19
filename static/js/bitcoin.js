@@ -716,22 +716,63 @@ export function isLegacyPlaintextWif(storage) {
 
 // Session storage for the decrypted WIF key.
 //
-// The encrypted WIF lives in localStorage (persists across sessions, at rest).
-// The decrypted WIF lives in sessionStorage, which is per-origin and per-tab,
-// cleared automatically when the tab/window closes, and not shared with other
-// tabs. This is an intentional middle ground: it avoids re-prompting for the
-// password on every page navigation while never writing the decrypted key to
-// disk or leaking it across tabs.
+// The raw WIF is held ONLY in memory (module scope) and must never be persisted
+// anywhere. The encrypted blob lives in localStorage (persists across sessions,
+// at rest). sessionStorage holds only a non-secret presence marker, so a full
+// page reload re-prompts for the password (a deliberate trade-off to avoid ever
+// persisting the private key). Same-document navigation is still served by the
+// in-memory copy, so no password is required within a single tab session.
 const SESSION_STORAGE_KEY = 'wif_session_key';
+const SESSION_MARKER = '1';
+
+let __sessionWifInMemory = null;
 
 export function saveSessionWif(wif) {
-    sessionStorage.setItem(SESSION_STORAGE_KEY, wif);
+    if (!wif) {
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        __sessionWifInMemory = null;
+        return;
+    }
+    // The raw key must never be persisted: keep it in memory only and write a
+    // non-secret sentinel marker to sessionStorage instead.
+    __sessionWifInMemory = wif;
+    sessionStorage.setItem(SESSION_STORAGE_KEY, SESSION_MARKER);
 }
 
 export function loadSessionWif() {
-    return sessionStorage.getItem(SESSION_STORAGE_KEY);
+    // Fast path: same-document navigation, the key is already held in memory.
+    if (__sessionWifInMemory) {
+        return __sessionWifInMemory;
+    }
+    // After a full page reload the raw key is no longer available (it is never
+    // written to sessionStorage). If a stale marker lingers, remove it so it
+    // cannot remain, then return null. Never return a value read from storage.
+    if (sessionStorage.getItem(SESSION_STORAGE_KEY)) {
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    return null;
 }
 
 export function clearSessionWif() {
+    __sessionWifInMemory = null;
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+export function isSessionUnlocked() {
+    return Boolean(__sessionWifInMemory);
+}
+
+// Best-effort wipe on unload so the in-memory key does not outlive the tab.
+// Guarded for environments without a DOM (e.g. tests / non-browser contexts).
+if (typeof window !== 'undefined' && window.addEventListener) {
+    try {
+        window.addEventListener('pagehide', clearSessionWif);
+    } catch (e) {
+        /* ignore */
+    }
+    try {
+        window.addEventListener('beforeunload', clearSessionWif);
+    } catch (e) {
+        /* ignore */
+    }
 }
