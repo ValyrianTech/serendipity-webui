@@ -82,13 +82,22 @@
                 list.innerHTML = '';
                 
                 data.conversations_info.forEach(conv => {
-                    const item = createConversationItem(conv);
-                    list.appendChild(item);
+                    try {
+                        const item = createConversationItem(conv);
+                        list.appendChild(item);
+                    } catch (e) {
+                        console.error('Failed to render conversation item:', e);
+                    }
                 });
                 
-                loading.classList.add('hidden');
-                list.classList.remove('hidden');
-                renderPagination(data.pagination);
+                if (list.children.length > 0) {
+                    loading.classList.add('hidden');
+                    list.classList.remove('hidden');
+                    renderPagination(data.pagination);
+                } else {
+                    loading.classList.add('hidden');
+                    empty.classList.remove('hidden');
+                }
             } else {
                 loading.classList.add('hidden');
                 empty.classList.remove('hidden');
@@ -125,6 +134,7 @@
     };
     
     function createConversationItem(conv) {
+        const id = String(conv.conversation_id ?? '');
         const item = document.createElement('div');
         item.className = 'conversation-item bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600';
         item.onclick = () => openConversation(conv.conversation_id);
@@ -133,7 +143,7 @@
             <div class="flex items-center justify-between">
                 <div class="flex-1 min-w-0">
                     <h3 class="font-medium truncate">${escapeHtml(conv.title || 'Untitled Conversation')}</h3>
-                    <p class="text-sm text-slate-400">${escapeHtml(conv.conversation_id.substring(0, 8))}...</p>
+                    <p class="text-sm text-slate-400">${escapeHtml(id.substring(0, 8))}${id ? '...' : ''}</p>
                 </div>
                 <svg class="w-5 h-5 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
