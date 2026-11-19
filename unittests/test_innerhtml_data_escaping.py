@@ -78,6 +78,26 @@ def test_conversations_item_escapes_title():
     assert "escapeHtml(conv.title || 'Untitled Conversation')" in body
 
 
+def test_conversations_item_click_handler_gated_on_nonempty_id():
+    """createConversationItem only wires the click handler when the id is non-empty.
+
+    A conversation entry whose ``conversation_id`` is missing/null/empty must not
+    render as a clickable card wired to a bad (``undefined``/empty) id. The click
+    handler is assigned only inside an ``if (id)`` guard using the normalised
+    ``id`` value; otherwise the card is disabled (non-interactive) instead.
+    """
+    body = _func_body("conversations.html", "createConversationItem")
+    # The id is normalised once and the handler closes over it.
+    assert "const id = String(conv.conversation_id ?? '');" in body
+    # The raw (possibly-missing) conversation_id must not be wired to the handler.
+    assert "openConversation(conv.conversation_id)" not in body
+    # The handler is gated behind a truthiness check and uses the normalised id.
+    assert "if (id) {" in body
+    assert "item.onclick = () => openConversation(id);" in body
+    # When there is no id the card is rendered disabled/non-interactive.
+    assert "item.classList.add('opacity-50', 'cursor-not-allowed');" in body
+
+
 def test_scheduled_task_item_escapes_fields_and_drops_inline_handlers():
     """createTaskItem escapes fields and no longer builds inline handlers from task_id."""
     body = _func_body("scheduled_tasks.html", "createTaskItem")
